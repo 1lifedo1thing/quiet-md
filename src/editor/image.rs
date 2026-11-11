@@ -37,6 +37,8 @@ const BAD_DIMS: &str = "识别图片宽高失败";
 const TOO_BIG: &str = "上传图片大小不能超过 20 MB";
 const FULL: [f32; 4] = [0., 0., 1., 1.];
 const FADE: f32 = 0.2;
+/// Keep viewer controls visible until interaction has stopped for three seconds.
+const CHROME_IDLE: Duration = Duration::from_secs(3);
 /// Media in the page stays crisp: image corners round at 5 (an image
 /// shown cropped keeps square corners — GPUI can only round a whole image).
 const RADIUS: f32 = 5.;
@@ -1564,7 +1566,7 @@ impl Editor {
             orig: false,
             opened: now,
             closing: None,
-            chrome: false,
+            chrome: true,
             chrome_t: now - Duration::from_secs(1),
             last_move: now,
             press: None,
@@ -1572,6 +1574,7 @@ impl Editor {
             rotated: None,
         });
         window.focus(&self.img.lb_focus, cx);
+        self.lb_show_chrome(cx);
         cx.notify();
     }
 
@@ -1637,6 +1640,7 @@ impl Editor {
     }
 
     fn lb_zoom(&mut self, factor: f32, cx: &mut Context<Self>) {
+        self.lb_show_chrome(cx);
         let Some(lb) = &mut self.img.lightbox else { return };
         let s = clampf(lb.scale * factor, 0.1, 5.);
         let k = s / lb.scale;
@@ -1649,6 +1653,7 @@ impl Editor {
     }
 
     fn lb_go(&mut self, d: isize, cx: &mut Context<Self>) {
+        self.lb_show_chrome(cx);
         let Some(lb) = &mut self.img.lightbox else { return };
         let ix = lb.ix as isize + d;
         if ix < 0 || ix as usize >= lb.ids.len() {
@@ -1662,6 +1667,7 @@ impl Editor {
     }
 
     fn lb_toggle(&mut self, cx: &mut Context<Self>) {
+        self.lb_show_chrome(cx);
         let Some(lb) = &mut self.img.lightbox else { return };
         if lb.orig && (lb.scale - 1.).abs() < 0.01 {
             self.lb_fit();
@@ -1676,6 +1682,7 @@ impl Editor {
     }
 
     fn lb_rotate(&mut self, cx: &mut Context<Self>) {
+        self.lb_show_chrome(cx);
         let Some(lb) = &mut self.img.lightbox else { return };
         lb.rot = (lb.rot + 1) % 4;
         lb.tx = 0.;
@@ -1693,11 +1700,11 @@ impl Editor {
             cx.notify();
         }
         self.img.chrome_task = Some(cx.spawn(async |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(5)).await;
+            cx.background_executor().timer(CHROME_IDLE).await;
             let _ = this.update(cx, |e, cx| {
                 if let Some(lb) = &mut e.img.lightbox
                     && lb.chrome
-                    && lb.last_move.elapsed() >= Duration::from_millis(4990)
+                    && lb.last_move.elapsed() >= CHROME_IDLE
                 {
                     lb.chrome = false;
                     lb.chrome_t = Instant::now();
@@ -1979,6 +1986,7 @@ impl Editor {
             .on_action(cx.listener(|e, _: &LbZoomOut, _, cx| e.lb_zoom(1. / 1.15, cx)))
             .on_action(cx.listener(|e, _: &LbToggle, _, cx| e.lb_toggle(cx)))
             .on_action(cx.listener(|e, _: &LbFit, _, cx| {
+                e.lb_show_chrome(cx);
                 e.lb_fit();
                 if let Some(lb) = &mut e.img.lightbox {
                     lb.orig = false;
@@ -2028,6 +2036,7 @@ impl Editor {
                 }),
             )
             .on_scroll(cx.listener(|e, ev: &ScrollEvent, _, cx| {
+                e.lb_show_chrome(cx);
                 let (dx, dy, lines) = match ev.delta {
                     ScrollDelta::Pixels(p) => (f32::from(p.x), f32::from(p.y), false),
                     ScrollDelta::Lines(l) => (l.x, l.y, true),
