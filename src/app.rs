@@ -742,6 +742,9 @@ impl Workspace {
         };
         ws.sort();
         ws.load_home();
+        // 手动排序 is the default: freeze the order shown now, so later edits
+        // (which change modification times) cannot reshuffle the list.
+        ws.freeze_manual_home(cx);
         // An empty library opens on 主页's empty state; only a quick note
         // window starts a document of its own. The main window returns to the
         // document read last (#234), or the home page when that is set; the
