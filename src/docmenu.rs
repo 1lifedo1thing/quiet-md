@@ -1,11 +1,12 @@
 //! The header "…" menu: page width, find & replace, move, pin, star,
 //! 新建子文档, duplicate, 下载为 PDF / Markdown, 复制为 Markdown, 打印, document info,
-//! 阅读模式 and 显示引用列表 switches, delete.
+//! 阅读模式, 显示引用列表 and 窗口保持在最前 switches, delete.
 
 use crate::app::Workspace;
 use crate::settings::display_title;
 use crate::store::PageWidth;
 use crate::design::{MenuItem, MenuSeparator, Popover, Switch, menu};
+use crate::ui::TipExt;
 use gpui::{prelude::FluentBuilder, *};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -139,6 +140,7 @@ impl Workspace {
         // references either
         let (board, board_file) = self.editor.as_ref().map_or((false, false), |e| { let e = e.read(cx); (e.board_open(), e.board_file) });
         let reading = self.reading();
+        let on_top = self.on_top;
         let sub = self.doc_sub;
         let hover_sub = |s: Option<DocSub>| {
             cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
@@ -272,8 +274,18 @@ impl Workspace {
                         w.close_doc_menu(cx);
                         w.ask_refs(!refs_shown, cx);
                     })),
-            )
-            .child(divider()))
+            ))
+            .when(crate::on_top::SUPPORTED, |d| d.child(
+                menu_item("dm-on-top", crate::on_top::ICON, crate::settings::tr("窗口保持在最前", "Keep Window on Top"), false, false)
+                    .child(Switch::new(on_top))
+                    .tip_right(crate::settings::tr("窗口会一直显示在其他应用的窗口之上", "Stays above other apps' windows"), None)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, window, cx| {
+                        w.close_doc_menu(cx);
+                        w.set_on_top(!on_top, window, cx);
+                    })),
+            ))
+            .when(!board_file || crate::on_top::SUPPORTED, |d| d.child(divider()))
             .child(
                 menu_item("dm-delete", "bin", crate::settings::text("删除"), false, false)
                     .on_hover(hover_sub(None))
