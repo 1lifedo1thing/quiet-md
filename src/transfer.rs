@@ -8,7 +8,7 @@ use crate::app::Workspace;
 use crate::settings::display_title;
 use crate::model::{Block, BlockKind, Document, RichText};
 use crate::printing::{self, Job};
-use crate::design::{Button, ButtonSize, Dialog, scrim};
+use crate::design::{Button, Dialog, scrim};
 use crate::ui::{TipExt, ToastKind};
 use gpui::{prelude::FluentBuilder, *};
 use std::path::{Path, PathBuf};
@@ -708,15 +708,19 @@ impl Workspace {
                     }
                 }))
         };
+        let ws = cx.entity().downgrade();
+        let ws2 = ws.clone();
         let dialog = Dialog::new("export-md")
+            .keys(&self.dialog_focus, move |_, cx| { let _ = ws.update(cx, |w, cx| { w.export_md = None; cx.notify(); }); },
+                Some(move |window: &mut Window, cx: &mut App| { let _ = ws2.update(cx, |w, cx| w.export_markdown(window, cx)); }))
             .relative()
             .w(px(720.))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .title(crate::settings::text("导出 Markdown 设置"))
-            .child(Button::ghost("export-md-close").sized(ButtonSize::Xs).icon("x").absolute().top(px(20.)).right(px(20.)).on_click(cx.listener(|w, _, _, cx| {
+            .closable(cx.listener(|w, _, _, cx| {
                 w.export_md = None;
                 cx.notify();
-            })))
+            }))
             .child(
                 div()
                     .flex()

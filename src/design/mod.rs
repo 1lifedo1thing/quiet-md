@@ -34,7 +34,7 @@ pub use card::{Card, Item, Separator, Toast, ToastTone};
 #[allow(unused_imports)]
 pub use control::{Checkbox, Radio, Segment, Segmented, Switch};
 #[allow(unused_imports)]
-pub use dialog::{Dialog, scrim};
+pub use dialog::{Dialog, DialogFocus, scrim};
 #[allow(unused_imports)]
 pub use field::{Field, FieldSize, Label, Textarea};
 #[allow(unused_imports)]
@@ -94,14 +94,19 @@ pub mod color {
     pub fn primary() -> Hsla { pick(N900, N200) }
     pub fn primary_foreground() -> Hsla { pick(N50, N900) }
     pub fn secondary() -> Hsla { pick(N100, N800) }
+    pub fn secondary_foreground() -> Hsla { pick(N900, N50) }
     /// What is selected.
     pub fn muted() -> Hsla { pick(N100, N800) }
     /// Captions, icons, row numbers.
     pub fn muted_foreground() -> Hsla { pick(N500, N400) }
     /// Placeholders: shadcn's `muted-foreground`.
     pub fn placeholder() -> Hsla { muted_foreground() }
-    /// Under the pointer.
+    /// Under the pointer; a ghost button that is on.
     pub fn accent() -> Hsla { pick(N100, N700) }
+    /// A ghost button under the pointer on a raised surface in the dark (white 6%, ours: there
+    /// shadcn's `muted/50` would be the surface itself, and `accent`, #404040, is its "on"); `accent`
+    /// in the light.
+    pub fn accent_hover() -> Hsla { if dark() { alpha(hex(N0), 0.06) } else { accent() } }
     pub fn accent_foreground() -> Hsla { pick(N900, N50) }
     /// oklch(0.577 0.245 27.325) / oklch(0.704 0.191 22.216).
     pub fn destructive() -> Hsla { pick(0xe7000b, 0xff6467) }
@@ -133,7 +138,7 @@ pub mod color {
     /// A disabled control's text.
     pub fn disabled() -> Hsla { alpha(muted_foreground(), 0.5) }
     /// shadcn's overlay under a dialog: `black/10`.
-    pub fn overlay() -> Hsla { crate::theme::rgbaf(0, 0, 0, if dark() { 0.4 } else { 0.1 }) }
+    pub fn overlay() -> Hsla { crate::theme::rgbaf(0, 0, 0, 0.1) }
 }
 
 /// The option colours of 单选 / 多选 (shadcn has none; ours): Tailwind's 200 fill under its 800
@@ -150,7 +155,7 @@ pub mod chip {
     pub const ORANGE: Chip = Chip(0xffd6a7, 0x9f2d00, 0x441306, 0.6, 0xff6900);
     pub const ROSE: Chip = Chip(0xffccd3, 0xa50036, 0x4d0218, 0.6, 0xff2056);
     pub const PINK: Chip = Chip(0xfccee8, 0xa3004c, 0x510424, 0.6, 0xfb64b6);
-    pub const PURPLE: Chip = Chip(0xf3e8ff, 0x9810fa, 0x59168b, 0.5, 0xdab2ff);
+    pub const PURPLE: Chip = Chip(0xe9d4ff, 0x6e11b0, 0x3c0366, 0.6, 0xc27aff);
     pub const CYAN: Chip = Chip(0xa2f4fd, 0x005f78, 0x053345, 0.6, 0x00d3f2);
     pub const SKY: Chip = Chip(0xb8e6fe, 0x00598a, 0x052f4a, 0.6, 0x00bcff);
     pub const ALL: [&Chip; 9] = [&BLUE, &LIME, &YELLOW, &ORANGE, &ROSE, &PINK, &PURPLE, &CYAN, &SKY];
@@ -273,11 +278,11 @@ pub const G: Geo = Geo {
     popover_pad: 16., popover_gap: 16., panel_gap: 8., label_gap: 8.,
     dialog_r: R + 4., dialog_pad: 24., dialog_gap: 24.,
     badge_h: 20., badge_r: radius::PILL, badge_px: 8.,
-    checkbox: 16., checkbox_r: 4., switch_w: 32., switch_h: 18., thumb: 16.,
+    checkbox: 16., checkbox_r: 4., switch_w: 32., switch_h: 18.4, thumb: 16.,
     tool_h: 28., tool_r: R - 2.,
-    seg_h: 32., seg_pad: 3., seg_r: R,
-    table_head: 40., row_short: 36., row_medium: 44., cell_px: 8., frame_r: R + 4., card_r: R + 4., item_h: 48., item_px: 16., item_py: 10.,
-    toast_r: R, toast_px: 16., toast_py: 12., tip_r: R - 2., tip_px: 12., tip_py: 6.,
+    seg_h: 36., seg_pad: 3., seg_r: R,
+    table_head: 40., row_short: 36., row_medium: 44., cell_px: 8., frame_r: R + 4., card_r: R + 4., item_h: 48., item_px: 16., item_py: 14.,
+    toast_r: R + 8., toast_px: 16., toast_py: 16., tip_r: R - 2., tip_px: 12., tip_py: 6.,
     add_row_h: 36., footer_h: 40., group_h: 36.,
 };
 

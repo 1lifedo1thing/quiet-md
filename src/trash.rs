@@ -503,7 +503,7 @@ impl Workspace {
         };
         let ok = if danger { Button::destructive("confirm-ok") } else { Button::primary("confirm-ok") }.label(action);
         // The dialog holds focus while it is up (`sync_confirm_focus`): ↩ and Esc are its own keys.
-        let dialog = Dialog::new("confirm-dialog")
+        let dialog = Dialog::alert("confirm-dialog")
             .key_context("Confirm")
             .track_focus(&self.confirm_focus)
             .on_action(cx.listener(|w, _: &ConfirmOk, window, cx| w.confirm_ok(window, cx)))

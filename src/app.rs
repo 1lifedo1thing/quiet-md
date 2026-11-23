@@ -438,6 +438,8 @@ pub struct Workspace {
     /// opened (given back when it closes); `None` while no dialog has it.
     pub confirm_focus: FocusHandle,
     pub confirm_return: Option<Option<WeakFocusHandle>>,
+    /// The keyboard while 导出 Markdown or 文档信息 dialog (the confirmation has its own, `confirm_focus`) is open.
+    pub dialog_focus: crate::design::DialogFocus,
     /// The first-launch pages laid over the window again (⌘⌥⇧O, Settings › About).
     pub onboarding: Option<Entity<crate::onboarding::Onboarding>>,
     pub view: View,
@@ -705,6 +707,7 @@ impl Workspace {
             confirm: None,
             confirm_focus: cx.focus_handle(),
             confirm_return: None,
+            dialog_focus: crate::design::DialogFocus::new(cx),
             onboarding: None,
             view: View::Doc,
             home: Default::default(),
@@ -1953,6 +1956,8 @@ impl Render for Workspace {
         let doc_menu = self.render_doc_menu(window, cx);
         let doc_info = self.render_doc_info(cx);
         let history = self.render_history(cx);
+        // a dialog holds the keyboard while open (Esc and ↩ go to it, not to the editor behind)
+        self.dialog_focus.sync(self.export_md.is_some() || self.doc_info.is_some(), window, cx);
         let confirm = self.render_confirm(cx);
         let trash_menu = self.render_trash_menu(cx);
         let home_menus = self.render_home_menus(cx);
