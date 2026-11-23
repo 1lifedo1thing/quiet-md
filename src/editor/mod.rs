@@ -22,7 +22,7 @@ pub(crate) use link::open as open_link;
 pub mod links;
 pub mod math;
 pub mod menus;
-mod overlays;
+pub(crate) mod overlays;
 mod numbering;
 mod reading;
 mod scrollbar;
