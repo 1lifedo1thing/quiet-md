@@ -1156,4 +1156,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("暂不支持在文件夹之间移动", "Le déplacement entre dossiers n’est pas encore pris en charge"),
     ("只是从侧栏去掉，文件夹里的文件不会删除。以后重新打开这个文件夹，置顶、历史版本和回收站都还在。", "Il quitte seulement la barre latérale ; rien n’est supprimé du dossier. Rouvrez-le plus tard : ses épinglés, son historique et sa Corbeille seront toujours là."),
     ("从侧栏移除「{}」？", "Retirer « {} » de la barre latérale ?"),
+    ("切换深色 / 浅色", "Basculer le mode sombre"),
 ];

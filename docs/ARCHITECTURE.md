@@ -139,6 +139,7 @@ Whiteboard and history modules in core:
 | `search.rs` | Search dialog and advanced search |
 | `docmenu.rs` / `docinfo.rs` / `modes.rs` | More menu, document information, edit/read mode switch and shortcut panel |
 | `theme.rs` | `craft` scale, semantic `Theme::*` colors, named display colors, `shadow_*`, type scale and note panel dimensions |
+| `design/` | Quiet.md's design system (shadcn/ui: Nova's colours, Vega's geometry). `mod.rs` holds the tokens (neutral ramp, semantic colours with light and dark values, option colours, radii, sizes, type, shadows); `button`, `menu`, `field`, `control`, `badge`, `dialog`, `card` the components, all shown live in the 组件库 panel (`gallery/`, `quiet_md --components`). Used across the app's controls, menus and dialogs (`table/style.rs` forwards to it for the 数据表) |
 | `ui.rs` / `input.rs` | Shared menu shells and rows, white pill buttons, hints, toasts and single-line input |
 | `highlight.rs` | Code highlighting |
 | `mermaid.rs` | Mermaid code blocks drawn as diagrams: bundled mermaid.js in an off-screen web view (macOS, Windows), SVG cached by source and theme |

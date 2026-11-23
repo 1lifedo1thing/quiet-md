@@ -24,7 +24,7 @@ const SAVE_DELAY: Duration = Duration::from_millis(500);
 const SAVE_MAX_DELAY: Duration = Duration::from_secs(2);
 
 actions!(workspace, [NewDoc, OpenFile, OpenFolder, ImportDoc, ImportFolder, ToggleSidebar, FocusSearch, FindInDoc, ReplaceInDoc, OpenSettings, OpenAbout, CheckForUpdates, GoHome, CloseWindow, Quit,
-    ReplayOnboarding, HideApp, HideOthers, ShowAll, Minimize, Zoom, ToggleFullScreen]);
+    ReplayOnboarding, HideApp, HideOthers, ShowAll, Minimize, Zoom, ToggleFullScreen, ToggleDarkMode]);
 // A confirmation dialog's keys, in its own key context: ↩ is the action button, Esc 取消.
 actions!(confirm, [ConfirmOk, ConfirmCancel]);
 
@@ -156,6 +156,16 @@ fn menu_bar(markdown: bool) -> Vec<Menu> {
             },
             disabled: false,
         },
+        // 显示 (View). Its name per language, not through `tr`: the key 显示 is the verb
+        // "show" in the tables (Mostrar, Afficher…); these are the system's View menus.
+        Menu {
+            name: {
+                use crate::settings::Lang as L;
+                match crate::settings::lang() { L::Zh => "显示", L::ZhTw => "顯示", L::En => "View", L::Ja => "表示", L::Ko => "보기", L::Fr => "Présentation", L::Es => "Visualización", L::Ar => "عرض", L::Tr => "Görüntü" }.into()
+            },
+            items: vec![MenuItem::action(tr("切换深色 / 浅色", "Toggle Dark Mode"), ToggleDarkMode)],
+            disabled: false,
+        },
         Menu {
             name: tr("窗口", "Window").into(),
             items: vec![
@@ -202,12 +212,17 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-h", HideApp, None),
         KeyBinding::new("cmd-m", Minimize, None),
         KeyBinding::new("ctrl-cmd-f", ToggleFullScreen, None),
+        // ⌥⌘D is the system's Dock hiding; ⌃⌘D is free in the app (Cocoa's 查询 doesn't reach GPUI)
+        KeyBinding::new("ctrl-cmd-d", ToggleDarkMode, None),
     ]);
     // Windows: F11 for full screen, and Ctrl+H for 查找和替换 as in Office
     // and Notepad (written cmd-h: `shortcuts::pc_binding` maps cmd to
     // ctrl and drops a literal ctrl-h, Cocoa's backspace).
     #[cfg(not(target_os = "macos"))]
     cx.bind_keys([KeyBinding::new("f11", ToggleFullScreen, None), KeyBinding::new("cmd-h", ReplaceInDoc, None)]);
+    // Ctrl+Shift+D there (written cmd-shift-d, mapped by `pc_binding`): Ctrl+Alt reads as AltGr on Windows (#290).
+    #[cfg(not(target_os = "macos"))]
+    cx.bind_keys([KeyBinding::new("cmd-shift-d", ToggleDarkMode, None)]);
     cx.on_action(|_: &HideApp, cx| cx.hide());
     cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
@@ -223,6 +238,14 @@ pub fn bind_keys(cx: &mut App) {
         }
     });
     cx.on_action(|_: &Quit, cx| cx.defer(quit));
+    // 切换深色 / 浅色: the other of the two, kept as the 外观 preference; under 跟随系统
+    // the look is the system's, so this is the opposite of the system's. After the
+    // key's dispatch, which borrows the window.
+    cx.on_action(|_: &ToggleDarkMode, cx| cx.defer(|cx| {
+        let Some(h) = cx.windows().into_iter().find_map(|w| w.downcast::<Workspace>()) else { return };
+        let to = if crate::theme::dark() { "light" } else { "dark" };
+        let _ = h.update(cx, |ws, _, cx| ws.set_pref(|p| p.appearance = to.into(), cx));
+    }));
     crate::modes::bind_keys(cx);
 }
 
@@ -415,6 +438,8 @@ pub struct Workspace {
     /// opened (given back when it closes); `None` while no dialog has it.
     pub confirm_focus: FocusHandle,
     pub confirm_return: Option<Option<WeakFocusHandle>>,
+    /// The keyboard while 导出 Markdown or 文档信息 dialog (the confirmation has its own, `confirm_focus`) is open.
+    pub dialog_focus: crate::design::DialogFocus,
     /// The first-launch pages laid over the window again (⌘⌥⇧O, Settings › About).
     pub onboarding: Option<Entity<crate::onboarding::Onboarding>>,
     pub view: View,
@@ -682,6 +707,7 @@ impl Workspace {
             confirm: None,
             confirm_focus: cx.focus_handle(),
             confirm_return: None,
+            dialog_focus: crate::design::DialogFocus::new(cx),
             onboarding: None,
             view: View::Doc,
             home: Default::default(),
@@ -1608,7 +1634,7 @@ impl Workspace {
     /// either side of it: the title (and, with the sidebar hidden, the
     /// traffic lights and 展开侧栏) on the left, … 导入 + on the right. Below a
     /// usable width it is None and the caller shows a search icon instead.
-    pub(crate) fn header_search(&self, window: &Window, cx: &mut Context<Self>) -> Option<Stateful<Div>> {
+    pub(crate) fn header_search(&self, window: &Window, cx: &mut Context<Self>) -> Option<crate::design::Field> {
         let main = f32::from(window.viewport_size().width) - if self.sidebar_open { self.sidebar_w(window) } else { 0. };
         let title = crate::settings::label(crate::settings::text("主页"));
         let title_w = f32::from(window.text_system().shape_line(title.clone().into(), px(17.), &[window.text_style().highlight(HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() }).to_run(title.len())], None).width);
@@ -1620,13 +1646,12 @@ impl Workspace {
         let half = (main / 2. - left).min(main / 2. - right);
         let width = (main - 320.).min(2. * half).min(360.);
         if width < 120. { return None }
-        Some(div().id("header-search").absolute().left(px((main - width) / 2.)).top(px(8.))
-            .w(px(width)).h(px(32.)).no_drag().flex().items_center().gap(px(8.)).px(px(10.))
-            .rounded(px(9.)).bg(Theme::fill_hover())
-            .cursor_pointer().hover(|s| s.bg(Theme::fill_hover_strong()))
-            .child(icon("search", 15., Theme::icon()))
-            .child(div().flex_1().min_w_0().truncate().text_size(px(13.)).text_color(Theme::text_caption()).child(crate::settings::tr("搜索文档…", "Search documents…")))
-            .when(width >= 200., |d| d.child(div().flex_none().text_size(px(11.)).text_color(Theme::text_placeholder()).child(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J").replace(" + ", " "))))
+        // A field that opens the search panel rather than taking text itself.
+        Some(crate::design::Field::new("header-search").sized(crate::design::FieldSize::Sm).absolute().left(px((main - width) / 2.)).top(px(8.))
+            .w(px(width)).no_drag().gap(px(8.)).cursor_pointer()
+            .child(crate::design::icon("search", 16., crate::design::color::muted_foreground()))
+            .child(div().flex_1().min_w_0().truncate().text_color(crate::design::color::placeholder()).child(crate::settings::tr("搜索文档…", "Search documents…")))
+            .when(width >= 200., |d| d.child(crate::design::Kbd::new(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J").replace(" + ", " "))))
             .tip(crate::settings::tr("搜索文档", "Search documents"), Some(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J")))
             .on_click(cx.listener(|w, _, window, cx| w.open_search(window, cx))))
     }
@@ -1649,7 +1674,7 @@ impl Workspace {
         };
         // Independent icon controls, with equal top and right insets.
         let seg = crate::ui::header_icon;
-        let divider = || div().flex_none().w(px(1.)).h(px(18.)).bg(Theme::line_divider());
+        let divider = || crate::design::Separator::new().vertical().h(px(18.));
         // Breadcrumbs: the parent pages, each linking to itself, with the
         // middle ones folded into "…" when the chain is long.
         let chain: Vec<(String, String, Option<String>)> = self
@@ -1769,32 +1794,19 @@ impl Workspace {
             .title_bar()
             .when(!self.sidebar_open, |d| {
                 d.child(
-                    div()
-                        .id("open-sidebar")
+                    crate::design::Button::ghost("open-sidebar")
                         .no_drag()
-                        .flex_none()
                         .ml(px(4.))
-                        .size(px(28.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(8.))
-                        .cursor_pointer()
-                        .hover(|s| s.bg(Theme::fill_hover_strong()))
+                        .icon("panel-left-open")
                         .tip(crate::settings::tr("展开侧栏", "Show sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
-                        .child(icon("panel-left-open", 17., Theme::icon()))
                         .on_click(cx.listener(|w, _, _, cx| {
                             w.sidebar_open = true;
                             cx.notify();
                         })),
                 )
                 .child(
-                    div().id("header-home").no_drag().flex_none().ml(px(4.)).size(px(28.))
-                        .flex().items_center().justify_center().rounded(px(8.)).cursor_pointer()
-                        .hover(|s| s.bg(Theme::fill_hover_strong()))
-                        .active(|s| s.bg(Theme::fill_pressed()))
+                    crate::design::Button::ghost("header-home").no_drag().ml(px(4.)).icon("home")
                         .tip(crate::settings::text("返回主页"), None)
-                        .child(icon("home", 18., Theme::icon()))
                         .on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))),
                 )
                 .child(div().mx(px(12.)).child(divider()))
@@ -1849,7 +1861,7 @@ impl Workspace {
                             // from this button's right edge.
                             seg("doc-more", "ellipsis")
                                 .relative()
-                                .when(self.doc_menu, |d| d.bg(Theme::fill_hover()))
+                                .selected(self.doc_menu)
                                 .when(!self.doc_menu, |d| d.tip(crate::settings::tr("更多", "More"), None))
                                 .child(canvas(move |b, _, _| record_more.set(Some(b)), |_, _, _, _| {}).absolute().inset_0())
                                 // Toggle on mouse-down from the render-time state: the menu's outside-press
@@ -1944,6 +1956,8 @@ impl Render for Workspace {
         let doc_menu = self.render_doc_menu(window, cx);
         let doc_info = self.render_doc_info(cx);
         let history = self.render_history(cx);
+        // a dialog holds the keyboard while open (Esc and ↩ go to it, not to the editor behind)
+        self.dialog_focus.sync(self.export_md.is_some() || self.doc_info.is_some(), window, cx);
         let confirm = self.render_confirm(cx);
         let trash_menu = self.render_trash_menu(cx);
         let home_menus = self.render_home_menus(cx);

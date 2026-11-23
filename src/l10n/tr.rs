@@ -1124,4 +1124,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("暂不支持在文件夹之间移动", "Klasörler arasında taşıma henüz desteklenmiyor"),
     ("只是从侧栏去掉，文件夹里的文件不会删除。以后重新打开这个文件夹，置顶、历史版本和回收站都还在。", "Yalnızca kenar çubuğundan çıkar; klasördeki hiçbir şey silinmez. Klasörü daha sonra yeniden açtığınızda sabitlenenleri, geçmişi ve Çöp Kutusu yerinde olur."),
     ("从侧栏移除「{}」？", "“{}” kenar çubuğundan kaldırılsın mı?"),
+    ("切换深色 / 浅色", "Karanlık modu aç / kapat"),
 ];
