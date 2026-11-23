@@ -471,10 +471,6 @@ fn sort_glyph(dir: SortDir, size: f32) -> Svg {
 /// automatic ones never write it, and fall back to it (then the id) for equal
 /// values, so equal pages keep the order the user arranged by hand.
 pub(crate) fn sort_entries(v: &mut [Entry], order: Order) {
-    if order.field == HomeSort::Manual {
-        v.sort_by(|a, b| (a.meta.place(), &a.id).cmp(&(b.meta.place(), &b.id)));
-        return;
-    }
     v.sort_by(|a, b| order.cmp(a, b));
 }
 
@@ -489,6 +485,11 @@ pub(crate) struct Order {
 
 impl Order {
     pub(crate) fn cmp(&self, a: &Entry, b: &Entry) -> std::cmp::Ordering {
+        // 多个根: their rows keep roots.json's order; only what is in a root is sorted.
+        let row = |e: &Entry| crate::shared_store::root_of_row(&e.id).is_some();
+        if row(a) || row(b) {
+            return row(b).cmp(&row(a)).then_with(|| (a.meta.place(), &a.id).cmp(&(b.meta.place(), &b.id)));
+        }
         if self.field == HomeSort::Manual {
             return (a.meta.place(), &a.id).cmp(&(b.meta.place(), &b.id));
         }
@@ -577,20 +578,6 @@ impl Workspace {
     }
 
     pub(crate) fn manual_home_sort(&self) -> bool { self.home.sort == HomeSort::Manual && self.home.tab == HomeTab::Recent }
-
-    /// On launch with 手动排序: freeze the order as it stands, so editing a
-    /// page cannot move it under the user. A no-op once everything is placed.
-    pub(crate) fn freeze_manual_home(&mut self, cx: &mut Context<Self>) {
-        if self.home.sort == HomeSort::Manual && !self.entries.is_empty() && !self.tree_writes_pending() {
-            self.prepare_manual_order(cx);
-        }
-    }
-
-    /// A page just arrived: under 手动排序, number it now, so editing it later
-    /// (which changes its modification time) cannot move it.
-    pub(crate) fn settle_manual_home(&mut self, cx: &mut Context<Self>) {
-        if self.home.sort == HomeSort::Manual { self.prepare_manual_order(cx); }
-    }
 
     /// A list header: clicking it sorts by that column; clicking the sorted
     /// one flips the direction. Headers without an order are not clickable.
@@ -774,8 +761,9 @@ impl Workspace {
         self.home.grid = !s.home_list;
         self.home.folders_first = s.home_folders_first;
         self.home.sort = s.home_sort.as_deref().map(HomeSort::of).unwrap_or(HomeSort::Manual);
-        // A library from before directions existed keeps the order it used to show.
+        // Settings from before directions existed keep the order they used to show.
         self.home.sort_dir = s.home_sort_dir.as_deref().map(SortDir::of).unwrap_or_else(|| self.home.sort.default_dir());
+        self.store.set_place_by_hand(self.home.sort == HomeSort::Manual);
     }
 
     fn save_home(&mut self) {
@@ -783,6 +771,7 @@ impl Workspace {
         s.home_folders_first = self.home.folders_first;
         (s.home_list, s.home_sort) = (!self.home.grid, Some(self.home.sort.key().to_string()));
         s.home_sort_dir = Some(self.home.sort_dir.key().to_string());
+        self.store.set_place_by_hand(self.home.sort == HomeSort::Manual);
         if let Err(e) = self.store.save_settings(&s) { eprintln!("无法保存主页视图：{e}"); }
     }
 
@@ -1171,6 +1160,8 @@ mod sort_tests {
             body: "".into(),
             reminders: vec![],
             links: vec![],
+            note: None,
+            root: String::new(),
         }
     }
 
@@ -1231,5 +1222,22 @@ mod sort_tests {
         // 手动排序 never groups: it is the order the sidebar shows.
         sort_entries(&mut v, Order { field: HomeSort::Manual, dir: SortDir::Desc, folders_first: true });
         assert_eq!(ids(&v), ["d", "f"]);
+    }
+
+    #[test]
+    fn root_rows_keep_their_order() {
+        // 多个根: the rows stay in roots.json's order (`root_order`) whatever the sort.
+        let row = |key: &str, title: &str, at: u64| {
+            let mut e = page(&crate::shared_store::root_row(key), title, 0, 0, 0, true);
+            (e.meta.parent, e.meta.root_order) = (None, Some(at));
+            e
+        };
+        let mut v = vec![row("b", "Alpha", 2), row("a", "Zulu", 1), page("x", "Middle", 5, 5, 0, false)];
+        for field in [HomeSort::Title, HomeSort::Modified, HomeSort::Manual] {
+            for dir in [SortDir::Asc, SortDir::Desc] {
+                sort_entries(&mut v, Order { field, dir, folders_first: false });
+                assert_eq!(ids(&v), ["root:a", "root:b", "x"]);
+            }
+        }
     }
 }

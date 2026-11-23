@@ -17,6 +17,8 @@ struct Shared {
     /// list (one root's) can stand in for that root among the others.
     entries: Vec<(String, Vec<Entry>)>,
     trash: Vec<(String, Vec<TrashEntry>)>,
+    /// `Store::set_place_by_hand` for every root, also those opened later.
+    place_by_hand: bool,
 }
 
 #[derive(Clone)]
@@ -42,7 +44,7 @@ impl gpui::Global for SharedStore {}
 impl SharedStore {
     pub fn open() -> Self { Self::with_workspace(Workspace::load()) }
     pub fn with_workspace(ws: Workspace) -> Self {
-        let s = Self(Rc::new(RefCell::new(Shared { ws, active: None, entries: vec![], trash: vec![] })), Arc::new(AtomicBool::new(false)));
+        let s = Self(Rc::new(RefCell::new(Shared { ws, active: None, entries: vec![], trash: vec![], place_by_hand: true })), Arc::new(AtomicBool::new(false)));
         if let Some(r) = s.0.borrow().ws.first() { Store::set_active_root(&r.path); }
         s.roots_changed();
         s
@@ -130,9 +132,13 @@ impl SharedStore {
     fn put<R>(&self, parent: Option<&str>, f: impl FnOnce(&mut Store, Option<&str>) -> Result<R>) -> Result<R> {
         let (key, real) = match parent.and_then(root_of_row) { Some(k) => (Some(k.to_string()), None), None => (match parent { Some(p) => self.root_of(p), None => self.active_root() }, parent) };
         let mut sh = self.0.borrow_mut();
+        let by_hand = sh.place_by_hand;
         let s = key.and_then(|k| sh.ws.store(&k)).ok_or_else(no_root)?;
+        s.set_place_by_hand(by_hand);
         f(s, real)
     }
+    /// Whether new pages get a hand-order number: only under 手动排序.
+    pub fn set_place_by_hand(&self, on: bool) { self.0.borrow_mut().place_by_hand = on; }
     /// `f` on the library `id` is in, else (no id) the active root's.
     pub fn with<R>(&self, id: Option<&str>, f: impl FnOnce(&mut Store) -> Result<R>) -> Result<R> {
         match id { Some(id) => self.on_res(id, f), None => self.put(None, |s, _| f(s)) }

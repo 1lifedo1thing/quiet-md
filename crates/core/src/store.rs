@@ -249,7 +249,7 @@ pub struct Settings {
     pub home_list: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_sort: Option<String>,
-    /// 升序 / 降序 for `home_sort`; absent in libraries from before it existed.
+    /// 升序 / 降序 for `home_sort`; absent in settings from before it existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_sort_dir: Option<String>,
     #[serde(default)]
@@ -373,6 +373,10 @@ pub struct Store {
     /// What this computer's data about the library is named by: its 工作区
     /// root key, else `library_key` of its path.
     key: String,
+    /// New pages in a folder get a hand-order number (手动排序). The window
+    /// turns it off under 自动排序, so sorting never rewrites what the user
+    /// arranged by hand; the core never reads the window's sort setting.
+    place_by_hand: bool,
 }
 
 /// What switching documents remembers in memory only: each write of it is an
@@ -1290,7 +1294,7 @@ impl Store {
         let trash = load_json(&base.join("trash").join("index.json"), "回收站索引", &mut warnings);
         let v5 = !flat && Self::format_at(&root) >= 5;
         let mut store = Store { file_changes: vec![], root, index: HashMap::new(), foreign: DiskIndex::new(), trash, flat, warnings, migrated: None, loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(),
-            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string() };
+            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string(), place_by_hand: true };
         if flat {
             store.index = load_json(&base.join("index.json"), "文档索引", &mut store.warnings);
             store.flat_folders()?;
@@ -1374,6 +1378,8 @@ impl Store {
 
     /// The name this computer's data about the library goes by.
     pub fn key(&self) -> &str { &self.key }
+    /// See `place_by_hand`: false while the window sorts automatically.
+    pub fn set_place_by_hand(&mut self, on: bool) { self.place_by_hand = on; }
 
     /// This computer's data about `root` named by its path (builds before
     /// root keys) goes by `key` from now on, unless `key` has some already.
@@ -2399,12 +2405,9 @@ impl Store {
     /// A document just made in folder `parent` becomes its last child, as
     /// 移动到 would put it (the old layout records the folder only here).
     fn place_new(&mut self, id: &str, parent: Option<&str>) -> Result<()> {
-        if parent.is_some() {
-            // 自动排序 must not rewrite the hand order: the page stays unplaced,
-            // and 手动排序 puts it at the top the next time it freezes.
-            let automatic = self.settings().home_sort.as_deref().is_some_and(|s| s != "manual");
-            self.move_in_tree_with(id, parent, None, !automatic)?;
-        }
+        // 自动排序 must not rewrite the hand order: the page stays unplaced,
+        // and 手动排序 shows it at the top.
+        if parent.is_some() { self.move_in_tree_with(id, parent, None, self.place_by_hand)?; }
         Ok(())
     }
 
@@ -3138,9 +3141,7 @@ mod tests {
         assert_eq!(before.len(), 2);
         assert!(before.iter().all(|(_, order)| *order > 0));
         // 自动排序: the new page stays unplaced and its siblings keep their numbers.
-        let mut settings = s.settings();
-        settings.home_sort = Some("modified".into());
-        s.save_settings(&settings).unwrap();
+        s.set_place_by_hand(false);
         let new = s.create_from_in(&doc("c"), Some(&folder)).unwrap();
         let after = hand(&mut s);
         let untouched = after.iter().filter(|(id, _)| *id != new).cloned().collect::<Vec<_>>();
@@ -4013,7 +4014,7 @@ mod tests {
         let index = crate::vfs::read(trash.join("index.json")).unwrap();
         crate::vfs::rename(&trash, lib.0.join(".quiet/trash-away")).unwrap();
         crate::vfs::write(&trash, b"").unwrap();
-        let mut s = Store { file_changes: vec![], root: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0) };
+        let mut s = Store { file_changes: vec![], root: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0), place_by_hand: true };
         assert_eq!(s.list_trash().len(), 1);
         assert_eq!(s.trash.len(), 1);
     }

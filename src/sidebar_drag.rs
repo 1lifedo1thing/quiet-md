@@ -325,10 +325,15 @@ impl Workspace {
 
     pub(crate) fn end_folder_drag(&mut self, cancel: bool, cx: &mut Context<Self>) {
         let rows = self.drag_rows();
+        // 自动排序 decides the order among siblings: a drop that only reorders them springs back.
+        let sorted = self.home.order().field != crate::home::HomeSort::Manual;
+        let held = self.folder_drag.active.as_ref().and_then(|d| self.entries.iter().find(|e| e.id == d.id)).map(|e| e.meta.parent.clone());
         let Some(d) = self.folder_drag.active.as_mut() else { return };
         if !d.started { self.folder_drag.active = None; cx.notify(); return; }
         let b = self.list_scroll.bounds();
         let cancel = cancel || d.at.x < b.left() || d.at.x > b.right() || d.at.y < b.top() || d.at.y > b.bottom();
+        let reorder = !cancel && sorted && held.as_ref() == Some(&d.parent);
+        let cancel = cancel || reorder;
         let before = rows.get(d.index).filter(|r| r.entry.meta.parent == d.parent).map(|r| r.entry.id.clone());
         let mut movement = PendingMove { id: d.id.clone(), parent: d.parent.clone(), before, history: 0 };
         let depth = if cancel { d.original_depth } else { d.depth };
@@ -362,6 +367,7 @@ impl Workspace {
             self.save_next_tree_move(cx);
             self.sync_sub_pages(cx);
         }
+        if reorder { self.show_toast_kind(crate::ui::ToastKind::Info, crate::settings::tr("自动排序时不能拖动调整顺序，可在主页改为手动排序", "Pages are sorted automatically. Switch to Manual order on Home to rearrange them."), cx); }
         cx.notify();
     }
 
