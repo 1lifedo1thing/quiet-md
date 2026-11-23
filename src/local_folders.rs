@@ -5,7 +5,6 @@
 
 use crate::app::{RowMenu, View, Workspace};
 use crate::theme::Theme;
-use crate::ui::{icon, popover};
 use crate::settings::tr;
 use crate::ui::ToastKind;
 use fdl_core::workspace::{AddError, RenameError};
@@ -171,12 +170,12 @@ impl Workspace {
 
     /// The "…" menu of a root's row (two or more roots).
     pub(crate) fn root_row_menu(&self, key: &str, m: RowMenu, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        let row = |id: &'static str, glyph: &'static str, label: &'static str| crate::ui::menu_row(id, SharedString::from(id)).child(icon(glyph, 16., Theme::icon())).child(label);
+        let row = |id: &'static str, glyph: &'static str, label: &'static str| crate::design::MenuItem::new(id).icon(glyph).label(label);
         let pos = if m.pos.x < px(0.) { point(-m.pos.x, m.pos.y + px(22.)) } else { m.pos };
         let open = self.store.roots().into_iter().find(|r| r.0 == key);
         let (name, path, missing) = open.map(|r| (r.1, r.2, r.3.is_some())).unwrap_or_default();
         let (doc, folder, rename, k1, k2) = (m.id.clone(), m.id.clone(), m.id.clone(), key.to_string(), key.to_string());
-        let mut menu = popover().id("root-row-menu").occlude().min_w(px(200.)).py(px(crate::ui::MENU_PAD_Y))
+        let mut menu = crate::design::Popover::new("root-row-menu").menu().min_w(px(200.))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }));
         if missing {
             menu = menu.child(row("rr-retry", "folder", tr("重新查找", "Look again")).on_click(cx.listener(move |w, _, _, cx| {
@@ -203,7 +202,7 @@ impl Workspace {
 
     /// The sidebar with no root folder open: a way to open or make one.
     pub(crate) fn empty_roots(&self, cx: &mut Context<Self>) -> Div {
-        let button = |id: &'static str, label: &'static str| crate::ui::menu_row(id, SharedString::from(id)).child(label);
+        let button = |id: &'static str, label: &'static str| crate::design::MenuItem::new(id).label(label);
         div().flex().flex_col().gap(px(2.)).px(px(4.)).pt(px(12.))
             .child(div().px(px(8.)).pb(px(6.)).text_size(px(crate::theme::ui_font())).line_height(px(crate::theme::ui_font() + 7.)).text_color(Theme::text_caption())
                 .child(tr("还没有打开任何文件夹。笔记就是文件夹里的文件。", "No folder is open yet. Your notes are the files in a folder.")))
@@ -217,8 +216,8 @@ impl Workspace {
             .child(img("illus/empty-list.svg").size(px(120.)))
             .child(div().mt(px(16.)).text_size(px(13.)).line_height(px(20.)).text_color(Theme::text_caption()).child(tr("还没有打开任何文件夹。笔记就是文件夹里的文件。", "No folder is open yet. Your notes are the files in a folder.")))
             .child(div().mt(px(20.)).flex().gap(px(8.))
-                .child(crate::ui::primary_button("empty-main-open", tr("打开文件夹…", "Open folder…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))))
-                .child(crate::ui::secondary_button("empty-main-new", tr("新建文件夹…", "New folder…")).on_click(cx.listener(|w, _, window, cx| w.new_root_dialog(window, cx)))))
+                .child(crate::design::Button::primary("empty-main-open").label(tr("打开文件夹…", "Open folder…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))))
+                .child(crate::design::Button::secondary("empty-main-new").label(tr("新建文件夹…", "New folder…")).on_click(cx.listener(|w, _, window, cx| w.new_root_dialog(window, cx)))))
     }
 
     /// What the top of the tree is called where nothing names a root: the
