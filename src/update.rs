@@ -542,7 +542,6 @@ fn download_verified(m: &Manifest, name: &str, key: &minisign_verify::PublicKey,
         let bytes = std::fs::read(part).map_err(|e| e.to_string())?;
         match wrong(&bytes) { None => return Ok(()), Some(w) => what = w }
     }
-    let _ = std::fs::remove_file(part);
     Err(format!("{} ({what})", crate::settings::tr("下载到的安装包和预期不一致，可能是网络缓存造成的。可以到官网下载最新版直接安装。", "The downloaded update doesn't match what was expected, possibly because of a network cache. You can download the latest version from the website and install it directly.")))
 }
 
@@ -965,7 +964,7 @@ FuE4L1zQnqL1nA/5xffpEtZyK2ca882Q1joA5X11poZ1xezdAlEMfn/36MJc5C60clQFec4vQf66MoxP
         assert_eq!(seen.join().unwrap().len(), 2);
         assert!(err.contains("network cache") || err.contains("网络缓存"), "{err}");
         assert!(err.ends_with("(signature)"), "{err}");
-        assert!(!part.exists(), "nothing half-checked is left");
+        assert_eq!(std::fs::read(&part).unwrap(), b"quiet.mD", "the second copy stays to look at (the next download clears it)");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
