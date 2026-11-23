@@ -3,7 +3,7 @@
 2026-11-23 起，组件的细节完全照 shadcn/ui 还原（维护者要求）。允许保留的偏差只有三类，原因写在 [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)「和 shadcn 的偏差」一节：
 
 - **A 边缘**：弹层、卡片、对话框用 `shadow::popover()` / `frame()` / `dialog()`，代替 `ring-1 ring-foreground/10` 加 `shadow-*`。
-- **B 圆角档位**：照 R 档位表（目前和 Vega 一致）。
+- **B 圆角**：R 是 12（Vega 10），档位算法照 shadcn；macOS 上画成连续圆角（补丁 0047）。
 - **C GPUI 限制**。
 
 来源：`shadcn-ui/ui` @ `bfa64ff`。
