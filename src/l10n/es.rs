@@ -743,6 +743,7 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("更新信息无法识别", "No se reconoce la información de actualización"),
     ("更新信息无效", "La información de actualización no es válida"),
     ("更新包校验失败", "No se pudo verificar el paquete de actualización"),
+    ("下载到的安装包和预期不一致，可能是网络缓存造成的。可以到官网下载最新版直接安装。", "El paquete descargado no coincide con lo esperado, posiblemente por una caché de red. Puedes descargar la última versión desde el sitio web e instalarla directamente."),
     ("无法连接更新服务器", "No se pudo conectar con el servidor de actualizaciones"),
     ("找不到正在运行的应用", "No se encuentra la app en ejecución"),
     ("请先把 Quiet.md 移到「应用程序」文件夹，再更新", "Mueve Quiet.md a la carpeta Aplicaciones antes de actualizar"),
