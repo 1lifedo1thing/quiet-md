@@ -245,6 +245,10 @@ impl DropItem {
 /// Renaming in place: a view tab, a table tab.
 pub(crate) enum Rename { Table(TableId), Field(FieldId) }
 
+/// `TableView::slide`: the springs, and the last frame's time for their step.
+#[derive(Default)]
+pub(crate) struct SlideFx { pub rows: HashMap<RecId, crate::sidebar_drag::Spring<1>>, pub gap: Option<crate::sidebar_drag::Spring<1>>, pub last: Option<web_time::Instant> }
+
 pub struct TableView {
     pub state: Entity<BaseState>,
     pub(crate) focus: FocusHandle,
@@ -289,6 +293,9 @@ pub struct TableView {
     pub(crate) find_input: Entity<TextField>,
     /// The column whose right edge is under the pointer (its width can be dragged there).
     pub(crate) grip_hover: Option<FieldId>,
+    /// Rows on their way to their places (dragged rows' neighbours making room, the dropped ones going
+    /// in), each a spring on its top in the list's coordinates, as the sidebar's rows; and the gap's.
+    pub(crate) slide: std::cell::RefCell<SlideFx>,
     _refresh: Task<()>,
     _subs: Vec<Subscription>,
 }
@@ -349,7 +356,7 @@ impl TableView {
             sel: None, rows_sel: HashSet::new(), col_sel: vec![], editing: None, input, aux, scroll: point(0., 0.),
             body: Rc::new(Cell::new(Bounds::default())), drag: None, popup: None, dropdown: None, rename: None,
             expanded: None, record: Default::default(), notes: Default::default(), find: None, find_input,
-            grip_hover: None, _refresh: refresh, _subs: subs,
+            grip_hover: None, slide: Default::default(), _refresh: refresh, _subs: subs,
         }
     }
 

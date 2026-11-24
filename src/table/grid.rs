@@ -371,7 +371,16 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
             v.rows_sel.clear();
         }
         Drag::ColSelect { .. } => {}
-        Drag::RowMove { ids, to, moved, .. } => if moved {
+        Drag::RowMove { ids, to, moved, y, off, .. } => if moved {
+            // the dragged rows glide in from where they were let go
+            {
+                let first = y - f32::from(v.body.get().origin.y) + v.scroll.y - off;
+                let row_h = { let st = v.state.read(cx); st.doc.base.table(tid).and_then(|t| t.view(v.view)).map_or(row_px(RowHeight::Short), |view| row_px(view.opts.row_height)) };
+                let mut fx = v.slide.borrow_mut();
+                let mut placed: Vec<(usize, RecId)> = ids.iter().filter_map(|r| v.order.get(r).map(|p| (*p, *r))).collect();
+                placed.sort();
+                for (k, (_, r)) in placed.into_iter().enumerate() { fx.rows.insert(r, crate::sidebar_drag::Spring::new([first + k as f32 * row_h])); }
+            }
             let target = {
                 let st = v.state.read(cx);
                 let Some(t) = st.doc.base.table(tid) else { return };
@@ -517,14 +526,28 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     let lift = match &v.drag { Some(Drag::RowMove { ids, to, y, off, moved: true, .. }) => Some((ids.clone(), *to, *y, *off)), _ => None };
     let mut lifted: Vec<AnyElement> = vec![];
     let (mut left_i, mut lift_i) = (0usize, 0usize);
+    // rows slide to their places on springs (the sidebar's): the step since the last frame
+    let mut fx = v.slide.borrow_mut();
+    let now = web_time::Instant::now();
+    let dt = fx.last.replace(now).map_or(1. / 120., |l| now.duration_since(l).as_secs_f32().min(0.032));
+    let mut sliding = false;
     let (first, last) = match &lift {
         // every row may move by the dragged ones' height: lay them all out (counting places from the top)
         Some((ids, ..)) => (0, (last + ids.len()).min(v.result.rows.len())),
+        // still settling: as far as they may still be from their places
+        None if !fx.rows.is_empty() => (first.saturating_sub(fx.rows.len()), (last + fx.rows.len()).min(v.result.rows.len())),
         None => (first, last),
     };
-    if let Some((ids, to, ..)) = &lift {
-        let gap_top = *to as f32 * row_h - sy;
-        body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(ids.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
+    match &lift {
+        Some((ids, to, ..)) => {
+            let at = *to as f32 * row_h;
+            let gap = fx.gap.get_or_insert_with(|| crate::sidebar_drag::Spring::new([at]));
+            gap.target = [at];
+            sliding |= gap.step(dt);
+            let gap_top = gap.p[0] - sy;
+            body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(ids.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
+        }
+        None => fx.gap = None,
     }
     for ri in first..last {
         let mut top = v.tops[ri] - sy;
@@ -537,11 +560,20 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 lift_i += 1;
             } else {
                 let at = left_i + if left_i >= *to { ids.len() } else { 0 };
-                top = at as f32 * row_h - sy;
+                let rid = t.records[*i].id;
+                let s = fx.rows.entry(rid).or_insert_with(|| crate::sidebar_drag::Spring::new([v.tops[ri]]));
+                s.target = [at as f32 * row_h];
+                sliding |= s.step(dt);
+                top = s.p[0] - sy;
                 place = Some(at);
                 left_i += 1;
             }
             if top + row_h < 0. || top > vs.height { continue }
+        } else if let (None, query::Row::Record(i)) = (&lift, &v.result.rows[ri]) && let Some(s) = fx.rows.get_mut(&t.records[*i].id) {
+            // dropped, or making room a moment ago: on to its place in the list
+            s.target = [v.tops[ri]];
+            sliding |= s.step(dt);
+            top = s.p[0] - sy;
         }
         match &v.result.rows[ri] {
             query::Row::Group(g) => body = body.child(group_row(v, t, g, top, cols.frozen_w, cx)),
@@ -658,6 +690,11 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx))));
     }
     body = body.children(lifted);
+    // settled rows let go of their springs; while any moves, another frame
+    if lift.is_none() { fx.rows.retain(|_, s| s.p != s.target || s.v[0] != 0.); }
+    if !sliding && lift.is_none() { fx.last = None; }
+    drop(fx);
+    if sliding { window.request_animation_frame(); }
     // gesture feedback: where a dragged column will land
     if let Some(Drag::ColMove { to: Some(to), .. }) = &v.drag {
         let edge = if *to >= cols.ids.len() { cols.total } else { cols.x[*to] };
