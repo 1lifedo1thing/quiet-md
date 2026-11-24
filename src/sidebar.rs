@@ -801,14 +801,13 @@ impl Workspace {
                     .on_click(cx.listener(move |w, _, window, cx| w.open_move(vec![mv.clone()], window, cx))),
             )
             .child(
-                item("rm-path", "copy", crate::settings::text("复制文件地址"))
+                // the file (or folder) picked out in Finder, as a 本机文件夹's row offers
+                item("rm-reveal", "folder", crate::local_folders::show_in_files())
                     .on_hover(set_sub(false))
                     .on_click(cx.listener(move |w, _, _, cx| {
                         w.row_menu = None;
-                        if let Some(path) = w.store.file_path(&path) {
-                            cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()));
-                            w.show_toast(crate::settings::text("已复制文件地址"), cx);
-                        }
+                        if let Some(path) = w.store.file_path(&path) { cx.reveal_path(&path); }
+                        cx.notify();
                     })),
             )
             .child(
