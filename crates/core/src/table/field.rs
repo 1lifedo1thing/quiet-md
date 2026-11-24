@@ -39,6 +39,46 @@ pub fn iso(ms: i64, time: bool) -> String {
     if time || h != 0 || min != 0 { format!("{y:04}-{m:02}-{d:02} {h:02}:{min:02}") } else { format!("{y:04}-{m:02}-{d:02}") }
 }
 
+/// Unix milliseconds as UTC ISO 8601 to the millisecond, `2027-01-15T00:02:03.123Z`:
+/// the file's `_created_at` / `_updated_at`. As strings they sort as the times do.
+pub fn iso_utc(ms: i64) -> String {
+    let (y, m, d, h, min) = date_parts(ms);
+    let r = ms.rem_euclid(60_000);
+    format!("{y:04}-{m:02}-{d:02}T{h:02}:{min:02}:{:02}.{:03}Z", r / 1000, r % 1000)
+}
+
+/// An ISO 8601 time as Unix milliseconds: `iso_utc`'s, and what other programs
+/// write: a space for the `T`, no seconds or milliseconds, an offset
+/// (`+08:00`, `+0800`, `-05`) for the `Z`. No zone at all is UTC; a date alone is its midnight.
+pub fn parse_iso(s: &str) -> Option<i64> {
+    let s = s.trim();
+    let (day, time) = match s.find(['T', 't', ' ']) { Some(i) => (&s[..i], s[i + 1..].trim()), None => (s, "") };
+    let p: Vec<&str> = day.split('-').collect();
+    let [y, m, d] = p[..] else { return None };
+    if y.len() != 4 || m.is_empty() || d.is_empty() || m.len() > 2 || d.len() > 2 { return None; }
+    let (y, m, d): (i64, u32, u32) = (y.parse().ok()?, m.parse().ok()?, d.parse().ok()?);
+    if !(1..=12).contains(&m) || d < 1 || d > crate::time::days_in_month(y, m) { return None; }
+    // the zone: `Z`, or a sign and hours with optional minutes
+    let (clock, off) = if let Some(c) = time.strip_suffix(['Z', 'z']) { (c, 0) } else if let Some(i) = time.rfind(['+', '-']) {
+        let z = time[i + 1..].replace(':', "");
+        if !z.bytes().all(|b| b.is_ascii_digit()) || !matches!(z.len(), 2 | 4) { return None; }
+        let (h, mm): (i64, i64) = (z[..2].parse().ok()?, if z.len() == 4 { z[2..].parse().ok()? } else { 0 });
+        if h > 23 || mm > 59 { return None; }
+        (time[..i].trim_end(), if &time[i..i + 1] == "-" { -1 } else { 1 } * (h * 60 + mm) * 60_000)
+    } else { (time, 0) };
+    let mut ms = days_from_civil(y, m, d) * DAY;
+    if !clock.is_empty() {
+        let (hms, frac) = clock.split_once(['.', ',']).unwrap_or((clock, ""));
+        let t: Vec<i64> = hms.split(':').map(|p| if p.len() == 2 { p.parse().ok() } else { None }).collect::<Option<_>>()?;
+        let (h, mi, sec) = match t[..] { [h, mi] => (h, mi, 0), [h, mi, sec] => (h, mi, sec), _ => return None };
+        if h > 23 || mi > 59 || sec > 60 || !frac.bytes().all(|b| b.is_ascii_digit()) { return None; }
+        // milliseconds: the first three digits
+        let frac: i64 = format!("{:0<3}", &frac[..frac.len().min(3)]).parse().ok()?;
+        ms += ((h * 60 + mi) * 60 + sec) * 1000 + frac;
+    }
+    Some(ms - off)
+}
+
 pub fn format_date(ms: i64, fmt: DateFmt, time: bool) -> String {
     let (y, m, d, h, min) = date_parts(ms);
     let day = match fmt {
@@ -310,6 +350,26 @@ mod tests {
     use super::*;
 
     fn f(ty: FieldType) -> Field { Field { id: 1, name: "f".into(), ty, opts: default_opts(ty), desc: String::new() } }
+
+    #[test]
+    fn utc_times_go_both_ways() {
+        let t = date_ms(2027, 1, 15, 0, 2) + 3123;
+        assert_eq!(iso_utc(t), "2027-01-15T00:02:03.123Z");
+        assert_eq!(parse_iso(&iso_utc(t)), Some(t));
+        for ms in [0, -1, 1_800_000_000_999, date_ms(1969, 12, 31, 23, 59) + 59_999] { assert_eq!(parse_iso(&iso_utc(ms)), Some(ms), "{ms}"); }
+        // as other programs write them
+        assert_eq!(parse_iso("2027-01-15 08:02:03+08:00"), Some(t - 123));
+        assert_eq!(parse_iso("2027-01-15T08:02:03.123+0800"), Some(t));
+        assert_eq!(parse_iso("2027-01-14T19:02:03.123-05"), Some(t));
+        assert_eq!(parse_iso("2027-01-15T00:02:03"), Some(t - 123));
+        assert_eq!(parse_iso("2027-01-15 00:02"), Some(t - 3123));
+        assert_eq!(parse_iso("2027-01-15T00:02:03.1234567Z"), Some(t));
+        assert_eq!(parse_iso("2027-01-15T00:02:03.1Z"), Some(t - 23));
+        assert_eq!(parse_iso("2027-01-15"), Some(date_ms(2027, 1, 15, 0, 0)));
+        for bad in ["", "x", "2027-13-01", "2027-02-30", "27-01-15", "2027-01-15T25:00", "2027-01-15T00:02:03+8", "2027-01-15T0:2"] { assert_eq!(parse_iso(bad), None, "{bad}"); }
+        // as strings, in time order
+        assert!(iso_utc(t) < iso_utc(t + 1) && iso_utc(t + 1) < iso_utc(t + 60_000));
+    }
 
     #[test]
     fn dates_read_and_show() {

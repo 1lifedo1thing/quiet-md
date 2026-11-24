@@ -15,7 +15,8 @@ impl Doc {
     /// It gets its sort key where it is inserted.
     fn blank_record(&self, t: &Table, id: RecId, n: u64) -> Record {
         let now = field::now();
-        let mut r = Record { id, created: now, modified: now, auto: t.next_auto + n, ..Default::default() };
+        let by = Some(self.base.writer.0.clone());
+        let mut r = Record { id, created: now, modified: now, created_by: by.clone(), updated_by: by, auto: t.next_auto + n, ..Default::default() };
         for f in t.fields.iter().filter(|f| !f.ty.computed() && !f.opts.default.is_empty()) {
             let v = if f.ty.is_date() && f.opts.default == "now" { Value::Date(if f.opts.time { now - now.rem_euclid(60_000) } else { field::today() }) } else { field::parse(f, &f.opts.default) };
             r.set(f.id, v);
@@ -145,6 +146,7 @@ impl Doc {
         let at = at.unwrap_or(t.fields.len());
         let id = self.base.new_id();
         let mut f = Field { id, name, ty, opts, desc: String::new() };
+        f.opts.unique &= ty.keyable();
         let mut ops = vec![];
         if ty == FieldType::Link && f.opts.link_table.is_none() { f.opts.link_table = Some(tid); }
         if ty == FieldType::Link && let Some(other) = f.opts.link_table.filter(|o| f.opts.back == Some(0) && *o != tid) {
@@ -196,6 +198,7 @@ impl Doc {
         new.name = t.free_field_name(&new.name, Some(new.id));
         // the primary field stays something a title can be
         if at == 0 && !(new.ty.textual() || matches!(new.ty, FieldType::Number | FieldType::Date | FieldType::Formula | FieldType::AutoNumber | FieldType::Currency | FieldType::Phone | FieldType::Email)) { new.ty = old.ty; }
+        if !new.ty.keyable() { new.opts.unique = false; }
         if new == old { return false; }
         let mut ops: Vec<BaseOp> = vec![];
         let mut ids = self.base.take_ids();
@@ -227,6 +230,15 @@ impl Doc {
         ops.insert(0, BaseOp::Table(tid, Op::SetField { field: new, cells }));
         self.base.ids = ids;
         self.run(ops)
+    }
+
+    /// Mark or unmark a field as 唯一键 (one undo step). False: unchanged, or a type that can't be one.
+    pub fn set_unique(&mut self, tid: TableId, fid: FieldId, on: bool) -> bool {
+        let Some(f) = self.base.table(tid).and_then(|t| t.field(fid)) else { return false };
+        if f.opts.unique == on || (on && !f.ty.keyable()) { return false; }
+        let mut f = f.clone();
+        f.opts.unique = on;
+        self.run_in(tid, vec![Op::SetField { field: f, cells: None }])
     }
 
     /// Delete a field (not the primary one); a 双向关联's mirror goes with it.
