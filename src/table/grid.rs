@@ -716,7 +716,8 @@ fn group_row(v: &TableView, t: &Table, g: &query::Group, top: f32, frozen_w: f32
 }
 
 /// The selection's frame: one ring (border-button-active) round the whole range, and, when the range
-/// is more than one cell, a thinner one on the active cell. BoardUI's grid rings only the active cell;
+/// is more than one cell, the same ring on the active cell, laid where a one-cell selection's would be:
+/// on the range's edge the two are one line, not two of different widths. BoardUI's grid rings only the active cell;
 /// the frame round the range is the spreadsheet convention, in its colour.
 fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
     let s = v.sel?;
@@ -734,7 +735,7 @@ fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
         .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, 2.));
     if r0 != r1 || c0 != c1 {
         let (hr, hc) = (v.order.get(&s.head.0).and_then(|p| row(*p))?, cols.index(s.head.1)?);
-        clip = clip.child(ring_at(left(hc) + 1., left(hc) + cols.w[hc] - 1., y(hr) + 1., y(hr) + row_h - 1., 1.));
+        clip = clip.child(ring_at(left(hc), left(hc) + cols.w[hc], y(hr), y(hr) + row_h, 2.));
     }
     Some(clip.into_any_element())
 }
