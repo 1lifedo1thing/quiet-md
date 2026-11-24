@@ -690,7 +690,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .children(cursor_ring(v, &cols, row_h).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
-            .children(edit_overlay(v, &cols, &fields, row_h, f32::from(vs.width), cx))
+            .children(edit_overlay(v, &cols, &fields, row_h, vs.width, cx))
             .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline)))
         .child(footer)
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
