@@ -105,7 +105,8 @@ say which root each is in when there are several. A path or title in two
 roots is `ambiguous`: add `--root NAME` (the folder's name, any case, or its
 path), or use the document's id from `ls --json`. New documents, folders and
 imports go into the `--in` folder's root, else `--root`, else the first
-root, and the output says which. Each root keeps its own trash and
+root, and the output says which; an `--in` folder in another root than
+`--root` is `root_conflict`, naming both. Each root keeps its own trash and
 versions; moving a document to another root is not supported (`cross_root`).
 Global options: `--root NAME`, `--library DIR` (that folder alone, not the
 app's list) and `--json` (every field, for parsing).

@@ -624,6 +624,15 @@ fn new_documents_land_in_one_root() {
     roots_ok(&file, &["--root", "Home", "mkdir", "Kitchen"]);
     let out = roots_ok(&file, &["new", "Soup", "--in", "Kitchen"]);
     assert!(out.contains("(in Home)") && home.join("Kitchen/Soup.xml").is_file(), "{out}");
+    // --in a folder of Home with --root Work: the two disagree, so neither wins.
+    let o = roots_run(&file, &["--root", "Work", "new", "Stew", "--in", "Kitchen"]);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("error[root_conflict]") && err.contains("is in Home") && err.contains("--root says Work"), "{err}");
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!home.join("Kitchen/Stew.xml").exists() && !work.join("Stew.xml").exists());
+    // A folder that is in no root stays not_found.
+    let o = roots_run(&file, &["--root", "Work", "new", "Stew", "--in", "Cellar"]);
+    assert!(String::from_utf8_lossy(&o.stderr).contains("error[not_found]"));
     let made = roots_json(&file, &["new", "Notes", "--dry-run"]);
     assert_eq!(made["root"], "Work");
     // No moving between roots yet; within one, as before.

@@ -106,6 +106,13 @@ fn match_docs<'a>(docs: impl Iterator<Item = &'a Entry> + Clone, s: &str) -> Res
     if many.len() > 1 { Err(many) } else { Ok(None) }
 }
 
+/// The folders of `list` at path `s`, else named `s`.
+fn folders_named<'a>(list: &'a [Entry], s: &str) -> Vec<&'a Entry> {
+    let folders: Vec<&Entry> = list.iter().filter(|e| e.meta.folder.is_some() && !e.meta.local()).collect();
+    let at: Vec<&Entry> = folders.iter().copied().filter(|e| e.meta.rel.trim_end_matches('/') == s).collect();
+    if at.is_empty() { folders.into_iter().filter(|e| e.title == s || e.meta.rel.trim_end_matches('/').rsplit('/').next() == Some(s)).collect() } else { at }
+}
+
 /// A root's library as it is: one whose folder is gone is an error, never
 /// made anew, and copies a crash left stay for the app to restore and report.
 fn open_root(e: &RootEntry) -> anyhow::Result<Store> {
@@ -286,9 +293,14 @@ impl Session {
     pub(crate) fn find_folder_in(&self, root: Option<&str>, spec: Option<&str>) -> R<Option<String>> {
         let s = spec.unwrap_or("").trim().trim_matches('/');
         if s.is_empty() { return Ok(None); }
-        let folders: Vec<&Entry> = self.entries.iter().filter(|e| e.meta.folder.is_some() && !e.meta.local() && root.is_none_or(|r| e.root == r)).collect();
-        let at: Vec<&Entry> = folders.iter().copied().filter(|e| e.meta.rel.trim_end_matches('/') == s).collect();
-        let named: Vec<&Entry> = if at.is_empty() { folders.iter().copied().filter(|e| e.title == s || e.meta.rel.trim_end_matches('/').rsplit('/').next() == Some(s)).collect() } else { at };
+        let mut named = folders_named(&self.entries, s);
+        named.retain(|e| root.is_none_or(|r| e.root == r));
+        // `--in` a folder of another root than `--root`: the two disagree, and
+        // picking either could write in the wrong place.
+        if named.is_empty() && root.is_none() && let Some(only) = &self.only && let Some(e) = folders_named(&self.all, s).first() {
+            return Err(fail("root_conflict", format!("folder {s:?} is in {}, but --root says {}", self.root_name(&e.root), self.root_name(only)))
+                .hint(format!("drop --root, or pass --root {:?}, or name a folder in {}", self.root_name(&e.root), self.root_name(only))));
+        }
         match named.len() {
             1 => Ok(Some(named[0].id.clone())),
             0 => Err(fail("not_found", format!("no folder {s:?}")).hint("`quiet ls -r --kind folder` lists folders; `quiet mkdir` makes one")),
