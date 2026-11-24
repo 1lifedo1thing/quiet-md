@@ -2416,7 +2416,6 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "搜索笔记" => "Search notes",
         "整页打开" => "Open as a page",
         "新建笔记" => "New note",
-        "未命名" => "Untitled",
         "没有笔记" => "No notes",
         "独立的数据表才能加笔记列" => "Only a data table of its own can have a note column",
         "空笔记" => "Empty",

@@ -438,8 +438,8 @@ impl TableView {
         cx.notify();
     }
 
-    pub(crate) fn undo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.undo()); notes::after_history(self, cx); }
-    pub(crate) fn redo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.redo()); notes::after_history(self, cx); }
+    pub(crate) fn undo(&mut self, cx: &mut Context<Self>) { let before = notes::pointed(self, cx); self.edit(cx, |d| d.undo()); notes::after_history(self, before, cx); }
+    pub(crate) fn redo(&mut self, cx: &mut Context<Self>) { let before = notes::pointed(self, cx); self.edit(cx, |d| d.redo()); notes::after_history(self, before, cx); }
 
     /// Keep a cell being edited and a name being typed, without a window at hand: the page is about
     /// to be left or saved, and the view may be dropped with no focus change to commit them.

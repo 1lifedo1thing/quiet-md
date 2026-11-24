@@ -361,8 +361,8 @@ pub fn all_text(path: &Path) -> Result<String> {
 
 /// Give every 笔记 cell of the file the path `f` returns for it (None: as it
 /// is): a note or the table itself was renamed or moved (`Store::relocate`).
-/// Only the cells that change are written, the rows stamped as changed now;
-/// a file with no 笔记 column is not written at all. Returns the cells changed.
+/// Only the cells that change are written, the rows stamped as changed now, by
+/// the app (`user`); a file with no 笔记 column is not written at all. Returns the cells changed.
 pub fn rewrite_notes(path: &Path, f: impl Fn(&str) -> Option<String>) -> Result<usize> {
     let mut conn = open(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
     let file = tables(&conn)?;
@@ -375,11 +375,11 @@ pub fn rewrite_notes(path: &Path, f: impl Fn(&str) -> Option<String>) -> Result<
         for (id, href) in cells { if let Some(new) = f(&href) { changes.push((t.clone(), c.clone(), id, new)); } }
     }
     if changes.is_empty() { return Ok(0); }
-    let now = field::iso_utc(crate::time::now_ms() as i64);
+    let (now, by) = (field::iso_utc(crate::time::now_ms() as i64), Writer::default().0);
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     for (t, c, id, new) in &changes {
-        // `_updated_at` where the table has it (ours); a table another program made has only the cell
-        let stamped = tx.execute(&format!("UPDATE {} SET {} = ?, \"_updated_at\" = ? WHERE rowid = ?", q(t), q(c)), params![new, now, id]);
+        // when and by whom, where the table has the columns (ours); a table another program made has only the cell
+        let stamped = tx.execute(&format!("UPDATE {} SET {} = ?, \"_updated_at\" = ?, \"_updated_by\" = ? WHERE rowid = ?", q(t), q(c)), params![new, now, by, id]);
         if stamped.is_err() { tx.execute(&format!("UPDATE {} SET {} = ? WHERE rowid = ?", q(t), q(c)), params![new, id])?; }
     }
     tx.commit()?;

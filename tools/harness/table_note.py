@@ -5,7 +5,8 @@ A table file of its own gets a 笔记 column; an empty cell makes a note
 saved; undo and redo take the note to the 回收站 and back; deleting the
 record asks about its note and undo restores both; a cell is pointed at a
 note there already is; a new title renames the note's file and the cell
-follows; 整页打开 opens the note as a page; a search finds what was written.
+follows; 整页打开 opens the note as a page; a search finds what was written;
+a note renamed in the sidebar stays through the undo of other edits.
 
 Build with --release --features devtools,datatable, then run this file.
 FDL_BIN selects another build; TABLE_NOTE_SHOTS a folder to copy the screenshots to.
@@ -41,6 +42,7 @@ NOTE_1, NOTE_2 = "837 149", "837 185"   # the 笔记 cells of rows 1 and 2
 PANEL_CLOSE = "1273 115"
 NOTE_BODY, NOTE_TITLE = "885 581", "875 518"
 NOTE_FULL = "1273 422"
+UNDO = "1178 69"                # the table's own ↶ (⌘Z after a rename in the sidebar undoes the rename)
 
 OPEN = f"""click {TABLE_ROW}
 wait 1200
@@ -191,10 +193,41 @@ assert notes(more) == ["书单/三体 II.xml", "已有的笔记.xml"], notes(mor
 assert (more / "书单" / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
 assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</title>\n<p>一段正文</p>\n"
 
+# 6. the note renamed in the sidebar while the table is open: the cell follows, and the undo of another
+#    edit (the table's own ↶), then of the cell following, leaves the note where it is
+kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""click 30 135
+wait 600
+rclick 100 167
+wait 500
+click 157 451
+wait 500
+key cmd-a
+type 黑暗森林
+key enter
+wait 2800
+move 1200 800
+shot sidebar-renamed
+click 650 185
+wait 200
+type 大刘
+key enter
+wait 400
+click {UNDO}
+wait 1200
+move 1200 800
+shot undone-once
+click {UNDO}
+wait 2800
+""", source)
+assert notes(kept) == ["书单/黑暗森林.xml", "已有的笔记.xml"] and trashed(kept) == [], (notes(kept), trashed(kept))
+assert cells(kept)[0] == ("三体", "黑暗森林.xml"), cells(kept)
+with sqlite3.connect(kept / "书单" / "书单.sqlite") as c:
+    assert c.execute('select "作者" from "书单" order by _order').fetchall()[1] == ("刘慈欣",)
+
 shots = os.environ.get("TABLE_NOTE_SHOTS")
 if shots:
     Path(shots).mkdir(parents=True, exist_ok=True)
-    for case in ("write", "reopen", "delete", "point"):
+    for case in ("write", "reopen", "delete", "point", "rename"):
         for png in (work / case).glob("*.png"):
             if png.name != "end.png": shutil.copy(png, Path(shots) / f"{case}-{png.name}")
 print("table notes ok:", work)

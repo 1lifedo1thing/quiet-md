@@ -5242,10 +5242,14 @@ mod tests {
         let mut d = Doc::new(sqlite::load(&s.abs("书单/书单.sqlite")).unwrap());
         let (t, f) = (d.base.tables[0].id, d.base.tables[0].fields.iter().find(|f| f.ty == FieldType::Note).unwrap().id);
         let second = d.base.tables[0].records[1].id;
+        d.base.writer = crate::table::Writer("agent:整理".into());
         d.set_cells(t, vec![(second, f, Value::Text("三体.xml".into()))]);
         sqlite::save(&s.abs("书单/书单.sqlite"), &d.base, &d.dirty).unwrap();
         s.rename(&note, "三体 II").unwrap();
         assert_eq!(cells(&s, "书单/书单.sqlite"), ["../别处的笔记.xml", "三体 II.xml"]);
+        // the row whose cell followed was changed by the app, and says so beside when
+        let by = |s: &Store| sqlite::load(&s.abs("书单/书单.sqlite")).unwrap().tables[0].records.iter().map(|r| r.updated_by.clone().unwrap_or_default()).collect::<Vec<_>>();
+        assert_eq!(by(&s)[..2], ["user", "user"]);
         s.rename(&outside, "搬走的").unwrap();
         s.set_parent(&note, None).unwrap();
         assert_eq!(cells(&s, "书单/书单.sqlite"), ["../搬走的.xml", "../三体 II.xml"]);

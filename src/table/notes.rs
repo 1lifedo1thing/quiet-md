@@ -55,8 +55,9 @@ pub(crate) struct NotesUi {
     home: Option<Home>,
     /// The document each 笔记 cell was last seen pointing at: a note renamed or moved keeps its cell.
     ids: HashMap<CellId, String>,
-    /// Notes this view made, or sent to the 回收站 with their records, with where they are (were):
-    /// undo and redo take them out of the 回收站 and put them back (`after_history`).
+    /// Notes this view made, or sent to the 回收站 with their records, with where they are (were;
+    /// `refresh` and `save` keep it right): the undo or redo that takes the last cell off one sends
+    /// it to the 回收站, the one that points a cell at it again brings it back (`after_history`).
     mine: HashMap<String, String>,
     gone: HashSet<String>,
     pub open: Option<OpenNote>,
@@ -137,6 +138,8 @@ pub(crate) fn refresh(v: &mut TableView, cx: &mut Context<TableView>) {
     }
     let changed = index.len() != v.notes.index.len() || index.iter().any(|(k, n)| v.notes.index.get(k).is_none_or(|o| o.id != n.id || o.title != n.title || o.empty != n.empty));
     let by_id: HashMap<&str, &str> = index.iter().map(|(rel, n)| (n.id.as_str(), rel.as_str())).collect();
+    // our notes renamed or moved elsewhere (the sidebar) are still ours, where they are now
+    for (id, rel) in v.notes.mine.iter_mut() { if let Some(now) = by_id.get(id.as_str()).filter(|now| **now != rel.as_str()) { *rel = now.to_string(); } }
     // cells whose note is elsewhere now, and what every cell points at
     let tid = v.table;
     let mut moved = vec![];
@@ -170,7 +173,7 @@ pub(crate) fn info<'a>(v: &'a TableView, href: &str) -> Option<&'a NoteInfo> {
     v.notes.index.get(&field::note_rel(&h.rel, href)?)
 }
 
-fn title_of(n: &NoteInfo) -> String { if n.title.trim().is_empty() { label("未命名") } else { n.title.clone() } }
+fn title_of(n: &NoteInfo) -> String { if n.title.trim().is_empty() { label("未命名文档") } else { n.title.clone() } }
 
 /// A 笔记 cell as the grid and 记录详情 show it: the note's title (and 空笔记 while nothing is written in it), or 找不到笔记.
 pub(crate) fn cell_view(v: &TableView, href: &str) -> AnyElement {
@@ -217,7 +220,7 @@ fn make(v: &mut TableView, h: &Home, cell: CellId, title: &str, cx: &mut Context
     let mut store = store(cx)?;
     let mut doc = crate::model::Document::default();
     let title = title.trim();
-    doc.title = crate::model::RichText::plain(if title.is_empty() { label("未命名") } else { title.to_string() });
+    doc.title = crate::model::RichText::plain(if title.is_empty() { label("未命名文档") } else { title.to_string() });
     let made = store.create_from_in(&doc, h.parent.as_deref()).and_then(|id| {
         let path = store.file_path(&id).ok_or_else(|| anyhow::anyhow!("no file"))?;
         Ok((id, slashed(path.strip_prefix(&h.root)?)))
@@ -510,27 +513,54 @@ fn trash(v: &mut TableView, ids: Vec<String>, cx: &mut Context<TableView>) {
     cx.emit(TableEvent::LibraryChanged);
 }
 
-/// After undo or redo: the notes this view made or sent to the 回收站 are where the table says,
-/// in the library while a cell points at them and in the 回收站 while none does.
-pub(crate) fn after_history(v: &mut TableView, cx: &mut Context<TableView>) {
-    if v.notes.mine.is_empty() { return; }
-    let (Some(h), Some(mut store)) = (v.notes.home.clone(), store(cx)) else { return };
-    let mut pointed: HashSet<String> = HashSet::new();
-    if let Some(t) = v.state.read(cx).doc.base.table(v.table) {
-        for f in t.fields.iter().filter(|f| f.ty == FieldType::Note) {
-            pointed.extend(t.records.iter().filter_map(|r| match r.get(f.id) { Value::Text(href) => field::note_rel(&h.rel, href), _ => None }));
+/// The document a 笔记 cell points at, by id: the one at its path; else the one the cell was last
+/// seen at (renamed or moved since, the cell not yet following); else a note of ours in the 回收站
+/// that was there.
+fn target<'a>(n: &'a NotesUi, cell: CellId, rel: Option<&str>) -> Option<&'a String> {
+    rel.and_then(|rel| n.index.get(rel)).map(|i| &i.id)
+        .or_else(|| n.ids.get(&cell))
+        .or_else(|| rel.and_then(|rel| n.mine.iter().find(|(id, at)| at.as_str() == rel && n.gone.contains(*id))).map(|(id, _)| id))
+}
+
+/// The documents the table's 笔记 cells point at now, by id (`target`): asked before an undo or
+/// redo, for `after_history` to see what the step did.
+pub(crate) fn pointed(v: &TableView, cx: &App) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let Some(h) = v.notes.home.as_ref().filter(|_| !v.notes.mine.is_empty()) else { return out };
+    let Some(t) = v.state.read(cx).doc.base.table(v.table) else { return out };
+    for f in t.fields.iter().filter(|f| f.ty == FieldType::Note) {
+        for r in &t.records {
+            let Value::Text(href) = r.get(f.id) else { continue };
+            if let Some(id) = target(&v.notes, (r.id, f.id), field::note_rel(&h.rel, href).as_deref()) { out.insert(id.clone()); }
         }
     }
-    let mut changed = false;
-    let mut back = vec![];
-    let mut away = vec![];
-    for (id, rel) in &v.notes.mine {
-        match (pointed.contains(rel), v.notes.gone.contains(id)) {
-            (true, true) => back.push(id.clone()),
-            (false, false) => away.push(id.clone()),
+    out
+}
+
+/// What an undo or redo did to our notes, from what the cells pointed at `before` and `after` it:
+/// (back from the 回收站, into it). Only the step that itself takes the last cell off a note sends
+/// it away, and only the one that points a cell at it again brings it back: a note whose cell was
+/// emptied or pointed elsewhere by hand stays through the undo of anything else.
+fn history_moves(n: &NotesUi, before: &HashSet<String>, after: &HashSet<String>) -> (Vec<String>, Vec<String>) {
+    let (mut back, mut away) = (vec![], vec![]);
+    for id in n.mine.keys() {
+        match (before.contains(id), after.contains(id), n.gone.contains(id)) {
+            (false, true, true) => back.push(id.clone()),
+            (true, false, false) => away.push(id.clone()),
             _ => {}
         }
     }
+    (back, away)
+}
+
+/// After undo or redo (`before`: `pointed` as it was): a note this view made or sent to the 回收站
+/// goes there with the step that took its last cell away, and comes back with the one that
+/// points a cell at it again.
+pub(crate) fn after_history(v: &mut TableView, before: HashSet<String>, cx: &mut Context<TableView>) {
+    if v.notes.mine.is_empty() { return; }
+    let Some(mut store) = store(cx) else { return };
+    let mut changed = false;
+    let (back, away) = history_moves(&v.notes, &before, &pointed(v, cx));
     for id in back {
         match store.restore(&id) {
             Ok(_) => { v.notes.gone.remove(&id); changed = true; }
@@ -576,4 +606,50 @@ pub(crate) fn ask(v: &TableView, window: &mut Window, cx: &Context<TableView>) -
                 .title(label(if a.fields.is_empty() { "删除记录" } else { "删除字段/列" }))
                 .description(body)
                 .footer(buttons)))).with_priority(7).into_any_element())
+}
+
+#[cfg(test)]
+mod tests {
+    // (`test` here is GPUI's, through the glob)
+    use super::*;
+
+    fn note(id: &str) -> NoteInfo { NoteInfo { id: id.into(), title: String::new(), empty: true } }
+    fn set(ids: &[&str]) -> HashSet<String> { ids.iter().map(|s| s.to_string()).collect() }
+
+    /// A note this view made, then renamed in the sidebar: the cell still says the old path, and
+    /// the note is known by its id all the same, so the undo of something else leaves it alone.
+    #[core::prelude::v1::test]
+    fn a_renamed_note_is_still_pointed_at() {
+        let cell: CellId = (1, 2);
+        let mut n = NotesUi { mine: HashMap::from([("a".to_string(), "书单/三体.xml".to_string())]), ids: HashMap::from([(cell, "a".to_string())]), ..Default::default() };
+        n.index = Rc::new(HashMap::from([("书单/三体.xml".to_string(), note("a"))]));
+        assert_eq!(target(&n, cell, Some("书单/三体.xml")), Some(&"a".to_string()));
+        // renamed elsewhere: the library has it under its new name, the cell not yet
+        n.index = Rc::new(HashMap::from([("书单/黑暗森林.xml".to_string(), note("a"))]));
+        assert_eq!(target(&n, cell, Some("书单/三体.xml")), Some(&"a".to_string()));
+        let at = set(&["a"]);
+        assert_eq!(history_moves(&n, &at, &at), (vec![], vec![]));
+        // in the 回收站 with its record, it is found by where it was
+        n.index = Rc::new(HashMap::new());
+        n.ids.clear();
+        assert_eq!(target(&n, cell, Some("书单/三体.xml")), None);
+        n.gone.insert("a".into());
+        assert_eq!(target(&n, cell, Some("书单/三体.xml")), Some(&"a".to_string()));
+    }
+
+    /// Only the step that takes the last cell off a note sends it away, only the one that gives it one brings it back.
+    #[core::prelude::v1::test]
+    fn only_the_step_itself_moves_a_note() {
+        let mut n = NotesUi { mine: HashMap::from([("a".to_string(), "a.xml".to_string())]), ..Default::default() };
+        let (none, a) = (set(&[]), set(&["a"]));
+        // the undo of the step that made it; of anything else, pointed at or (the cell emptied by hand) not
+        assert_eq!(history_moves(&n, &a, &none), (vec![], vec!["a".to_string()]));
+        assert_eq!(history_moves(&n, &a, &a), (vec![], vec![]));
+        assert_eq!(history_moves(&n, &none, &none), (vec![], vec![]));
+        // the undo of emptying the cell by hand: it never left
+        assert_eq!(history_moves(&n, &none, &a), (vec![], vec![]));
+        n.gone.insert("a".into());
+        assert_eq!(history_moves(&n, &none, &a), (vec!["a".to_string()], vec![]));
+        assert_eq!(history_moves(&n, &none, &none), (vec![], vec![]));
+    }
 }

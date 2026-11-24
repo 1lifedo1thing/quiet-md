@@ -90,10 +90,13 @@ pub fn ring() -> Hsla { color::ring() }
 /// A range selection's fill over the cells.
 pub fn range_bg() -> Hsla { color::muted() }
 pub fn star() -> Hsla { crate::theme::c(crate::theme::craft::O350) }
+// 查找's hits and the current one: 飞书多维表格's two yellows, as the first 数据表 took them (4cf23b9).
+// The design system has no highlight token yet; these stay until it does.
 pub fn found_bg() -> Hsla { crate::theme::c(0xfff5c2) }
 pub fn found_current() -> Hsla { crate::theme::c(0xffd666) }
 
-/// Slots 10–19: 飞书's deeper row, (fill, text).
+/// Slots 10–19: 飞书's deeper row, (fill, text): 飞书多维表格's option palette as files store its
+/// slots (4cf23b9). The design system's chips cover the first ten only, so these keep their values.
 const DEEPER: [(u32, u32); 10] = [(0xbacefd, 0x0c296e), (0xb7edb1, 0x124b0c), (0xf8e6ab, 0x5c3a00), (0xfed4a4, 0x6f3604), (0xfbbfbc, 0x7a1512),
     (0xf9aed9, 0x6c0d47), (0xcdb2fa, 0x3a1b85), (0xa9efe6, 0x06443c), (0xb1e8fc, 0x0a4563), (0xdee0e3, 0x1f2329)];
 /// How many option colours there are.
