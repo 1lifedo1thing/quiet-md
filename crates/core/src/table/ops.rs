@@ -278,7 +278,22 @@ impl Table {
     }
 }
 
-/// Drop every mention of a removed field from a view.
+/// Point a view's mentions of fields at the ids in `to` (fields that got a new
+/// id when the file was read); the rest stay.
+pub fn rename_fields(o: &mut ViewOpts, to: &HashMap<FieldId, FieldId>) {
+    if to.is_empty() { return; }
+    let m = |f: &mut FieldId| if let Some(n) = to.get(f) { *f = *n; };
+    o.order.iter_mut().for_each(m);
+    o.hidden = o.hidden.drain().map(|mut f| { m(&mut f); f }).collect();
+    o.widths = std::mem::take(&mut o.widths).into_iter().map(|(mut f, w)| { m(&mut f); (f, w) }).collect();
+    o.stats = std::mem::take(&mut o.stats).into_iter().map(|(mut f, s)| { m(&mut f); (f, s) }).collect();
+    o.filter.conds.iter_mut().for_each(|c| m(&mut c.field));
+    o.sorts.iter_mut().chain(o.groups.iter_mut()).for_each(|s| m(&mut s.field));
+    for rule in &mut o.colors { rule.filter.conds.iter_mut().for_each(|c| m(&mut c.field)); }
+    for f in [&mut o.stack, &mut o.cover, &mut o.date, &mut o.end].into_iter().flatten() { m(f); }
+}
+
+/// Drop every mention of a removed field from a view. (A new mention: `rename_fields` too.)
 fn forget_field(o: &mut ViewOpts, id: FieldId) {
     o.order.retain(|f| *f != id);
     o.hidden.remove(&id);

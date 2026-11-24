@@ -335,6 +335,9 @@ fn write(conn: &Connection, base: &Base, dirty: Option<&Dirty>) -> Result<()> {
 struct RowMeta {
     c: Option<i64>, m: Option<i64>, auto: Option<u64>, created: Option<String>, modified: Option<String>,
     #[serde(skip)] by: (Option<String>, Option<String>),
+    /// Its rowid when that was too big to keep (`ID_LIMIT`), else 0; and where it came in the read.
+    #[serde(skip)] was: u64,
+    #[serde(skip)] at: u64,
 }
 
 /// Every value of every table in the file, ours and SQLite's too, as text, a
@@ -374,36 +377,32 @@ pub fn load_marked(path: &Path) -> Result<(Base, Dirty)> {
     let file = tables(&conn).with_context(|| format!("{} is not a SQLite database", path.display()))?;
     let has = |n: &str| file.iter().any(|x| x == n);
     let described = has("_tables") && has("_fields");
-    // ids are ours to keep unique across the file: a duplicate, a 0 or one past ID_LIMIT becomes 0 here and gets a fresh one below
-    let id = |seen: &mut HashSet<u64>, v: &Sql| int(v).and_then(|i| u64::try_from(i).ok()).filter(|i| (1..ID_LIMIT).contains(i) && seen.insert(*i)).unwrap_or(0);
-    let mut seen = HashSet::new();
+    // the ids as the file has them (a negative or missing one: 0); `stable_ids` replaces those that can't stay
+    let id = |v: &Sql| int(v).and_then(|i| u64::try_from(i).ok()).unwrap_or(0);
     // (the id in the file, which the fields and views point at; the table so far)
     let mut known: Vec<(Option<i64>, Table)> = if !described { vec![] } else {
         grid(&conn, "SELECT id, name, next_auto FROM _tables ORDER BY position, id").iter().map(|r| {
-            (int(&r[0]), Table { id: id(&mut seen, &r[0]), name: text(&r[1]), next_auto: int(&r[2]).unwrap_or(0).max(0) as u64, ..Default::default() })
+            (int(&r[0]), Table { id: id(&r[0]), name: text(&r[1]), next_auto: int(&r[2]).unwrap_or(0).max(0) as u64, ..Default::default() })
         }).collect()
     };
     for r in if described { grid(&conn, "SELECT table_id, id, name, type, options, description FROM _fields ORDER BY position, id") } else { vec![] } {
         let Some((_, t)) = known.iter_mut().find(|(tid, _)| tid.is_some() && *tid == int(&r[0])) else { continue };
-        let mut opts: FieldOpts = serde_json::from_str(&text(&r[4])).unwrap_or_default();
-        let fid = id(&mut seen, &r[1]);
-        // cells name their options, so an option can take another id
-        for o in &mut opts.options { o.id = id(&mut seen, &Sql::Integer(o.id.min(i64::MAX as u64) as i64)); }
-        t.fields.push(Field { id: fid, name: text(&r[2]), ty: FieldType::from_key(&text(&r[3])).unwrap_or(FieldType::Text), opts, desc: text(&r[5]) });
+        let opts: FieldOpts = serde_json::from_str(&text(&r[4])).unwrap_or_default();
+        t.fields.push(Field { id: id(&r[1]), name: text(&r[2]), ty: FieldType::from_key(&text(&r[3])).unwrap_or(FieldType::Text), opts, desc: text(&r[5]) });
     }
     for r in if described { grid(&conn, "SELECT table_id, id, name, type, config FROM _views ORDER BY position, id") } else { vec![] } {
         let Some((_, t)) = known.iter_mut().find(|(tid, _)| tid.is_some() && *tid == int(&r[0])) else { continue };
         let kind = serde_json::from_value(serde_json::Value::String(text(&r[3]))).unwrap_or_default();
         let opts = serde_json::from_str(&text(&r[4])).unwrap_or(ViewOpts { frozen: 1, ..Default::default() });
-        t.views.push(View { id: id(&mut seen, &r[1]), name: text(&r[2]), kind, opts });
+        t.views.push(View { id: id(&r[1]), name: text(&r[2]), kind, opts });
     }
-    let mut ids = IdGen::default();
-    ids.take(seen);
-    let mut fresh = |slot: &mut u64| if *slot == 0 { *slot = ids.fresh(); };
-    for (_, t) in &mut known {
-        fresh(&mut t.id);
-        for f in &mut t.fields { fresh(&mut f.id); for o in &mut f.opts.options { fresh(&mut o.id); } }
-        for v in &mut t.views { fresh(&mut v.id); }
+    let (mut kept, moved, replaced) = stable_ids(&mut known);
+    if !moved.is_empty() {
+        let to = |x: &mut Option<u64>| if let Some(n) = x.and_then(|x| moved.get(&x)) { *x = Some(*n); };
+        for (_, t) in &mut known {
+            for f in &mut t.fields { to(&mut f.opts.link_table); to(&mut f.opts.back); to(&mut f.opts.via); to(&mut f.opts.target); }
+            for v in &mut t.views { super::ops::rename_fields(&mut v.opts, &moved); }
+        }
     }
     // the described tables that are in the file, in their order, then the rest of the file's
     let mut rest: Vec<&String> = file.iter().filter(|n| user_table(n)).collect();
@@ -412,18 +411,72 @@ pub fn load_marked(path: &Path) -> Result<(Base, Dirty)> {
         let Some(k) = rest.iter().position(|n| **n == t.name).or_else(|| rest.iter().position(|n| n.eq_ignore_ascii_case(&t.name))) else { continue };
         found.push((rest.remove(k), t, true));
     }
-    for n in rest { found.push((n, Table { id: ids.fresh(), next_auto: 1, ..Default::default() }, false)); }
+    // a table nobody described gets a `stable_id` too (its records' are made from it)
+    for (k, n) in rest.into_iter().enumerate() {
+        let id = stable_id(IdKind::Table, 0, 0, (found.len() + k) as u64, |x| kept.contains(&x));
+        kept.insert(id);
+        found.push((n, Table { id, next_auto: 1, ..Default::default() }, false));
+    }
+    let mut ids = IdGen::default();
+    ids.take(kept);
     let mut base = Base::default();
-    let mut dirty = Dirty::default();
+    // `_tables`, `_fields`, `_views` to write with the new ids
+    let mut dirty = Dirty { meta: replaced, ..Default::default() };
+    // per table, the records whose id was too big: the old id, the new
+    let mut renamed: HashMap<TableId, HashMap<RecId, RecId>> = HashMap::new();
+    let mut ours = HashSet::new();
     for i in 0..found.len() {
         // a name the app can carry, that no other table of the file has
         let name = safe_name(found[i].0, "数据表", |x| base.tables.iter().any(|t| t.name.eq_ignore_ascii_case(x)) || found[i + 1..].iter().any(|f| f.0.eq_ignore_ascii_case(x)));
         let (sql, t, described) = &mut found[i];
         t.name = name;
-        if let Some(t) = read_table(&conn, sql, std::mem::take(t), *described, &mut ids, &mut dirty) { base.tables.push(t); }
+        if *described { ours.insert(t.id); }
+        if let Some(t) = read_table(&conn, sql, std::mem::take(t), *described, &mut ids, &mut dirty, &mut renamed) { base.tables.push(t); }
+    }
+    // 关联 cells follow records that got a new id
+    for t in &mut base.tables {
+        let links: Vec<(FieldId, &HashMap<RecId, RecId>)> = t.fields.iter().filter(|f| f.ty == FieldType::Link).filter_map(|f| Some((f.id, renamed.get(&f.opts.link_table?)?))).collect();
+        for r in &mut t.records {
+            for (f, to) in &links {
+                let Some(Value::Links(l)) = r.cells.get_mut(f) else { continue };
+                if !l.iter().any(|id| to.contains_key(id)) { continue; }
+                for id in l.iter_mut() { if let Some(n) = to.get(id) { *id = *n; } }
+                if ours.contains(&t.id) { dirty.row(t.id, r.id); }
+            }
+        }
     }
     base.ids = ids;
     Ok((base, dirty))
+}
+
+/// Keep the ids of `known` (as read, tables first, then each table's fields with
+/// their options, then its views) that are in range and not had before; give the
+/// rest a `stable_id`. Returns the ids in use, the ids 2^53 or more with their
+/// new ones (what pointed at them is to follow; a 0 or a duplicate means
+/// nothing to point at), and whether any was replaced.
+fn stable_ids(known: &mut [(Option<i64>, Table)]) -> (HashSet<u64>, HashMap<u64, u64>, bool) {
+    let mut good: HashSet<u64> = known.iter().flat_map(|(_, t)| t.all_ids()).filter(|i| (1..ID_LIMIT).contains(i)).collect();
+    let mut kept = HashSet::new();
+    let mut moved = HashMap::new();
+    let mut replaced = false;
+    let mut fix = |slot: &mut u64, kind: IdKind, table: u64, seq: u64| {
+        if (1..ID_LIMIT).contains(slot) && kept.insert(*slot) { return; }
+        let new = stable_id(kind, *slot, table, seq, |x| good.contains(&x) || kept.contains(&x));
+        kept.insert(new);
+        good.insert(new);
+        if *slot >= ID_LIMIT { moved.entry(*slot).or_insert(new); }
+        *slot = new;
+        replaced = true;
+    };
+    for (i, (_, t)) in known.iter_mut().enumerate() { fix(&mut t.id, IdKind::Table, 0, i as u64); }
+    for (_, t) in known.iter_mut() {
+        for (j, f) in t.fields.iter_mut().enumerate() {
+            fix(&mut f.id, IdKind::Field, t.id, j as u64);
+            for (k, o) in f.opts.options.iter_mut().enumerate() { fix(&mut o.id, IdKind::Option, t.id, (j as u64) << 20 | k as u64); }
+        }
+    }
+    for (_, t) in known.iter_mut() { for (j, v) in t.views.iter_mut().enumerate() { fix(&mut v.id, IdKind::View, t.id, j as u64); } }
+    (kept, moved, replaced)
 }
 
 /// A row's `_order`: a sort key (format 2), or a row number (format 1, another program's).
@@ -442,7 +495,7 @@ fn guess(conn: &Connection, table: &str, col: &str, decl: &str) -> FieldType {
 /// describe) from the SQL table `sql`. None: the table can't be read at all.
 /// Rows that got a sort key or an id here are marked in `dirty` (only in a
 /// described table: another program's table is rewritten whole when written).
-fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: &mut IdGen, dirty: &mut Dirty) -> Option<Table> {
+fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: &mut IdGen, dirty: &mut Dirty, renamed: &mut HashMap<TableId, HashMap<RecId, RecId>>) -> Option<Table> {
     let n = q(sql);
     // WITHOUT ROWID tables have no rowid: their records are numbered as they come
     let mut stmt = conn.prepare(&format!("SELECT rowid, * FROM {n}")).or_else(|_| conn.prepare(&format!("SELECT NULL, * FROM {n}"))).ok()?;
@@ -486,7 +539,8 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
     let zone = zone();
     let mut rows = stmt.query([]).ok()?;
     while let Ok(Some(row)) = rows.next() {
-        let id = match row.get_ref(0) { Ok(ValueRef::Integer(i)) if i > 0 => Some(i as u64), _ => None };
+        // a rowid of 2^53 or more is replaced like a missing one (and remembered, for the links to it)
+        let (id, was) = match row.get_ref(0) { Ok(ValueRef::Integer(i)) if i > 0 => if (i as u64) < ID_LIMIT { (Some(i as u64), 0) } else { (None, i as u64) }, _ => (None, 0) };
         let order = order_at.and_then(|c| match row.get_ref(c + 1) {
             Ok(ValueRef::Text(b)) => Some(Place::Key(String::from_utf8_lossy(b).into_owned())),
             Ok(ValueRef::Integer(i)) => Some(Place::Row(i as f64)),
@@ -520,6 +574,7 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
                 (_, v) => { r.cells.insert(f.id, v); }
             }
         }
+        (meta.was, meta.at) = (was, recs.len() as u64);
         recs.push((order, id.is_some(), r, meta));
     }
     drop(rows);
@@ -533,10 +588,16 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
         for r in &mut recs { if let Some(Place::Key(k)) = r.0.take() { r.2.ord = k; } }
         recs.sort_by(|a, b| (a.2.ord.is_empty(), &a.2.ord, id(a)).cmp(&(b.2.ord.is_empty(), &b.2.ord, id(b))));
     }
-    // a row without a rowid (a WITHOUT ROWID table, a 0) gets an id no other row of the table has
-    let have: HashSet<RecId> = recs.iter().filter(|r| r.1).map(|r| r.2.id).collect();
+    // a row without a rowid we can keep (a WITHOUT ROWID table, a 0, 2^53 or more) gets an id no
+    // other row of the table has: a `stable_id`, the same wherever the file is read
+    let mut have: HashSet<RecId> = recs.iter().filter(|r| r.1).map(|r| r.2.id).collect();
     let mut marked = vec![];
-    for r in recs.iter_mut().filter(|r| !r.1) { r.2.id = ids.fresh_unless(|id| have.contains(&id)); marked.push(r.2.id); }
+    for r in recs.iter_mut().filter(|r| !r.1) {
+        r.2.id = stable_id(IdKind::Record, r.3.was, t.id, r.3.at, |id| have.contains(&id));
+        have.insert(r.2.id);
+        marked.push(r.2.id);
+        if r.3.was != 0 { renamed.entry(t.id).or_default().insert(r.3.was, r.2.id); }
+    }
     t.next_auto = t.next_auto.max(recs.iter().filter_map(|r| r.3.auto).max().map_or(0, |a| a + 1)).max(if described { 0 } else { 1 });
     let now = field::now();
     // `_meta` (format 1, and 2 before the system columns): the table is written again in today's shape
@@ -1095,6 +1156,8 @@ mod tests {
         // no rowids: ids of their own, the rows in the order they came
         assert_eq!(t.records.iter().map(|r| t.title(r)).collect::<Vec<_>>(), ["a", "b"]);
         assert!(t.records.iter().all(|r| (1..ID_LIMIT).contains(&r.id)) && t.records[0].id != t.records[1].id);
+        // and the same ones each time the file is read (`stable_id`)
+        assert_eq!(load(&path).unwrap().tables[2].records.iter().map(|r| r.id).collect::<Vec<_>>(), t.records.iter().map(|r| r.id).collect::<Vec<_>>());
         // a table with no columns of its own still has a title field
         let t = &got.tables[3];
         assert_eq!((t.fields.len(), t.fields[0].ty, t.records.iter().map(|r| r.id).collect::<Vec<_>>()), (1, Text, vec![5, 9]));
@@ -1315,6 +1378,56 @@ mod tests {
         assert!(doc.undo());
         sync(&mut doc, &path);
         assert_eq!(orders(), before);
+    }
+
+    /// Ids that can't stay (2^53 or more, 0, a duplicate) are replaced as they are read,
+    /// what points at them following, and the same way on every read: two devices
+    /// opening one damaged file make the same file of it.
+    #[test]
+    fn bad_ids_are_replaced_the_same_everywhere() {
+        let dir = Tmp::new("bad-ids");
+        let path = dir.file("a.sqlite");
+        create(&path, &library()).unwrap();
+        const BIG: u64 = ID_LIMIT + 5;
+        Connection::open(&path).unwrap().execute_batch(&format!(r#"
+            INSERT INTO "作者" (id, _order, _created_at, _updated_at, "姓名") VALUES ({BIG}, 'a5', '2027-01-15T00:02:03Z', '2027-01-15T00:02:03Z', '大号');
+            UPDATE "读书清单" SET "作者" = '[1,{BIG}]' WHERE id = 3;
+            UPDATE _tables SET id = {t} WHERE name = '作者';
+            UPDATE _fields SET table_id = {t} WHERE table_name = '作者';
+            UPDATE _views SET table_id = {t} WHERE table_name = '作者';
+            UPDATE _fields SET options = json_set(options, '$.link_table', {t}) WHERE table_name = '读书清单' AND name = '作者';
+            UPDATE _fields SET id = {f} WHERE name = '状态';
+            UPDATE _views SET config = json_set(config, '$.stack', {f}) WHERE name = '看板';
+            UPDATE _fields SET id = 0 WHERE name = '页数';
+            UPDATE _views SET id = (SELECT id FROM _fields WHERE name = '书名') WHERE name = '看板';
+        "#, t = ID_LIMIT + 7, f = ID_LIMIT + 8)).unwrap();
+        let (base, dirty) = load_marked(&path).unwrap();
+        // another read, its own random ids for anything new: the same base
+        assert_eq!(load_marked(&path).unwrap(), (base.clone(), dirty.clone()));
+        assert!(base.all_ids().all(|i| (1..ID_LIMIT).contains(&i)) && base.tables.iter().flat_map(|t| &t.records).all(|r| (1..ID_LIMIT).contains(&r.id)));
+        let ids: Vec<u64> = base.all_ids().collect();
+        assert_eq!(ids.len(), ids.iter().collect::<HashSet<_>>().len());
+        let (books, people) = (&base.tables[0], &base.tables[1]);
+        let f = |n: &str| books.field_named(n).unwrap();
+        // the table and the field that moved are pointed at where they went
+        assert!(people.id < ID_LIMIT && f("作者").opts.link_table == Some(people.id));
+        let kanban = books.views.iter().find(|v| v.name == "看板").unwrap();
+        assert_eq!(kanban.opts.stack, Some(f("状态").id));
+        assert_ne!(kanban.id, f("书名").id);
+        // the record too: the link to it holds its new id
+        let big = people.records.iter().find(|r| people.title(r) == "大号").unwrap().id;
+        assert!(big < ID_LIMIT);
+        assert_eq!(books.record(3).unwrap().get(f("作者").id), &Value::Links(vec![1, big]));
+        // written back at once: `_tables` / `_fields` / `_views`, the new row, the row whose link changed
+        assert!(dirty.meta && dirty.rows[&people.id].contains(&big) && dirty.rows[&books.id].contains(&3));
+        let mut doc = Doc::new(base);
+        doc.dirty = dirty;
+        sync(&mut doc, &path);
+        let conn = Connection::open(&path).unwrap();
+        for sql in [r#"select max(id) from "作者""#, "select max(id) from _tables", "select max(id) from _fields", "select max(id) from _views"] { assert!(int(&grid(&conn, sql)[0][0]).unwrap() < ID_LIMIT as i64, "{sql}"); }
+        assert_eq!(grid(&conn, r#"select "作者" from "读书清单" where id = 3"#), [[Sql::Text(format!("[1,{}]", big))]]);
+        drop(conn);
+        assert!(load_marked(&path).unwrap().1.is_clean());
     }
 
     #[test]

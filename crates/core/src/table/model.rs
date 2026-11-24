@@ -508,6 +508,10 @@ impl Table {
         groups.retain(|g| g.len() > 1);
         groups
     }
+    /// Its own id, its fields', their options' and its views'.
+    pub fn all_ids(&self) -> impl Iterator<Item = u64> + '_ {
+        [self.id].into_iter().chain(self.fields.iter().flat_map(|f| [f.id].into_iter().chain(f.opts.options.iter().map(|o| o.id)))).chain(self.views.iter().map(|v| v.id))
+    }
     pub fn index_of(&self, id: RecId) -> Option<usize> { self.records.iter().position(|r| r.id == id) }
 
     /// The fields a view shows, in its order.
@@ -586,10 +590,7 @@ impl IdGen {
     /// splitmix64, cut to 53 bits.
     fn raw(&mut self) -> u64 {
         self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = self.state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        (z ^ (z >> 31)) >> 11
+        mix(self.state) >> 11
     }
     /// A fresh id that `busy` doesn't refuse either.
     pub fn fresh_unless(&mut self, busy: impl Fn(u64) -> bool) -> u64 {
@@ -598,6 +599,35 @@ impl IdGen {
     pub fn fresh(&mut self) -> u64 { self.fresh_unless(|_| false) }
     /// Ids that are in use without having come from here (read from a file).
     pub fn take(&mut self, ids: impl IntoIterator<Item = u64>) { self.taken.extend(ids); }
+}
+
+/// splitmix64's finalizer.
+fn mix(mut z: u64) -> u64 {
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// What a replaced id was: the hash of `stable_id` tells them apart.
+#[derive(Clone, Copy)]
+pub enum IdKind { Table = 1, Field, View, Option, Record }
+
+/// The id for something whose id in the file can't be kept (0, a duplicate,
+/// 2^53 or more): a hash of what it is, the id it had, its table's id (0 for a
+/// table) and where it is in the file, so every device that reads the same file
+/// gives it the same one, and two copies merge without one side's id seeming
+/// deleted and another's added. Below 2^53; one `taken` says is in use is passed
+/// for the next one up (from 2^53 - 1 round to 1). Not std's hasher: it may
+/// change between Rust versions.
+pub fn stable_id(kind: IdKind, old: u64, table: u64, seq: u64, taken: impl Fn(u64) -> bool) -> u64 {
+    let h = [kind as u64, old, table, seq].iter().fold(0x5157_4D44_7461_626Cu64, |h, p| mix(h.wrapping_add(0x9E37_79B9_7F4A_7C15) ^ *p));
+    free_from((h >> 11).max(1), taken)
+}
+
+/// `id`, or the first after it that isn't `taken` (past 2^53 - 1: from 1).
+fn free_from(mut id: u64, taken: impl Fn(u64) -> bool) -> u64 {
+    while taken(id) { id = if id + 1 >= ID_LIMIT { 1 } else { id + 1 }; }
+    id
 }
 
 impl Default for IdGen {
@@ -633,7 +663,7 @@ pub struct Base {
 impl Base {
     /// The table, field, view and option ids in use.
     pub fn all_ids(&self) -> impl Iterator<Item = u64> + '_ {
-        self.tables.iter().flat_map(|t| [t.id].into_iter().chain(t.fields.iter().flat_map(|f| [f.id].into_iter().chain(f.opts.options.iter().map(|o| o.id)))).chain(t.views.iter().map(|v| v.id)))
+        self.tables.iter().flat_map(Table::all_ids)
     }
     /// A fresh id for a table, field, view or option: none in the base has it.
     pub fn new_id(&mut self) -> u64 {
@@ -698,6 +728,21 @@ impl Base {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stable_ids_repeat_and_step_past_what_is_taken() {
+        let a = stable_id(IdKind::Record, ID_LIMIT + 5, 7, 3, |_| false);
+        assert!((1..ID_LIMIT).contains(&a));
+        assert_eq!(stable_id(IdKind::Record, ID_LIMIT + 5, 7, 3, |_| false), a);
+        // each part counts
+        let others = [stable_id(IdKind::Field, ID_LIMIT + 5, 7, 3, |_| false), stable_id(IdKind::Record, 0, 7, 3, |_| false), stable_id(IdKind::Record, ID_LIMIT + 5, 8, 3, |_| false), stable_id(IdKind::Record, ID_LIMIT + 5, 7, 4, |_| false)];
+        assert!(others.iter().all(|o| *o != a) && others.iter().collect::<HashSet<_>>().len() == 4);
+        // taken: the next one up, round past the top to 1
+        if a + 2 < ID_LIMIT { assert_eq!(stable_id(IdKind::Record, ID_LIMIT + 5, 7, 3, |x| x == a || x == a + 1), a + 2); }
+        assert_eq!(free_from(ID_LIMIT - 2, |x| x >= ID_LIMIT - 2 || x == 1), 2);
+        // the values themselves are part of the file format between devices: they mustn't drift
+        assert_eq!(stable_id(IdKind::Table, 0, 0, 0, |_| false), 312_325_106_538_460);
+    }
 
     #[test]
     fn unique_keys_find_and_clash() {
