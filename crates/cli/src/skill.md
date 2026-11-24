@@ -6,7 +6,7 @@ description: Read, search, edit and organize the user's Quiet.md notes library (
 # quiet: the user's Quiet.md library
 
 Quiet.md keeps notes as plain files in the folders the user opened in it
-(`quiet folders` lists them; `--folder NAME` picks one): `.xml` documents, `.md`
+(`quiet ls` lists them; paths start with one: `Quiet.md/工作/周报`): `.xml` documents, `.md`
 notes, `.excalidraw` boards and `.sqlite` 数据表. The user
 edits them in the Quiet.md app; you work on the same files with `quiet`, which
 keeps them valid, rewrites links when a document moves, keeps every replaced

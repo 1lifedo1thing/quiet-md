@@ -64,13 +64,12 @@ impl Session {
 
     /// Every top-level folder's 回收站 (each top-level folder keeps its own), as (top-level folder key, entry).
     fn all_trash(&mut self) -> Vec<(String, fdl_core::store::TrashEntry)> {
-        let only = self.only.clone();
-        self.ws.folders.iter_mut().filter(|r| only.as_ref().is_none_or(|k| k == &r.key)).filter_map(|r| Some((r.key.clone(), r.store.as_mut()?)))
+        self.ws.folders.iter_mut().filter_map(|r| Some((r.key.clone(), r.store.as_mut()?)))
             .flat_map(|(k, s)| s.list_trash().into_iter().map(move |t| (k.clone(), t))).collect()
     }
 
     pub(crate) fn trash_list(&mut self) -> R<Value> {
-        let list: Vec<Value> = self.all_trash().iter().map(|(k, t)| json!({ "id": t.id, "title": t.title, "top_folder": self.top_name(k), "deleted": date_ms(t.deleted * 1000) })).collect();
+        let list: Vec<Value> = self.all_trash().iter().map(|(k, t)| json!({ "id": t.id, "title": t.title, "folder": self.top_name(k), "deleted": date_ms(t.deleted * 1000) })).collect();
         Ok(json!({ "days": fdl_core::store::TRASH_DAYS, "items": list }))
     }
 
@@ -82,9 +81,9 @@ impl Session {
         let hits = if hits.is_empty() { list.iter().filter(|(_, t)| t.title.to_lowercase().contains(&spec.to_lowercase())).collect() } else { hits };
         match hits.as_slice() {
             // Back into the top-level folder whose 回收站 it is in.
-            [(k, t)] => { self.pending.push(Pending::Untrash { top: k.clone(), id: t.id.clone(), title: t.title.clone() }); Ok(json!({ "title": t.title, "top_folder": self.top_name(k), "untrash": true })) }
+            [(k, t)] => { self.pending.push(Pending::Untrash { top: k.clone(), id: t.id.clone(), title: t.title.clone() }); Ok(json!({ "title": t.title, "folder": self.top_name(k), "untrash": true })) }
             [] => Err(fail("not_found", format!("nothing called {spec:?} in the trash")).hint("`quiet trash` lists it")),
-            many => Err(fail("ambiguous", format!("{} items match {spec:?}: {}", many.len(), many.iter().map(|(k, t)| if self.multi() { format!("{} ({}, in {})", t.title, t.id, self.top_name(k)) } else { format!("{} ({})", t.title, t.id) }).collect::<Vec<_>>().join(", "))).hint("pass the id")),
+            many => Err(fail("ambiguous", format!("{} items match {spec:?}: {}", many.len(), many.iter().map(|(k, t)| format!("{} ({}, in {})", t.title, t.id, self.top_name(k))).collect::<Vec<_>>().join(", "))).hint("pass the id")),
         }
     }
 
@@ -96,9 +95,9 @@ impl Session {
         kind_of_file(&path)?;
         let (top, folder) = self.landing(arg(a, "folder"))?;
         let to = self.folder_rel(folder.as_deref());
-        let name = self.top_name(&top);
-        self.pending.push(Pending::Import { top, path: path.clone(), folder: Some(to.clone()).filter(|t| !t.is_empty()) });
-        Ok(json!({ "path": path.display().to_string(), "import": true, "top_folder": name, "to": if to.is_empty() { "/".to_string() } else { to } }))
+        let shown = self.home_path(&top, &to);
+        self.pending.push(Pending::Import { top, path: path.clone(), folder: Some(to).filter(|t| !t.is_empty()) });
+        Ok(json!({ "path": path.display().to_string(), "import": true, "to": shown }))
     }
 }
 
