@@ -24,7 +24,7 @@
 | 不可用 | `disabled:opacity-50` | 整体 50% | 一致 |
 | 按下 | `active:not-aria-[haspopup]:translate-y-px` | 按下时下移 1pt（菜单触发器 `selected` 时、调用方绝对定位时不移） | 改（新增） |
 | 图标颜色 | `[&_svg]` 继承 `currentColor` | 和文字同色 | 改（原来是 `muted-foreground`） |
-| 图标尺寸 | `size-4`；xs / icon-xs `size-3` | 16；Xs 12 | 改（Xs 原来 14） |
+| 图标尺寸 | `size-4`；xs / icon-xs `size-3` | 16；带文字的 Xs 12，只有图标的 Xs（icon-xs）16 | 维护者 2026-11-24：icon-xs 的 12 在侧栏、关闭 × 等处又小又细，回到应用原来的 16 |
 | 焦点环 | `focus-visible:ring-3 ring-ring/50` | 无 | 保留 C（按钮不接键盘焦点，没有 focus-visible） |
 | default 变体 | `.cn-button-variant-default` bg-primary，悬停 primary/80 | 同 | 一致 |
 | outline | `border-border bg-background hover:bg-muted`，深色 `bg-input/30 border-input hover:bg-input/50`，`aria-expanded:bg-muted`，shadow-xs | 同 | 一致 |
