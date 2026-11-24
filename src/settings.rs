@@ -1992,8 +1992,6 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "秒" => "s",
         "无效公式" => "Invalid equation",
         "目录下暂无子页面" => "No child pages yet",
-        "创建时间（最新优先）" => "Created (newest first)",
-        "标题（升序）" => "Title (A–Z)",
         "切换为宫格视图" => "Switch to grid view",
         "切换为列表视图" => "Switch to list view",
         "当前列表暂无内容" => "Nothing here yet",

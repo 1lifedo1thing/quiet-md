@@ -249,6 +249,9 @@ pub struct Settings {
     pub home_list: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_sort: Option<String>,
+    /// 升序 / 降序 for `home_sort`; absent in settings from before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_sort_dir: Option<String>,
     #[serde(default)]
     pub home_folders_first: bool,
     #[serde(default)]
@@ -370,6 +373,10 @@ pub struct Store {
     /// What this computer's data about the library is named by: its 工作区
     /// root key, else `library_key` of its path.
     key: String,
+    /// New pages in a folder get a hand-order number (手动排序). The window
+    /// turns it off under 自动排序, so sorting never rewrites what the user
+    /// arranged by hand; the core never reads the window's sort setting.
+    place_by_hand: bool,
 }
 
 /// What switching documents remembers in memory only: each write of it is an
@@ -1287,7 +1294,7 @@ impl Store {
         let trash = load_json(&base.join("trash").join("index.json"), "回收站索引", &mut warnings);
         let v5 = !flat && Self::format_at(&root) >= 5;
         let mut store = Store { file_changes: vec![], root, index: HashMap::new(), foreign: DiskIndex::new(), trash, flat, warnings, migrated: None, loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(),
-            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string() };
+            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string(), place_by_hand: true };
         if flat {
             store.index = load_json(&base.join("index.json"), "文档索引", &mut store.warnings);
             store.flat_folders()?;
@@ -1371,6 +1378,8 @@ impl Store {
 
     /// The name this computer's data about the library goes by.
     pub fn key(&self) -> &str { &self.key }
+    /// See `place_by_hand`: false while the window sorts automatically.
+    pub fn set_place_by_hand(&mut self, on: bool) { self.place_by_hand = on; }
 
     /// This computer's data about `root` named by its path (builds before
     /// root keys) goes by `key` from now on, unless `key` has some already.
@@ -2396,7 +2405,9 @@ impl Store {
     /// A document just made in folder `parent` becomes its last child, as
     /// 移动到 would put it (the old layout records the folder only here).
     fn place_new(&mut self, id: &str, parent: Option<&str>) -> Result<()> {
-        if parent.is_some() { self.move_in_tree(id, parent, None)?; }
+        // 自动排序 must not rewrite the hand order: the page stays unplaced,
+        // and 手动排序 shows it at the top.
+        if parent.is_some() { self.move_in_tree_with(id, parent, None, self.place_by_hand)?; }
         Ok(())
     }
 
@@ -3111,6 +3122,31 @@ mod tests {
         let mut d = doc(title);
         d.blocks.push(crate::model::Block::text(body));
         d
+    }
+
+    /// 自动排序's new pages leave the hand order alone: switching back to
+    /// 手动排序 shows what the user arranged, not what sorting touched.
+    #[test]
+    fn automatic_sort_new_page_keeps_the_hand_order() {
+        let lib = Lib::new("sort-hand-order");
+        let mut s = lib.open();
+        let folder = s.create_folder("项目", None).unwrap();
+        // 手动排序 is the default: pages made in a folder arrive numbered.
+        s.create_from_in(&doc("a"), Some(&folder)).unwrap();
+        s.create_from_in(&doc("b"), Some(&folder)).unwrap();
+        let hand = |s: &mut Store| s.list().into_iter()
+            .filter(|e| e.meta.parent.as_deref() == Some(folder.as_str()))
+            .map(|e| (e.id, e.meta.order)).collect::<Vec<_>>();
+        let before = hand(&mut s);
+        assert_eq!(before.len(), 2);
+        assert!(before.iter().all(|(_, order)| *order > 0));
+        // 自动排序: the new page stays unplaced and its siblings keep their numbers.
+        s.set_place_by_hand(false);
+        let new = s.create_from_in(&doc("c"), Some(&folder)).unwrap();
+        let after = hand(&mut s);
+        let untouched = after.iter().filter(|(id, _)| *id != new).cloned().collect::<Vec<_>>();
+        assert_eq!(untouched, before);
+        assert_eq!(after.iter().find(|(id, _)| *id == new).unwrap().1, 0);
     }
 
     #[test]
@@ -3978,7 +4014,7 @@ mod tests {
         let index = crate::vfs::read(trash.join("index.json")).unwrap();
         crate::vfs::rename(&trash, lib.0.join(".quiet/trash-away")).unwrap();
         crate::vfs::write(&trash, b"").unwrap();
-        let mut s = Store { file_changes: vec![], root: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0) };
+        let mut s = Store { file_changes: vec![], root: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0), place_by_hand: true };
         assert_eq!(s.list_trash().len(), 1);
         assert_eq!(s.trash.len(), 1);
     }
@@ -4594,6 +4630,10 @@ mod tests {
         assert!(!s.can_have_children(&f) && s.create_child(&f, &doc("x")).is_err());
         let board = s.create_board_in("板", &crate::whiteboard::Board::default(), None).unwrap();
         assert!(!s.can_have_children(&board));
+        // Nor a Markdown file: it stays where it is, no folder is made.
+        let md = s.create_markdown(&doc("笔记"), "").unwrap();
+        assert!(!s.can_have_children(&md) && s.create_child(&md, &doc("x")).is_err());
+        assert!(s.abs("笔记.md").fs_is_file() && !s.abs("笔记").fs_exists() && s.folder_of_note(&md).is_none());
     }
 
     /// Renaming a page with children renames its folder and its file
@@ -4662,9 +4702,10 @@ mod tests {
     }
 
     /// A library v0.1.11 moved to real folders reads its old child pages as
-    /// child pages again, and a hand-made `X/X.md` does too.
+    /// child pages again. A hand-made `X/X.md` does not make `X` a page: it
+    /// is a plain Markdown file in a plain folder.
     #[test]
-    fn migrated_and_hand_made_pages_have_children() {
+    fn migrated_pages_have_children_markdown_ones_do_not() {
         let lib = Lib::new("subdoc-migrated");
         let mut old = Old::new(&lib, 1);
         let p = old.doc("父", Meta::default());
@@ -4678,14 +4719,20 @@ mod tests {
         crate::vfs::create_dir_all(lib.0.join("手写")).unwrap();
         crate::vfs::write(lib.0.join("手写/手写.md"), "# 手写\n").unwrap();
         crate::vfs::write(lib.0.join("手写/别的.md"), "x\n").unwrap();
-        // An XML 正文 wins over a Markdown one of the same name.
+        // Beside an XML 正文 of the same name, the Markdown one is a child page.
         crate::vfs::create_dir_all(lib.0.join("双")).unwrap();
         crate::vfs::write(lib.0.join("双/双.md"), "x\n").unwrap();
         crate::vfs::write(lib.0.join("双/双.xml"), docxml::serialize(&doc("双"))).unwrap();
         let list = s.list();
         let by_rel = |rel: &str| list.iter().find(|e| e.meta.rel == rel).unwrap();
-        assert_eq!(by_rel("手写").note.as_deref(), Some(by_rel("手写/手写.md").id.as_str()));
+        let (hand, md) = (by_rel("手写"), by_rel("手写/手写.md"));
+        assert!(hand.note.is_none() && hand.meta.folder.is_some() && hand.title == "手写");
+        assert_eq!(md.meta.parent.as_deref(), Some(hand.id.as_str()));
+        assert!(s.folder_of_note(&md.id).is_none() && s.note_of(&hand.id).is_none() && !s.can_have_children(&hand.id));
+        assert_eq!(by_rel("手写/别的.md").meta.parent.as_deref(), Some(hand.id.as_str()));
         assert_eq!(by_rel("双").note.as_deref(), Some(by_rel("双/双.xml").id.as_str()));
+        assert_eq!(by_rel("双/双.md").meta.parent.as_deref(), Some(by_rel("双").id.as_str()));
+        assert!(s.folder_of_note(&by_rel("双/双.md").id).is_none());
         // A 画板 is never a 正文.
         crate::vfs::create_dir_all(lib.0.join("板")).unwrap();
         crate::vfs::write(lib.0.join("板/板.excalidraw"), crate::whiteboard::Board::default().file_json()).unwrap();
