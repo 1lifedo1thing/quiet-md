@@ -200,6 +200,8 @@ pub(crate) enum Drag {
     /// in the list's own coordinates; a gap at place `to` of the rows left holds where they will land,
     /// the others closing up round it as it moves.
     RowMove { ids: Vec<RecId>, to: usize, y0: f32, y: f32, off: f32, moved: bool },
+    /// A scroll thumb dragged: `across` the bottom one; the pointer and the scroll where it was pressed, scroll per point.
+    Thumb { across: bool, p0: f32, s0: f32, per: f32 },
 }
 
 /// What floats over the view. One at a time, with at most one `Dropdown` on top of it.
@@ -214,8 +216,7 @@ pub(crate) enum Popup {
     /// 指向已有笔记: the library's documents, searched.
     NotePick { rec: RecId, field: FieldId },
     Panel(panels::Panel),
-    /// The view list under a table-in-a-page's view name.
-    Stat(FieldId),
+    /// The 「…」 menu: export, copy as Markdown.
     More,
 }
 
@@ -439,6 +440,7 @@ impl TableView {
     }
 
     pub(crate) fn close_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        panels::closing(self, cx);
         if self.popup.take().is_some() || self.dropdown.take().is_some() {
             if !self.input.read(cx).is_focused(window) { window.focus(&self.focus, cx); }
             cx.notify();
@@ -639,7 +641,7 @@ impl Render for TableView {
                 .child(crate::ui::squircle_outline(RADIUS, 0.5, crate::theme::Theme::line_sheet())))
         } else {
             let rows = self.tops.last().copied().unwrap_or(0.) + add_row_h();
-            let h = INLINE_HEAD_H + header_h() + rows.min(INLINE_MAX_ROWS_H) + footer_h() + 2.;
+            let h = INLINE_HEAD_H + header_h() + rows.min(INLINE_MAX_ROWS_H) + 2.;
             self.height = h;
             root.group("tb-block").h(px(h))
                 .child(menus::inline_header(self, t, v, cx))

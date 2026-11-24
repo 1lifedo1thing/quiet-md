@@ -20,9 +20,7 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
     tools.push(("tb-t-color", "palette", "填色", o.colors.len(), panels::Kind::Color));
     // the pane's bar (`add`) has room to name its main tools; a page's one line keeps to icons
     let named = |id: &str| add && matches!(id, "tb-t-fields" | "tb-t-filter" | "tb-t-group" | "tb-t-sort");
-    let mut row = div().flex_none().flex().items_center().gap(px(4.))
-        .when(add, |d| d.child(crate::design::Button::ghost("tb-add").icon("plus").label(crate::settings::label("添加记录")).on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx)))))
-        .when(add, |d| d.child(div().flex_none().w(px(1.)).h(px(16.)).mx(px(4.)).bg(line())));
+    let mut row = div().flex_none().flex().items_center().gap(px(4.));
     for (id, glyph, tip, n, kind) in tools {
         let b = if named(id) {
             let name = crate::settings::label(tip);
@@ -37,18 +35,24 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
 /// A square tool of the bar (`design::Button`, ghost, 28); `off` greys it out and makes it inert.
 fn icon_button(id: &'static str, glyph: &'static str, off: bool) -> crate::design::Button { crate::design::Button::ghost(id).icon(glyph).disabled(off) }
 
-/// A file is one table with one view: the pane's chrome is one line. Left, the tools as icons;
-/// right, 撤销, 重做, 表内搜索, the 「…」 menu (and, for a page's table opened full, back to the page).
+/// A file is one table with one view: the pane's chrome is one line. Left, 添加记录; right, 撤销 and
+/// 重做, the view's tools (字段配置 … 填色), 表内搜索, the 「…」 menu (and, for a page's table opened
+/// full, back to the page).
 pub(crate) fn bar(v: &TableView, t: &Table, view: &View, cx: &Context<TableView>) -> AnyElement {
     let (can_undo, can_redo) = { let d = &v.state.read(cx).doc; (d.can_undo(), d.can_redo()) };
+    let divider = || div().flex_none().w(px(1.)).h(px(16.)).mx(px(4.)).bg(line());
+    let left = crate::design::Button::ghost("tb-add").icon("plus").label(crate::settings::label("添加记录")).on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx)));
     let right = div().flex_none().flex().items_center().gap(px(4.))
         .child(icon_button("tb-undo", "undo", !can_undo).on_click(cx.listener(|v, _, _, cx| v.undo(cx))))
         .child(icon_button("tb-redo", "redo", !can_redo).on_click(cx.listener(|v, _, _, cx| v.redo(cx))))
+        .child(divider())
+        .child(tool_icons(t, view, true, cx))
+        .child(divider())
         .child(icon_button("tb-find", "search", false).on_click(cx.listener(|v, _, window, cx| v.open_find(window, cx))))
         .child(icon_button("tb-more", "ellipsis", false).on_click(cx.listener(|v, ev: &ClickEvent, _, cx| { let p = ev.position(); v.open_popup(point(p.x - px(160.), p.y + px(18.)), Popup::More, cx); })))
         .when(!v.standalone, |d| d.child(icon_button("tb-collapse", "x", false).tip_above(crate::settings::text("退出全屏"), None).on_click(cx.listener(|_, _, _, cx| cx.emit(TableEvent::Close)))));
     div().id("tb-bar").flex_none().h(px(BAR_H)).flex().items_center().justify_between().gap(px(8.)).px(px(12.)).border_b_1().border_color(line())
-        .child(tool_icons(t, view, true, cx)).child(right)
+        .child(left).child(right)
         .into_any_element()
 }
 
@@ -119,7 +123,7 @@ pub(crate) fn selection_bar(v: &TableView, _t: &Table, cx: &Context<TableView>) 
     let n = v.rows_sel.len();
     if n == 0 { return None; }
     let btn = |id: &'static str, glyph: &'static str, text: &str, danger: bool| ghost_btn(id, glyph, label(text)).variant(if danger { crate::design::ButtonVariant::Destructive } else { crate::design::ButtonVariant::Ghost });
-    Some(div().absolute().bottom(px(footer_h() + 16.)).left_0().right_0().flex().justify_center().child(crate::design::Popover::new("tb-selbar").occlude().h(px(44.)).px(px(12.)).flex().items_center().gap(px(8.))
+    Some(div().absolute().bottom(px(16.)).left_0().right_0().flex().justify_center().child(crate::design::Popover::new("tb-selbar").occlude().h(px(44.)).px(px(12.)).flex().items_center().gap(px(8.))
         .child(div().text_color(Theme::text()).child(format!("{} {n} {}", label("已选"), label("条记录"))))
         .child(div().w(px(1.)).h(px(16.)).bg(Theme::line_divider()))
         .child(btn("tb-sel-dup", "copy", "创建副本", false).on_click(cx.listener(|v, _, _, cx| { let (tid, ids) = (v.table, v.rows_sel.iter().copied().collect::<Vec<_>>()); v.edit(cx, |d| d.duplicate_records(tid, &ids)); })))
@@ -174,7 +178,6 @@ pub(crate) fn popup(v: &TableView, base: &Base, t: &Table, view: &View, _window:
         Popup::Files { rec, field } => editors::files_popup(v, t, *rec, *field, cx),
         Popup::NotePick { rec, field } => notes::pick_popup(v, *rec, *field, cx),
         Popup::Panel(panel) => panels::render(v, base, t, view, panel, cx),
-        Popup::Stat(f) => stat_menu(t, view, *f, cx),
         Popup::More => more_menu(cx),
     };
     Some(deferred(anchored().position(*pos).snap_to_window_with_margin(px(8.)).child(el)).with_priority(5).into_any_element())
@@ -275,17 +278,6 @@ fn cell_menu(v: &TableView, t: &Table, view: &View, rec: RecId, cx: &Context<Tab
             notes::remove_records(v, ids, window, cx);
         })))
         .into_any_element()
-}
-
-/// 统计: what to show at the foot of a column.
-fn stat_menu(t: &Table, view: &View, fid: FieldId, cx: &Context<TableView>) -> AnyElement {
-    let Some(f) = t.field(fid) else { return div().into_any_element() };
-    let cur = view.opts.stats.get(&fid).copied();
-    let row = |id: usize, text: String, on: bool, stat: Option<Stat>| menu_item(("tb-stat-item", id), "", text, false).when(on, |d| d.child(icon("check", 14., crate::design::color::foreground())))
-        .on_click(cx.listener(move |v, _, window, cx| { v.edit_view(cx, |view| { match stat { Some(s) => { view.opts.stats.insert(fid, s); } None => { view.opts.stats.remove(&fid); } } }); v.close_popup(window, cx); }));
-    let mut m = shell("tb-stat-menu", 180., cx).child(row(0, label("不展示"), cur.is_none(), None));
-    for (i, s) in query::stats_for(f.ty).iter().enumerate() { m = m.child(row(i + 1, label(s.label()), cur == Some(*s), Some(*s))); }
-    m.into_any_element()
 }
 
 fn more_menu(cx: &Context<TableView>) -> AnyElement {

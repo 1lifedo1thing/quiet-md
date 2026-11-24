@@ -224,6 +224,10 @@ fn date_range(d: DateRef, value: &str, today: i64) -> Option<(i64, i64)> {
 
 /// None: the condition says nothing yet (its field is gone, or its value is
 /// still to be typed), so it is left out rather than emptying the table.
+/// Whether a condition says anything yet (a value given, or an operator that needs none): one that
+/// doesn't filters nothing and colours nothing.
+pub fn cond_active(base: &Base, t: &Table, c: &Cond, today: i64) -> bool { compile(base, t, c, today).is_some() }
+
 fn compile<'a>(base: &'a Base, t: &'a Table, c: &Cond, today: i64) -> Option<Check<'a>> {
     use FilterOp::*;
     let f = t.field(c.field)?;

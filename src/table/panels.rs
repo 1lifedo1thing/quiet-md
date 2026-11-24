@@ -57,6 +57,30 @@ pub(crate) fn open(v: &mut TableView, kind: Kind, pos: Point<Pixels>, window: &m
     });
     v.open_popup(pos, Popup::Panel(Panel { kind, search, inputs: vec![], palette: None }), cx);
     sync_inputs(v, window, cx);
+    // 填色 with no rule opens on one, ready to fill in (left empty, it goes again as the panel closes)
+    if kind == Kind::Color && peek(v, cx, |_, view| view.opts.colors.is_empty()).unwrap_or(false) { add_color_rule(v, window, cx); }
+}
+
+/// A 填色 rule more: the first field, nothing yet, the next colour no rule has; its value box focused.
+fn add_color_rule(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
+    let Some(c) = new_cond(v, cx) else { return };
+    v.edit_view(cx, |view| {
+        // 飞书 starts on yellow; then whichever colour no rule has yet
+        let color = (0..10u8).map(|k| (k + 2) % 10).find(|s| !view.opts.colors.iter().any(|r| r.color == *s)).unwrap_or(2);
+        view.opts.colors.push(ColorRule { filter: Filter { all: true, conds: vec![c] }, color });
+    });
+    sync_inputs(v, window, cx);
+    if let Some(input) = panel_mut(v).and_then(|p| p.inputs.last()).map(|(e, _)| e.clone()) { window.focus(&input.focus_handle(cx), cx); }
+}
+
+/// The 填色 panel closing: its rules that say nothing go (one opened on and left empty, as 飞书 drops it).
+pub(crate) fn closing(v: &mut TableView, cx: &mut Context<TableView>) {
+    if !matches!(v.popup.as_ref(), Some((_, Popup::Panel(p))) if p.kind == Kind::Color) { return }
+    let today = field::today();
+    let empty: Vec<usize> = { let st = v.state.read(cx); let base = &st.doc.base; base.table(v.table).and_then(|t| t.view(v.view).map(|view| view.opts.colors.iter().enumerate()
+        .filter(|(_, r)| !r.filter.conds.iter().any(|c| query::cond_active(base, t, c, today))).map(|(i, _)| i).collect())).unwrap_or_default() };
+    if empty.is_empty() { return }
+    v.edit_view(cx, |view| { for i in empty.into_iter().rev() { if i < view.opts.colors.len() { view.opts.colors.remove(i); } } });
 }
 
 pub(crate) fn render(_v: &TableView, _base: &Base, t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
@@ -438,7 +462,7 @@ fn height_panel(view: &View, cx: &Context<TableView>) -> AnyElement {
 // ---- 填色 ----
 
 fn color_panel(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
-    let mut p = shell("tb-panel-color", if view.opts.colors.is_empty() { EMPTY_W } else { 560. }, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置填色条件"));
+    let mut p = shell("tb-panel-color", 560., cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置填色条件"));
     for (i, rule) in view.opts.colors.iter().enumerate() {
         let cur = rule.color % 10;
         p = p.child(div().flex().items_center().gap(px(8.))
@@ -463,14 +487,5 @@ fn color_panel(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -
         }
         p = p.child(row);
     }
-    p.child(div().flex().child(text_btn("tb-pk-add", "plus", "添加条件").on_click(cx.listener(|v, _, window, cx| {
-        let Some(c) = new_cond(v, cx) else { return };
-        v.edit_view(cx, |view| {
-            // 飞书 starts on yellow; then whichever colour no rule has yet
-            let color = (0..10u8).map(|k| (k + 2) % 10).find(|s| !view.opts.colors.iter().any(|r| r.color == *s)).unwrap_or(2);
-            view.opts.colors.push(ColorRule { filter: Filter { all: true, conds: vec![c] }, color });
-        });
-        sync_inputs(v, window, cx);
-        if let Some(input) = panel_mut(v).and_then(|p| p.inputs.last()).map(|(e, _)| e.clone()) { window.focus(&input.focus_handle(cx), cx); }
-    })))).into_any_element()
+    p.child(div().flex().child(text_btn("tb-pk-add", "plus", "添加条件").on_click(cx.listener(|v, _, window, cx| add_color_rule(v, window, cx))))).into_any_element()
 }

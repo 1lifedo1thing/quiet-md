@@ -296,6 +296,10 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
                 *to = Some(gap);
             }
         }
+        Drag::Thumb { across, p0, s0, per } => {
+            if *across { v.scroll.x = *s0 + (px_ - *p0) * *per; } else { v.scroll.y = *s0 + (py_ - *p0) * *per; }
+            v.clamp_scroll(&cols, row_px(view.opts.row_height));
+        }
         Drag::ColSelect { from } => {
             let lx = px_ - f32::from(body.origin.x);
             let cx_ = if lx < cols.frozen_w { lx } else { lx + v.scroll.x };
@@ -307,7 +311,7 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
             if (py_ - *y0).abs() > 4. { *moved = true; }
             // the dragged rows' first top, in rows of the list without them: the nearest place is the gap's
             let first = py_ - f32::from(body.origin.y) + v.scroll.y - *off;
-            let rest = result.records.len() - result.records.iter().filter(|i| ids.contains(&t.records[**i].id)).count();
+            let rest = result.records.len() - ids.iter().filter(|r| v.order.contains_key(*r)).count();
             *to = ((first / row_px(view.opts.row_height)) + 0.5).floor().clamp(0., rest as f32) as usize;
         }
     }
@@ -322,7 +326,7 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
     let tid = v.table;
     match drag {
         Drag::ColWidth { field, w, w0, .. } => if (w - w0).abs() >= 1. { v.edit_view(cx, |view| { view.opts.widths.insert(field, w.round()); }); },
-        Drag::Select => {}
+        Drag::Select | Drag::Thumb { .. } => {}
         Drag::Fill(to) => {
             let plan = {
                 let st = v.state.read(cx);
@@ -386,7 +390,8 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
                 let Some(t) = st.doc.base.table(tid) else { return };
                 // the record at the gap's place among the rows left → its row in the table's own order (past
                 // the last of them, just after it)
-                let rest: Vec<usize> = v.result.records.iter().copied().filter(|i| !ids.contains(&t.records[*i].id)).collect();
+                let gone: HashSet<RecId> = ids.iter().copied().collect();
+                let rest: Vec<usize> = v.result.records.iter().copied().filter(|i| !gone.contains(&t.records[*i].id)).collect();
                 rest.get(to).copied().unwrap_or_else(|| rest.last().map_or(t.records.len(), |i| i + 1))
             };
             v.edit(cx, |d| d.move_records(tid, &ids, target));
@@ -523,58 +528,89 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         .child({ let b = v.body.clone(); canvas(move |bounds, _, _| b.set(bounds), |_, _, _, _| {}).absolute().size_full() });
     let rec_pos = |i: usize| v.order.get(&t.records[i].id).copied();
     // rows being dragged: each left row's place counting the gap, the dragged ones over the rest at the pointer
-    let lift = match &v.drag { Some(Drag::RowMove { ids, to, y, off, moved: true, .. }) => Some((ids.clone(), *to, *y, *off)), _ => None };
+    // rows being dragged (only in the table's own order: no groups, a row is its record's place):
+    // the dragged ones, their places in order, the gap's place among the rest, the first one's top on screen
+    let lift = match &v.drag {
+        Some(Drag::RowMove { ids, to, y, off, moved: true, .. }) => {
+            let set: HashSet<RecId> = ids.iter().copied().collect();
+            let mut at: Vec<usize> = ids.iter().filter_map(|r| v.order.get(r).copied()).collect();
+            at.sort_unstable();
+            Some((set, at, *to, y - f32::from(v.body.get().origin.y) - off))
+        }
+        _ => None,
+    };
     let mut lifted: Vec<AnyElement> = vec![];
-    let (mut left_i, mut lift_i) = (0usize, 0usize);
     // rows slide to their places on springs (the sidebar's): the step since the last frame
     let mut fx = v.slide.borrow_mut();
     let now = web_time::Instant::now();
     let dt = fx.last.replace(now).map_or(1. / 120., |l| now.duration_since(l).as_secs_f32().min(0.032));
     let mut sliding = false;
-    let (first, last) = match &lift {
-        // every row may move by the dragged ones' height: lay them all out (counting places from the top)
-        Some((ids, ..)) => (0, (last + ids.len()).min(v.result.rows.len())),
-        // still settling: as far as they may still be from their places
-        None if !fx.rows.is_empty() => (first.saturating_sub(fx.rows.len()), (last + fx.rows.len()).min(v.result.rows.len())),
-        None => (first, last),
+    let n_rows = v.result.rows.len();
+    let near = |y: f32| y - sy > -2. * row_h && y - sy < vs.height + row_h;
+    // the rows to lay out: those in sight, wherever they are going or coming from. Only these get
+    // springs, so a long table costs no more than a short one.
+    let visit: Vec<usize> = match &lift {
+        Some((set, at, _, ghost)) => {
+            // a row moves by at most the dragged ones' count: the window in sight, widened by that
+            let k = at.len();
+            let (lo, hi) = (((sy / row_h).floor() as usize).saturating_sub(k + 1), ((((sy + vs.height) / row_h).ceil() as usize) + k + 1).min(n_rows));
+            let mut r: Vec<usize> = (lo..hi).filter(|ri| !matches!(&v.result.rows[*ri], query::Row::Record(i) if set.contains(&t.records[*i].id))).collect();
+            // the dragged ones in sight, riding the pointer
+            r.extend(at.iter().enumerate().filter(|(j, _)| { let y = ghost + *j as f32 * row_h; y > -row_h && y < vs.height }).filter_map(|(_, p)| v.row_of.get(*p).copied().filter(|r| *r != usize::MAX)));
+            r
+        }
+        None => {
+            let mut r: Vec<usize> = (first..last).collect();
+            // still settling: those a spring still carries, from wherever they are
+            r.extend(fx.rows.keys().filter_map(|id| v.order.get(id).and_then(|p| v.row_of.get(*p)).copied()).filter(|ri| *ri != usize::MAX && !(first..last).contains(ri)));
+            r
+        }
     };
     match &lift {
-        Some((ids, to, ..)) => {
-            let at = *to as f32 * row_h;
-            let gap = fx.gap.get_or_insert_with(|| crate::sidebar_drag::Spring::new([at]));
-            gap.target = [at];
+        Some((_, at, to, _)) => {
+            let y = *to as f32 * row_h;
+            let gap = fx.gap.get_or_insert_with(|| crate::sidebar_drag::Spring::new([y]));
+            gap.target = [y];
             sliding |= gap.step(dt);
             let gap_top = gap.p[0] - sy;
-            body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(ids.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
+            body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(at.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
         }
         None => fx.gap = None,
     }
-    for ri in first..last {
+    for ri in visit {
         let mut top = v.tops[ri] - sy;
         // the place it shows at, numbered so while rows are dragged
         let mut place = None;
-        if let (Some((ids, to, y, off)), query::Row::Record(i)) = (&lift, &v.result.rows[ri]) {
-            if ids.contains(&t.records[*i].id) {
-                top = y - f32::from(v.body.get().origin.y) - off + lift_i as f32 * row_h;
-                place = Some(to + lift_i);
-                lift_i += 1;
+        if let (Some((set, at, to, ghost)), query::Row::Record(i)) = (&lift, &v.result.rows[ri]) {
+            let rid = t.records[*i].id;
+            let pos = v.order.get(&rid).copied().unwrap_or(ri);
+            if set.contains(&rid) {
+                let j = at.partition_point(|p| *p < pos);
+                top = ghost + j as f32 * row_h;
+                place = Some(to + j);
             } else {
-                let at = left_i + if left_i >= *to { ids.len() } else { 0 };
-                let rid = t.records[*i].id;
-                let s = fx.rows.entry(rid).or_insert_with(|| crate::sidebar_drag::Spring::new([v.tops[ri]]));
-                s.target = [at as f32 * row_h];
+                // its place among the rows left (those dragged from above it are gone), the gap's rows after it
+                let left = pos - at.partition_point(|p| *p < pos);
+                let shown = left + if left >= *to { at.len() } else { 0 };
+                let target = shown as f32 * row_h;
+                let s = match fx.rows.get_mut(&rid) {
+                    Some(s) => s,
+                    // in sight before or after: on a spring from where it was; else straight to its place
+                    None if near(target) || near(v.tops[ri]) => fx.rows.entry(rid).or_insert(crate::sidebar_drag::Spring::new([if near(v.tops[ri]) { v.tops[ri] } else { target }])),
+                    None => continue,
+                };
+                s.target = [target];
                 sliding |= s.step(dt);
                 top = s.p[0] - sy;
-                place = Some(at);
-                left_i += 1;
+                place = Some(shown);
             }
-            if top + row_h < 0. || top > vs.height { continue }
         } else if let (None, query::Row::Record(i)) = (&lift, &v.result.rows[ri]) && let Some(s) = fx.rows.get_mut(&t.records[*i].id) {
             // dropped, or making room a moment ago: on to its place in the list
             s.target = [v.tops[ri]];
             sliding |= s.step(dt);
             top = s.p[0] - sy;
         }
+        if top + row_h < 0. || top > vs.height { continue }
         match &v.result.rows[ri] {
             query::Row::Group(g) => body = body.child(group_row(v, t, g, top, cols.frozen_w, cx)),
             query::Row::Record(i) => {
@@ -703,40 +739,6 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     }
     let empty = v.result.records.is_empty() && !t.records.is_empty();
 
-    // ---- 统计 ----
-    let stat_cell = |ci: usize| {
-        let f = fields[ci];
-        let fid = f.id;
-        let text = view.opts.stats.get(&fid).map(|s| format!("{} {}", crate::settings::label(s.label()), query::stat(base, t, f, &v.result.records, *s)));
-        div().id(("tb-stat", fid)).group("tb-stat").flex_none().w(px(cols.w[ci])).h_full().flex().items_center().justify_end().px(px(cell_pad_x())).cursor_pointer()
-            .hover(|s| s.bg(Theme::fill_hover())).text_size(px(12.)).text_color(Theme::text_caption()).overflow_hidden().whitespace_nowrap()
-            .map(|d| match text {
-                Some(t) => d.child(ui_text(t)),
-                None => d.child(div().invisible().group_hover("tb-stat", |s| s.visible()).flex().items_center().gap(px(2.)).child(crate::settings::label("统计")).child(icon("chevron-down", 11., Theme::text_caption()))),
-            })
-            .on_click(cx.listener(move |v, ev: &ClickEvent, _, cx| { let p = ev.position(); v.open_popup(point(p.x - px(80.), p.y - px(12.)), Popup::Stat(fid), cx); }))
-    };
-    let count = v.result.records.len();
-    let mut ft_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().when(!inline, |d| d.border_r_1().border_color(frozen_line()))
-        .child(div().flex_none().w(px(GUTTER_W)).h_full());
-    for ci in 0..cols.frozen {
-        ft_frozen = ft_frozen.child(if ci == 0 && !view.opts.stats.contains_key(&fields[0].id) {
-            // 飞书: the count at the right of the title column, its menu the summary choices
-            let fid = fields[0].id;
-            div().flex_none().w(px(cols.w[0])).h_full().flex().items_center().justify_end().px(px(cell_pad_x()))
-                .child(div().id("tb-count").h(px(24.)).px(px(4.)).flex().items_center().gap(px(4.)).rounded(px(4.)).cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-                    .text_size(px(12.)).text_color(Theme::text_caption())
-                    .child(format!("{count} {}", crate::settings::label("条记录"))).child(icon("chevron-down", 11., Theme::text_caption()))
-                    .on_click(cx.listener(move |v, ev: &ClickEvent, _, cx| { let p = ev.position(); v.open_popup(point(p.x - px(80.), p.y - px(12.)), Popup::Stat(fid), cx); })))
-                .into_any_element()
-        } else { stat_cell(ci).into_any_element() });
-    }
-    let mut ft_scroll = div().flex().h_full().ml(px(-sx));
-    for ci in cols.frozen..fields.len() { ft_scroll = ft_scroll.child(stat_cell(ci)); }
-    // in a page the count sits under the frame, unboxed (飞书's embedded base)
-    let footer = div().flex_none().flex().h(px(footer_h())).when(!inline, |d| d.border_t_1().border_color(line())).bg(Theme::bg_body())
-        .child(ft_frozen).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(ft_scroll));
-
     let max_x = (cols.total + ADD_FIELD_W - vs.width).max(0.);
     let max_y = (v.content_h(row_h) + v.slack() - vs.height).max(0.);
     div().id("tb-grid").relative().flex_1().min_h_0().flex().flex_col()
@@ -750,8 +752,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
             .children(edit_overlay(v, &cols, &fields, row_h))
-            .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline)))
-        .child(footer)
+            .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline, cx)))
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
             let d = ev.delta.pixel_delta(px(20.));
             let (mut dx, mut dy) = (f32::from(d.x), f32::from(d.y));
@@ -766,21 +767,30 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         .into_any_element()
 }
 
-/// Thin scroll thumbs along the right and bottom edges of the body.
-/// `quiet`: only while the pointer is over the block (a table in a page).
-fn scrollbars(v: &TableView, max_x: f32, max_y: f32, vs: Size<f32>, frozen_w: f32, quiet: bool) -> Vec<AnyElement> {
+/// Thin scroll thumbs along the right and bottom edges of the body, each dragged to scroll (a band
+/// wider than the thumb takes the press). `quiet`: only while the pointer is over the block (a table in a page).
+fn scrollbars(v: &TableView, max_x: f32, max_y: f32, vs: Size<f32>, frozen_w: f32, quiet: bool, cx: &Context<TableView>) -> Vec<AnyElement> {
     let mut out = vec![];
+    let thumb = |d: Div| d.rounded(px(3.)).bg(Theme::scrollbar_thumb());
     if max_y > 0. {
         let track = vs.height;
         let len = (track * track / (track + max_y)).max(28.);
         let top = header_h() + (track - len) * (v.scroll.y / max_y);
-        out.push(div().absolute().right(px(2.)).top(px(top)).w(px(6.)).h(px(len)).rounded(px(3.)).bg(Theme::scrollbar_thumb()).when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible())).into_any_element());
+        let per = max_y / (track - len).max(1.);
+        out.push(div().id("tb-thumb-y").absolute().right_0().top(px(top)).w(px(10.)).h(px(len)).flex().justify_center().when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible()))
+            .child(thumb(div().w(px(6.)).h_full()))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Thumb { across: false, p0: f32::from(ev.position.y), s0: v.scroll.y, per }); cx.notify(); }))
+            .into_any_element());
     }
     if max_x > 0. {
         let track = vs.width - frozen_w;
         let len = (track * track / (track + max_x)).max(28.);
         let left = frozen_w + (track - len) * (v.scroll.x / max_x);
-        out.push(div().absolute().bottom(px(if quiet { 2. } else { footer_h() + 2. })).left(px(left)).h(px(6.)).w(px(len)).rounded(px(3.)).bg(Theme::scrollbar_thumb()).when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible())).into_any_element());
+        let per = max_x / (track - len).max(1.);
+        out.push(div().id("tb-thumb-x").absolute().bottom_0().left(px(left)).h(px(10.)).w(px(len)).flex().items_center().when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible()))
+            .child(thumb(div().h(px(6.)).w_full()))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Thumb { across: true, p0: f32::from(ev.position.x), s0: v.scroll.x, per }); cx.notify(); }))
+            .into_any_element());
     }
     out
 }
@@ -846,9 +856,10 @@ fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32) -> Op
     let x = cols.x[ci] - if scrolled { v.scroll.x } else { 0. };
     if scrolled && x + cols.w[ci] <= cols.frozen_w { return None }
     let y = header_h() + v.tops[row] - v.scroll.y;
-    Some(div().id("tb-cell-editor").absolute().left(px(x - RING_W / 2.)).top(px(y - RING_W / 2.)).w(px(cols.w[ci] + RING_W)).min_h(px(row_h + RING_W)).max_h(px(EDIT_MAX_H))
+    // the frame on the same lines as the picked cell's (`cursor_ring`): each side over the grid line and one point out
+    Some(div().id("tb-cell-editor").absolute().left(px(x - RING_W)).top(px(y - RING_W)).w(px(cols.w[ci] + 2. * RING_W - 1.)).min_h(px(row_h + 2. * RING_W - 1.)).max_h(px(EDIT_MAX_H))
         .overflow_y_scroll().bg(Theme::bg_body()).border(px(RING_W)).border_color(ring())
-        .px(px(cell_pad_x() - RING_W)).py(px((row_h.min(one_line_h()) - 20.) / 2. - RING_W / 2.)).child(v.input.clone())
+        .pl(px(cell_pad_x())).pr(px(cell_pad_x() - 1.)).py(px((row_h.min(one_line_h()) - 20.) / 2. - 0.5)).child(v.input.clone())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .into_any_element())
 }

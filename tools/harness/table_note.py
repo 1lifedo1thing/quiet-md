@@ -43,7 +43,7 @@ NOTE_1, NOTE_2 = "861 149", "861 185"   # the 笔记 cells of rows 1 and 2
 PANEL_CLOSE = "1265 124"
 NOTE_BODY, NOTE_TITLE = "885 581", "830 223"
 NOTE_FULL = "1229 124"
-UNDO = "1178 69"                # the table's own ↶ (⌘Z after a rename in the sidebar undoes the rename)
+UNDO = "787 77"                 # the table's own ↶ (⌘Z after a rename in the sidebar undoes the rename)
 
 OPEN = f"""click {TABLE_ROW}
 wait 1200

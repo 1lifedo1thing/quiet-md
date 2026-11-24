@@ -60,7 +60,6 @@ pub fn add_row_h() -> f32 { geo().add_row_h }
 /// The pane's one line of chrome (views, tools).
 pub const BAR_H: f32 = 44.;
 /// 统计 bar under the grid.
-pub fn footer_h() -> f32 { geo().footer_h }
 /// A 分组 header line.
 pub fn group_h() -> f32 { geo().group_h }
 /// Indent per group level.
