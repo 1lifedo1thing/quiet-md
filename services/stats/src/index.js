@@ -130,12 +130,13 @@ async function run(env, source, day, f) {
 // ---- Cloudflare ----
 
 /// What a request to download.quiet.md is: a manifest, a package, or noise (null).
+/// A re-upload goes to v<x.y.z>-r<n>/ (published packages are cached as immutable), counted as x.y.z.
 export function classify(path, userAgent) {
   let m = path.match(/^\/latest\/update-(.+)\.json$/);
   if (m) return { kind: 'check', platform: m[1] };
   m = path.match(/^\/latest\/quiet-md-(macos-arm64\.(?:dmg|zip)|macos-x86_64\.(?:dmg|zip)|windows-x64-setup\.exe|x86_64\.AppImage)$/);
   if (m) return { kind: 'download', platform: PLATFORMS[m[1]], version: 'latest', channel: 'cdn' };
-  m = path.match(/^\/v(\d+\.\d+\.\d+)\/quiet-md-(\d+\.\d+\.\d+)-(macos-arm64\.(?:dmg|zip)|macos-x86_64\.(?:dmg|zip)|windows-x64-setup\.exe|x86_64\.AppImage)$/);
+  m = path.match(/^\/v(\d+\.\d+\.\d+)(?:-r\d+)?\/quiet-md-(\d+\.\d+\.\d+)-(macos-arm64\.(?:dmg|zip)|macos-x86_64\.(?:dmg|zip)|windows-x64-setup\.exe|x86_64\.AppImage)$/);
   if (m && m[1] === m[2]) return { kind: 'download', platform: PLATFORMS[m[3]], version: m[1], channel: /^curl\//.test(userAgent || '') ? 'update' : 'cdn' };
   return null;
 }
