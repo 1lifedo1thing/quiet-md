@@ -193,7 +193,7 @@ pub(crate) enum Drag {
     /// A picked header pressed, then (past a few pixels) dragged: `to` is the gap
     /// it would drop into, as a column index. Released unmoved, it was a click: on the one picked
     /// header (`rename`), its name is edited.
-    ColMove { field: FieldId, x0: f32, x: f32, to: Option<usize>, rename: bool },
+    ColMove { field: FieldId, x0: f32, x: f32, off: f32, to: Option<usize>, rename: bool },
     /// Pressed on a header not picked, then dragged along the headers: the columns from `from` to the one under the pointer are picked.
     ColSelect { from: FieldId },
     /// Row handles dragged (as a folder's rows in the sidebar): the rows ride the pointer, `off` above it
@@ -248,7 +248,7 @@ pub(crate) enum Rename { Table(TableId), Field(FieldId) }
 
 /// `TableView::slide`: the springs, and the last frame's time for their step.
 #[derive(Default)]
-pub(crate) struct SlideFx { pub rows: HashMap<RecId, crate::sidebar_drag::Spring<1>>, pub gap: Option<crate::sidebar_drag::Spring<1>>, pub last: Option<web_time::Instant> }
+pub(crate) struct SlideFx { pub rows: HashMap<RecId, crate::sidebar_drag::Spring<1>>, pub cols: HashMap<FieldId, crate::sidebar_drag::Spring<1>>, pub gap: Option<crate::sidebar_drag::Spring<1>>, pub last: Option<web_time::Instant> }
 
 pub struct TableView {
     pub state: Entity<BaseState>,

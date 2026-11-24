@@ -2417,6 +2417,8 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "查找引用" => "Lookup",
         "查找或创建选项" => "Find or create an option",
         "查看详情" => "Open record",
+        "打开链接" => "Open link",
+        "⌘ + 点击" => "⌘ + click",
         "一起删除" => "Delete both",
         "保留笔记" => "Keep the notes",
         "找不到笔记" => "Note not found",

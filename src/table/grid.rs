@@ -352,11 +352,15 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
                 }
             }
         }
-        Drag::ColMove { field, to: Some(to), .. } => {
+        Drag::ColMove { field, to: Some(to), x, off, .. } => {
             let order = {
                 let st = v.state.read(cx);
                 let (Some(t), Some(view)) = (st.doc.base.table(tid), st.doc.base.table(tid).and_then(|t| t.view(v.view))) else { return };
                 let shown: Vec<FieldId> = t.visible_fields(view).iter().map(|f| f.id).collect();
+                // from where it was let go to its place (a left in the list's own coordinates)
+                let at = shown.iter().position(|f| *f == field).map(|d| if to > d { to - 1 } else { to }).unwrap_or(0);
+                let ghost = x - f32::from(v.body.get().origin.x) - off + if at >= view.opts.frozen.max(1) { v.scroll.x } else { 0. };
+                v.slide.borrow_mut().cols.insert(field, crate::sidebar_drag::Spring::new([ghost]));
                 let all: Vec<FieldId> = t.ordered_fields(view).iter().map(|f| f.id).collect();
                 // before which field (of all, hidden ones too) the dragged one lands
                 let before = shown.get(to).copied();
@@ -402,9 +406,41 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
 
 pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window: &mut Window, cx: &Context<TableView>) -> AnyElement {
     let cols = v.cols(t, view);
-    let fields = t.visible_fields(view);
+    let mut fields = t.visible_fields(view);
     let row_h = row_px(view.opts.row_height);
     let (sx, sy) = (v.scroll.x, v.scroll.y);
+    // a column being dragged (as rows are): laid out at the gap it would land in, its place there
+    // left empty, itself riding the pointer over the rest (`ghost`, from the list's left)
+    let col_lift = match &v.drag { Some(Drag::ColMove { field, to: Some(to), x, off, .. }) => cols.index(*field).map(|d| (d, *to, x - f32::from(v.body.get().origin.x) - off)), _ => None };
+    let was_x: HashMap<FieldId, f32> = cols.ids.iter().copied().zip(cols.x.iter().copied()).collect();
+    let (cols, dragged_col, ghost) = match col_lift {
+        Some((d, to, ghost)) if cols.ids.len() > 1 => {
+            let n = (if to > d { to - 1 } else { to }).clamp(1, cols.ids.len() - 1);
+            let f = fields.remove(d);
+            fields.insert(n, f);
+            (relaid(&cols, d, n), Some(n), ghost)
+        }
+        _ => (cols, None, 0.),
+    };
+    // columns making room slide on springs (the rows'), each cell of theirs `col_dx` off its place
+    let mut fx = v.slide.borrow_mut();
+    let now = web_time::Instant::now();
+    let dt = fx.last.replace(now).map_or(1. / 120., |l| now.duration_since(l).as_secs_f32().min(0.032));
+    let mut sliding = false;
+    let mut col_dx = vec![0f32; cols.ids.len()];
+    for (c, fid) in cols.ids.iter().enumerate() {
+        if Some(c) == dragged_col { continue }
+        let target = cols.x[c];
+        let s = match fx.cols.get_mut(fid) {
+            Some(s) => s,
+            None if dragged_col.is_some() => fx.cols.entry(*fid).or_insert(crate::sidebar_drag::Spring::new([was_x.get(fid).copied().unwrap_or(target)])),
+            None => continue,
+        };
+        s.target = [target];
+        sliding |= s.step(dt);
+        col_dx[c] = s.p[0] - target;
+    }
+    if dragged_col.is_none() { fx.cols.retain(|_, s| s.p != s.target || s.v[0] != 0.); }
     let vs = v.view_size();
     let sel = v.sel_rect(&cols);
     let fill_to = match &v.drag { Some(Drag::Fill(r)) => v.order.get(r).copied(), _ => None };
@@ -424,6 +460,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         let fid = f.id;
         let (w, on) = (cols.w[ci], v.col_sel.contains(&fid));
         let sorted = view.opts.sorts.iter().find(|s| s.field == fid).map(|s| s.desc);
+        // its left on screen, from the list's left: where a drag of it takes hold
+        let col_left = cols.x[ci] - if ci >= cols.frozen { sx } else { 0. };
         div().id(("tb-hdr", fid)).group("tb-hdr").relative().flex_none().w(px(w)).h_full().flex().items_center().gap(px(4.)).px(px(cell_pad_x()))
             .border_r_1().border_color(line())
             .when(on, |d| d.bg(sel_header()))
@@ -476,7 +514,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 // a picked header drags its column along; another starts picking columns, as cells are picked
                 let x = f32::from(ev.position.x);
                 if v.col_sel.contains(&fid) {
-                    v.drag = Some(Drag::ColMove { field: fid, x0: x, x, to: None, rename: v.col_sel == [fid] });
+                    v.drag = Some(Drag::ColMove { field: fid, x0: x, x, off: x - f32::from(v.body.get().origin.x) - col_left, to: None, rename: v.col_sel == [fid] });
                 } else {
                     v.col_sel = vec![fid];
                     v.sel = None;
@@ -510,16 +548,20 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 v.sel = None;
                 cx.notify();
             })));
-    for ci in 0..cols.frozen { hdr_frozen = hdr_frozen.child(hdr_cell(ci)); }
+    // a column's place while it is dragged: empty, the rest sliding round it
+    let hole = |ci: usize| div().flex_none().w(px(cols.w[ci])).h_full().bg(Theme::fill_hover()).border_r_1().border_b_1().border_color(line()).into_any_element();
+    let placed_hdr = |ci: usize| if Some(ci) == dragged_col { hole(ci) } else { hdr_cell(ci).left(px(col_dx[ci])).into_any_element() };
+    for ci in 0..cols.frozen { hdr_frozen = hdr_frozen.child(placed_hdr(ci)); }
     let mut hdr_scroll = div().flex().h_full().ml(px(-sx));
-    for ci in cols.frozen..fields.len() { hdr_scroll = hdr_scroll.child(hdr_cell(ci)); }
+    for ci in cols.frozen..fields.len() { hdr_scroll = hdr_scroll.child(placed_hdr(ci)); }
     hdr_scroll = hdr_scroll.child(div().id("tb-add-field").flex_none().w(px(ADD_FIELD_W)).h_full().flex().items_center().justify_center()
         .cursor_pointer().hover(|s| s.bg(Theme::fill_hover())).child(icon("plus", 15., Theme::icon()))
         // a 文本 column at once, its name ready to type; its type's icon changes the type
         .on_click(cx.listener(|v, _, window, cx| v.add_text_field(window, cx))));
     // in a page the fill follows the frame's top corners
-    let header = div().flex_none().flex().h(px(header_h())).bg(hdr_bg).border_b_1().border_color(header_line()).when(inline, |d| d.rounded_t(px(frame_r())))
-        .child(hdr_frozen).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(hdr_scroll));
+    let header = div().relative().flex_none().flex().h(px(header_h())).bg(hdr_bg).border_b_1().border_color(header_line()).when(inline, |d| d.rounded_t(px(frame_r())))
+        .child(hdr_frozen).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(hdr_scroll))
+        .children(dragged_col.map(|c| ghost_col(hdr_cell(c).into_any_element(), ghost, hdr_bg)));
 
     // ---- rows in sight ----
     let first = v.tops.partition_point(|y| *y + group_h().max(row_h) <= sy).min(v.result.rows.len());
@@ -540,11 +582,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         _ => None,
     };
     let mut lifted: Vec<AnyElement> = vec![];
-    // rows slide to their places on springs (the sidebar's): the step since the last frame
-    let mut fx = v.slide.borrow_mut();
-    let now = web_time::Instant::now();
-    let dt = fx.last.replace(now).map_or(1. / 120., |l| now.duration_since(l).as_secs_f32().min(0.032));
-    let mut sliding = false;
+    // rows slide to their places on springs too (`fx`, above)
     let n_rows = v.result.rows.len();
     let near = |y: f32| y - sy > -2. * row_h && y - sy < vs.height + row_h;
     // the rows to lay out: those in sight, wherever they are going or coming from. Only these get
@@ -658,6 +696,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     let corner = sel.is_some_and(|(_, r1, _, c1)| pos == r1 && ci == c1) && !editing && v.drag.as_ref().is_none_or(|d| matches!(d, Drag::Fill(_)));
                     let filling = in_fill && sel.is_some_and(|(_, _, c0, c1)| ci >= c0 && ci <= c1);
                     let found = hits.contains(&id);
+                    // a link's cell: ⌘-click opens it (in the browser 设置 picks), as a link in a page does
+                    let link = match r.get(f.id) { Value::Text(s) if matches!(f.ty, FieldType::Url | FieldType::Email) && !s.trim().is_empty() => Some(href(f.ty, s.trim())), _ => None };
                     // text is edited in the cell grown to fit it (`edit_overlay`), the cell left blank under it
                     let content: AnyElement = if editing && f.ty.textual() { div().into_any_element() } else if editing { div().w_full().child(v.input.clone()).into_any_element() } else { cell::content(v, base, t, f, r, row_h, cx) };
                     div().id(("tb-cell", (rid as usize) << 12 | (f.id as usize & 0xfff))).relative().flex_none().w(px(cols.w[ci])).h_full().flex().items_start().px(px(cell_pad_x())).overflow_hidden()
@@ -671,7 +711,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                         .when(corner, |d| d.child(div().id(("tb-fill", rid as usize)).absolute().right(px(-1.)).bottom(px(-1.)).size(px(7.)).bg(ring()).border_1().border_color(Theme::bg_body())
                             .cursor(CursorStyle::Crosshair)
                             .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Fill(rid)); cx.notify(); }))))
+                        .when(link.is_some(), |d| { use crate::ui::TipExt; d.tip("打开链接", Some(&crate::settings::label("⌘ + 点击"))) })
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                            if ev.modifiers.platform && let Some(url) = &link { crate::editor::open_link(cx, url); return; }
                             if v.editing == Some(id) { return; }
                             v.commit_edit(true, window, cx);
                             window.focus(&v.focus, cx);
@@ -701,15 +743,17 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                         }))
                 };
                 let mut fz = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line()).child(gutter);
-                for ci in 0..cols.frozen { fz = fz.child(cell(ci)); }
+                let placed = |ci: usize| if Some(ci) == dragged_col { hole(ci) } else { cell(ci).left(px(col_dx[ci])).into_any_element() };
+                for ci in 0..cols.frozen { fz = fz.child(placed(ci)); }
                 let mut sc = div().flex().h_full().ml(px(-sx));
-                for ci in cols.frozen..fields.len() { sc = sc.child(cell(ci)); }
+                for ci in cols.frozen..fields.len() { sc = sc.child(placed(ci)); }
                 let row = div().group("tb-row").absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(top)).h(px(row_h)).flex()
                     .when_some(tint, |d, slot| d.bg(row_tint(slot)))
                     .when(checked, |d| d.bg(sel_bg()))
                     // lifted: over the rest, a card riding the pointer
                     .when(dragging, |d| d.bg(Theme::bg_body()).opacity(0.92).shadow(crate::design::shadow::popover()))
-                    .child(fz).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(sc));
+                    .child(fz).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(sc))
+                    .children(dragged_col.map(|c| ghost_col(cell(c).into_any_element(), ghost, Theme::bg_body())));
                 if dragging { lifted.push(row.into_any_element()); } else { body = body.child(row); }
             }
         }
@@ -728,15 +772,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     body = body.children(lifted);
     // settled rows let go of their springs; while any moves, another frame
     if lift.is_none() { fx.rows.retain(|_, s| s.p != s.target || s.v[0] != 0.); }
-    if !sliding && lift.is_none() { fx.last = None; }
+    if !sliding && lift.is_none() && dragged_col.is_none() { fx.last = None; }
     drop(fx);
     if sliding { window.request_animation_frame(); }
-    // gesture feedback: where a dragged column will land
-    if let Some(Drag::ColMove { to: Some(to), .. }) = &v.drag {
-        let edge = if *to >= cols.ids.len() { cols.total } else { cols.x[*to] };
-        let x = if *to <= cols.frozen { edge } else { edge - sx };
-        if *to <= cols.frozen || x >= cols.frozen_w { body = body.child(div().absolute().top_0().bottom_0().left(px(x - 1.)).w(px(2.)).bg(Theme::primary())); }
-    }
     let empty = v.result.records.is_empty() && !t.records.is_empty();
 
     let max_x = (cols.total + ADD_FIELD_W - vs.width).max(0.);
@@ -891,6 +929,30 @@ fn col_grips(v: &TableView, cols: &Cols, fields: &[&Field], cx: &Context<TableVi
             .into_any_element());
     }
     out
+}
+
+/// A link cell's address as a browser takes it: a mail address as `mailto:`, a bare host over https.
+fn href(ty: FieldType, s: &str) -> String {
+    if ty == FieldType::Email { if s.starts_with("mailto:") { s.to_string() } else { format!("mailto:{s}") } }
+    else if s.contains("://") || s.starts_with("mailto:") { s.to_string() } else { format!("https://{s}") }
+}
+
+/// `cols` with column `d` moved to place `n`, the lefts laid out again.
+fn relaid(cols: &Cols, d: usize, n: usize) -> Cols {
+    let (mut ids, mut w) = (cols.ids.clone(), cols.w.clone());
+    let (id, cw) = (ids.remove(d), w.remove(d));
+    ids.insert(n, id);
+    w.insert(n, cw);
+    let mut x = Vec::with_capacity(w.len());
+    let mut at = GUTTER_W;
+    for cw in &w { x.push(at); at += cw; }
+    let frozen_w = GUTTER_W + w[..cols.frozen].iter().sum::<f32>();
+    Cols { ids, w, x, frozen: cols.frozen, frozen_w, total: at }
+}
+
+/// A dragged column's cell (or head), over the rest at `left`: edged on both sides, a little see-through.
+fn ghost_col(cell: AnyElement, left: f32, bg: Hsla) -> AnyElement {
+    div().absolute().top_0().h_full().left(px(left)).bg(bg).opacity(0.92).border_l_1().border_color(line()).child(cell).into_any_element()
 }
 
 /// Where a row's checkbox sits in its controls (and the header's, above them).
