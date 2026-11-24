@@ -562,39 +562,19 @@ impl Workspace {
             }))
     }
 
-    /// Hover "+" on a document (新建子文档, #357): a new page under it, straight away.
-    fn child_button(&self, e: &Entry, key: &str, cx: &mut Context<Self>) -> Stateful<Div> {
-        let id = e.id.clone();
-        div()
-            .id(SharedString::from(format!("child-{key}-{}", e.id)))
-            .size(px(22.))
-            .p(px(3.))
-            .flex_none()
-            .rounded(px(6.))
-            .opacity(self.folder_drag.reveal(&e.id))
-            .hover(|s| s.bg(Theme::sidebar_selected()))
-            .child(icon("plus", 16., Theme::icon()))
-            .tip(crate::settings::tr("新建子文档", "New child page"), None)
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, _, window, cx| {
-                cx.stop_propagation();
-                w.row_menu = None;
-                w.new_child(&id, window, cx);
-            }))
-    }
-
     pub(crate) fn doc_row(&self, e: &Entry, key: &str, depth: usize, _kids: bool, cx: &mut Context<Self>) -> impl IntoElement {
         let drop_target = self.folder_drop_target(&e.id);
         // 我的文档 rows float their buttons over the row's right end instead of reserving
         // the room: at rest the name runs to the edge, and it gives way as they fade in.
         // A folder with a 正文 is that document with child pages (#357): a page's face and buttons.
+        // A document row has no "+": 新建子文档 is only in its "…" menu, so child pages stay a
+        // side feature rather than the habit for making pages.
         let note = e.note.as_deref();
         let folder = e.meta.folder.is_some() && note.is_none();
-        let child = key == "doc" && self.takes_children(&e.id);
         let lib_batch = self.batch.is_some() && key == "doc";
         let float = key == "doc" && !lib_batch && self.rename.as_ref().is_none_or(|r| r.id != e.id);
         let menu_open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && !m.batch && m.pos.x < px(0.)) || (folder && self.create_menu.as_ref().is_some_and(|(p, _)| p.as_deref() == Some(e.id.as_str())));
-        let give = if float { (if folder { 74. } else if child { 52. } else { 28. }) * if menu_open { 1. } else { self.folder_drag.reveal(&e.id) } } else { 0. };
+        let give = if float { (if folder { 74. } else { 28. }) * if menu_open { 1. } else { self.folder_drag.reveal(&e.id) } } else { 0. };
         let selected = (self.view == View::Doc && (self.current.as_deref() == Some(e.id.as_str()) || (note.is_some() && self.current.as_deref() == note))) || (self.view == View::Folder && self.folder_current.as_deref() == Some(e.id.as_str()));
         let renaming = self.rename.as_ref().filter(|r| r.id == e.id).map(|r| r.field.clone());
         let title = match renaming {
@@ -719,7 +699,6 @@ impl Workspace {
             .when(float, |d| {
                 let end = div().absolute().top_0().bottom_0().right_0().flex().items_center();
                 d.child(if folder { end.child(self.more_button(e, key, cx).mr(px(0.))).child(self.add_button(e, key, true, cx).ml(px(2.))).child(self.add_button(e, key, false, cx).ml(px(2.)).mr(px(4.))) }
-                    else if child { end.child(self.more_button(e, key, cx).mr(px(0.))).child(self.child_button(e, key, cx).ml(px(2.)).mr(px(4.))) }
                     else { end.child(self.more_button(e, key, cx)) })
             })
             .when(!renaming && key != "doc" && batch.is_none(), |d| d.child(self.more_button(e, key, cx)))
