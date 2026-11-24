@@ -16,6 +16,7 @@ pub mod merge_file;
 pub mod model;
 pub mod palette;
 pub mod paste;
+pub mod remote;
 pub mod spacing;
 pub mod store;
 pub mod sync_base;
