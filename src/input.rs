@@ -101,6 +101,8 @@ pub struct TextField {
     pub digits: bool,
     /// Tab / Shift+Tab emit events instead of reaching the parent.
     pub tab_events: bool,
+    /// Shift+Enter breaks the line in a field whose Enter submits (a table's text cell).
+    pub shift_newline: bool,
     /// Draw no caret even when focused (a field that takes keys before it
     /// looks focused, like the emoji search).
     pub hide_caret: bool,
@@ -143,6 +145,7 @@ impl TextField {
             max_len: None,
             digits: false,
             tab_events: false,
+            shift_newline: false,
             hide_caret: false,
             selecting: false,
             pointer_hidden: false,
@@ -353,6 +356,12 @@ impl TextField {
     fn shift_submit(&mut self, _: &ShiftSubmit, _: &mut Window, cx: &mut Context<Self>) {
         if self.multiline {
             return self.replace(self.sel.clone(), "\n", cx);
+        }
+        if self.shift_newline {
+            self.multiline = true;
+            self.replace(self.sel.clone(), "\n", cx);
+            self.multiline = false;
+            return;
         }
         cx.emit(TextFieldEvent::ShiftSubmit);
     }

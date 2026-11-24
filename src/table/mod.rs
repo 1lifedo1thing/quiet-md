@@ -196,8 +196,10 @@ pub(crate) enum Drag {
     ColMove { field: FieldId, x0: f32, x: f32, to: Option<usize>, rename: bool },
     /// Pressed on a header not picked, then dragged along the headers: the columns from `from` to the one under the pointer are picked.
     ColSelect { from: FieldId },
-    /// Row handles dragged: lands before the record at place `to` of the view's order.
-    RowMove { ids: Vec<RecId>, to: usize, y0: f32, y: f32, moved: bool },
+    /// Row handles dragged (as a folder's rows in the sidebar): the rows ride the pointer, `off` above it
+    /// in the list's own coordinates; a gap at place `to` of the rows left holds where they will land,
+    /// the others closing up round it as it moves.
+    RowMove { ids: Vec<RecId>, to: usize, y0: f32, y: f32, off: f32, moved: bool },
 }
 
 /// What floats over the view. One at a time, with at most one `Dropdown` on top of it.

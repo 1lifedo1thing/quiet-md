@@ -43,13 +43,13 @@ pub(crate) fn open(v: &mut TableView, rec: RecId, window: &mut Window, cx: &mut 
         v.record.input = Some(input);
     }
     v.record.menu = None;
-    // another record: its own note, when one is opened
-    if v.expanded != Some(rec) { notes::close(v, cx); }
+    // the record's fields: a note open in the panel gives way (a 笔记 cell opens its note after this)
+    notes::close(v, cx);
     v.expanded = Some(rec);
     cx.notify();
 }
 
-fn close(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
+pub(crate) fn close(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
     commit(v, true, window, cx);
     notes::close(v, cx);
     v.record.menu = None;
@@ -256,21 +256,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, r: &Rec
                     .child(div().id("tb-rec-body").flex_1().min_h_0().overflow_y_scroll().px(px(40.)).pb(px(24.)).child(list))
                     .children(menu)))).with_priority(4).into_any_element();
     }
-    // a note open in the panel takes the room under the fields, which keep to the top (and scroll there)
-    let note = notes::pane(v, rid, cx);
-    let fields_h = v.notes.fields_h.clone();
-    let body = div().id("tb-rec-body").min_h_0().overflow_y_scroll().map(|d| match (note.is_some(), v.notes.split) {
-        (false, _) => d.flex_1(),
-        (true, Some(h)) => d.flex_none().h(px(h)),
-        (true, None) => d.flex_none().max_h(relative(notes::FIELDS_SHARE)),
-    }).child(list)
-        // its height as laid out, where a drag of the line under it starts from
-        .child(canvas(move |b, _, _| fields_h.set(f32::from(b.size.height)), |_, _, _, _| {}).absolute().inset_0());
-    div().id("tb-record").relative().flex_none().w(px(notes::panel_w(v))).h_full().flex().flex_col().bg(Theme::bg_body()).border_l_1().border_color(line())
+    let panel = div().id("tb-record").relative().flex_none().w(px(notes::panel_w(v))).h_full().flex().flex_col().bg(Theme::bg_body()).border_l_1().border_color(line());
+    // a 笔记 cell's note: the note alone, under a page's head
+    if let Some(note) = notes::pane(v, rid, cx) { return panel.child(note).child(notes::grip(v, cx)).into_any_element(); }
+    panel
         .child(head)
         .child(crate::design::Separator::new())
-        .child(body)
-        .children(note)
+        .child(div().id("tb-rec-body").flex_1().min_h_0().overflow_y_scroll().child(list))
         .child(notes::grip(v, cx))
         .children(menu)
         .into_any_element()

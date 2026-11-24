@@ -65,11 +65,6 @@ pub(crate) struct NotesUi {
     /// 记录详情's width once dragged, and the drag: where it was pressed, the width then.
     pub width: Option<f32>,
     pub grip: Option<(f32, f32)>,
-    /// With a note open: the fields' height once the line between them and the note was dragged,
-    /// the drag (where it was pressed, the height then), and the height last laid out.
-    pub split: Option<f32>,
-    pub split_drag: Option<(f32, f32)>,
-    pub fields_h: Rc<std::cell::Cell<f32>>,
 }
 
 impl NotesUi {
@@ -408,38 +403,6 @@ pub(crate) fn grip(v: &TableView, cx: &Context<TableView>) -> impl IntoElement {
         })
 }
 
-/// The fields' share of the panel over a note: what was dragged, else at most this much of it.
-pub(crate) const FIELDS_SHARE: f32 = 0.3;
-
-/// The line between the record's fields and its note: dragged up or down, the note is taller or
-/// shorter; a double click puts it back.
-fn split_grip(v: &TableView, cx: &Context<TableView>) -> impl IntoElement {
-    let dragging = v.notes.split_drag.is_some();
-    div().id("tb-note-split").relative().flex_none().h(px(1.)).bg(line())
-        .child(div().absolute().left_0().right_0().top(px(-3.)).h(px(7.)).cursor(CursorStyle::ResizeUpDown).group("tb-note-split")
-            .child(div().mt(px(2.)).h(px(2.)).w_full().when(dragging, |d| d.bg(Theme::primary())).when(!dragging, |d| d.group_hover("tb-note-split", |s| s.bg(Theme::primary()))))
-            .on_mouse_down(MouseButton::Left, cx.listener(|v, ev: &MouseDownEvent, _, cx| {
-                cx.stop_propagation();
-                if ev.click_count >= 2 { v.notes.split = None; } else { v.notes.split_drag = Some((f32::from(ev.position.y), v.notes.split.unwrap_or(v.notes.fields_h.get()))); }
-                cx.notify();
-            })))
-        .when(dragging, |d| {
-            let (a, b) = (cx.weak_entity(), cx.weak_entity());
-            d.child(canvas(|_, _, _| {}, move |_, _, window, _| {
-                window.on_mouse_event(move |ev: &MouseMoveEvent, phase, window, cx| if phase == DispatchPhase::Capture {
-                    let _ = a.update(cx, |v, cx| {
-                        let Some((y0, h0)) = v.notes.split_drag else { return };
-                        // the note keeps 200 for itself, the fields one row
-                        let max = (f32::from(window.viewport_size().height) - 320.).max(80.);
-                        v.notes.split = Some((h0 + f32::from(ev.position.y) - y0).clamp(48., max));
-                        cx.notify();
-                    });
-                });
-                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| if phase == DispatchPhase::Capture { let _ = b.update(cx, |v, cx| { v.notes.split_drag = None; cx.notify(); }); });
-            }).absolute().size_0())
-        })
-}
-
 /// A 笔记 field's value in 记录详情: its note's title (the one open in the panel marked), or what to do about there being none.
 pub(crate) fn row_value(v: &TableView, cell: CellId, val: &Value) -> AnyElement {
     match val {
@@ -453,24 +416,35 @@ pub(crate) fn row_value(v: &TableView, cell: CellId, val: &Value) -> AnyElement 
     }
 }
 
-/// The open note under the record's fields: a bar (整页打开, 指向已有笔记) and the note itself.
+/// The panel a 笔记 cell opens: the note alone (the record's fields are the row it came from). Its
+/// head is a page's top bar (`Workspace::top_bar`): as high, the path in its crumbs (the table, then
+/// the note's title), its actions the same 32pt icons at the right; a page's 搜索 and 新建 have no
+/// place here, 指向已有笔记, 整页打开 and closing do.
 pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option<AnyElement> {
     let o = v.notes.open.as_ref().filter(|o| o.cell.0 == rec)?;
     let (cell, id) = (o.cell, o.id.clone());
-    let name = v.state.read(cx).doc.base.table(v.table).and_then(|t| t.field(cell.1)).map(|f| f.name.clone()).unwrap_or_default();
-    let tool = |el_id: &'static str, glyph: &'static str, tip: &str| { use crate::ui::TipExt; crate::design::Button::ghost(el_id).icon(glyph).tip(tip, None) };
-    let bar = div().flex_none().h(px(40.)).px(px(12.)).flex().items_center().gap(px(4.))
-        .child(icon("doc", 15., Theme::icon()))
-        .child(div().flex_1().min_w_0().pl(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(Theme::text_caption()).child(ui_text(name)))
-        .child(tool("tb-note-point", "link", "指向已有笔记").on_click(cx.listener(move |v, ev: &ClickEvent, window, cx| {
+    let table = v.state.read(cx).doc.base.table(v.table).map(|t| t.name.clone()).unwrap_or_default();
+    let title = crate::settings::display_title(&o.editor.read(cx).core.doc.title.text);
+    let seg = crate::ui::header_icon;
+    use crate::ui::TipExt;
+    let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., Theme::icon()));
+    let crumbs = div().h(px(20.)).min_w_0().overflow_hidden().flex().items_center().text_size(px(13.)).line_height(px(20.))
+        .child(div().id("tb-note-crumb").flex_none().max_w(px(200.)).px(px(4.)).rounded(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
+            .text_color(Theme::text_caption()).cursor_pointer().hover(|s| s.text_color(crate::theme::Theme::primary_500())).child(ui_text(table))
+            .on_click(cx.listener(|v, _, window, cx| record::close(v, window, cx))))
+        .child(sep())
+        .child(div().min_w_0().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(Theme::text()).overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(title)));
+    let actions = div().flex_none().h(px(crate::app::HEADER_ACTIONS_H)).flex().items_center().gap(px(4.))
+        .child(seg("tb-note-point", "link").tip(&label("指向已有笔记"), None).on_click(cx.listener(move |v, ev: &ClickEvent, window, cx| {
             let p = ev.position();
             open_pick(v, cell, point(p.x - px(280.), p.y + px(18.)), window, cx);
         })))
-        .child(tool("tb-note-full", "expand", "整页打开").on_click(cx.listener(move |v, _, _, cx| open_full(v, id.clone(), cx))));
-    Some(div().flex_1().min_h(px(200.)).flex().flex_col()
-        .child(split_grip(v, cx))
-        .child(bar)
-        .child(crate::design::Separator::new())
+        .child(seg("tb-note-full", "expand").tip(&label("整页打开"), None).on_click(cx.listener(move |v, _, _, cx| open_full(v, id.clone(), cx))))
+        .child(seg("tb-rec-close", "x").tip(&label("关闭"), None).on_click(cx.listener(|v, _, window, cx| record::close(v, window, cx))));
+    let head = div().id("tb-note-head").flex_none().h(px(crate::app::HEADER_H)).pl(px(18.)).pr(px(crate::ui::header_right_inset())).flex().items_center()
+        .child(crumbs).child(div().flex_1().min_w(px(16.))).child(actions);
+    Some(div().flex_1().min_h_0().flex().flex_col()
+        .child(head)
         .child(div().id("tb-note-editor").flex_1().min_h_0().overflow_hidden().child(o.editor.clone()))
         .into_any_element())
 }

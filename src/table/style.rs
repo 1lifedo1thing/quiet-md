@@ -37,8 +37,8 @@ impl Theme {
     pub fn scrollbar_thumb() -> Hsla { crate::theme::Theme::scrollbar_thumb() }
 }
 
-/// The row's controls (no numbers: sorted and filtered, a row's place says nothing): its handle,
-/// its checkbox and 展开, shown as the row is hovered, a ticked box staying.
+/// The row's start (as 飞书's 多维表格): its number in the rows shown, a checkbox in its place while the
+/// row is hovered or ticked, the handle before it and 展开 after it on hover.
 pub const GUTTER_W: f32 = 72.;
 /// Field header row (Vega's table head, h-10).
 pub fn header_h() -> f32 { geo().table_head }

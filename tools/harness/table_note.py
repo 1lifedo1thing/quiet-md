@@ -40,9 +40,9 @@ NEW_TYPE = "795 119"            # the new column's type icon: its settings
 TYPE_BOX = "953 265"
 TYPE_NOTE = "848 567"           # 笔记, the type list scrolled to its end
 NOTE_1, NOTE_2 = "861 149", "861 185"   # the 笔记 cells of rows 1 and 2
-PANEL_CLOSE = "1273 115"
-NOTE_BODY, NOTE_TITLE = "885 581", "875 518"
-NOTE_FULL = "1273 422"
+PANEL_CLOSE = "1265 124"
+NOTE_BODY, NOTE_TITLE = "885 581", "830 223"
+NOTE_FULL = "1229 124"
 UNDO = "1178 69"                # the table's own ↶ (⌘Z after a rename in the sidebar undoes the rename)
 
 OPEN = f"""click {TABLE_ROW}

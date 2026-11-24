@@ -185,8 +185,9 @@ impl TableView {
             FieldType::Rating => if let Some(n) = typed.and_then(|s| s.parse::<f64>().ok()) { let tid = self.table; self.edit(cx, |d| d.set_cells(tid, vec![(cell.0, cell.1, Value::Number(n))])); },
             _ => {
                 let text = typed.map_or(text, str::to_string);
-                // text wraps in its box over the cell (`edit_overlay`); a number stays on its line, right-aligned
-                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.wrap = ty.textual(); t.set_text(&text, cx); });
+                // text wraps in the cell, which grows down while it is edited (`edit_overlay`), ⇧⏎ breaking
+                // the line; a number stays on its line, right-aligned
+                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.wrap = ty.textual(); t.shift_newline = ty == FieldType::Text; t.set_text(&text, cx); });
                 window.focus(&self.input.focus_handle(cx), cx);
                 self.editing = Some(cell);
             }
@@ -268,7 +269,7 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
     let cols = v.cols(t, view);
     let (px_, py_) = (f32::from(ev.position.x), f32::from(ev.position.y));
     let body = v.body.get();
-    let (tops, result) = (v.tops.clone(), v.result.clone());
+    let result = v.result.clone();
     let mut drag = v.drag.take().unwrap();
     match &mut drag {
         Drag::ColWidth { x0, w0, w, .. } => *w = (*w0 + px_ - *x0).max(MIN_WIDTH),
@@ -301,13 +302,13 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
             let under = (0..cols.ids.len()).find(|i| cx_ < cols.x[*i] + cols.w[*i]).unwrap_or(cols.ids.len().saturating_sub(1));
             if let Some(a) = cols.index(*from) { v.col_sel = cols.ids[a.min(under)..=a.max(under)].to_vec(); }
         }
-        Drag::RowMove { y, to, moved, y0, .. } => {
+        Drag::RowMove { ids, y, to, moved, y0, off } => {
             *y = py_;
             if (py_ - *y0).abs() > 4. { *moved = true; }
-            let ly = py_ - f32::from(body.origin.y) + v.scroll.y;
-            let row = tops.partition_point(|t| *t + row_px(view.opts.row_height) / 2. <= ly).min(result.rows.len());
-            // rows before `row` in the list that are records → its place in the record order
-            *to = result.rows[..row].iter().filter(|r| matches!(r, query::Row::Record(_))).count();
+            // the dragged rows' first top, in rows of the list without them: the nearest place is the gap's
+            let first = py_ - f32::from(body.origin.y) + v.scroll.y - *off;
+            let rest = result.records.len() - result.records.iter().filter(|i| ids.contains(&t.records[**i].id)).count();
+            *to = ((first / row_px(view.opts.row_height)) + 0.5).floor().clamp(0., rest as f32) as usize;
         }
     }
     v.drag = Some(drag);
@@ -374,8 +375,10 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
             let target = {
                 let st = v.state.read(cx);
                 let Some(t) = st.doc.base.table(tid) else { return };
-                // the record now at that place in the view → its row in the table's own order
-                v.result.records.get(to).copied().unwrap_or(t.records.len())
+                // the record at the gap's place among the rows left → its row in the table's own order (past
+                // the last of them, just after it)
+                let rest: Vec<usize> = v.result.records.iter().copied().filter(|i| !ids.contains(&t.records[*i].id)).collect();
+                rest.get(to).copied().unwrap_or_else(|| rest.last().map_or(t.records.len(), |i| i + 1))
             };
             v.edit(cx, |d| d.move_records(tid, &ids, target));
         },
@@ -486,7 +489,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     };
     let mut hdr_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line())
         .child(div().id("tb-hdr-check").group("tb-hdr-all").relative().flex_none().w(px(GUTTER_W)).h_full().border_r_1().border_color(line()).cursor_pointer()
-            .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(18.)).flex().items_center().justify_center().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
+            .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
             .on_click(cx.listener(|v, _, _, cx| {
                 let ids: Vec<RecId> = { let st = v.state.read(cx); st.doc.base.table(v.table).map(|t| v.result.records.iter().map(|i| t.records[*i].id).collect()).unwrap_or_default() };
                 if v.rows_sel.len() == ids.len() { v.rows_sel.clear(); } else { v.rows_sel = ids.into_iter().collect(); }
@@ -510,14 +513,43 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     let mut body = div().id("tb-body").relative().flex_1().min_h_0().overflow_hidden()
         .child({ let b = v.body.clone(); canvas(move |bounds, _, _| b.set(bounds), |_, _, _, _| {}).absolute().size_full() });
     let rec_pos = |i: usize| v.order.get(&t.records[i].id).copied();
+    // rows being dragged: each left row's place counting the gap, the dragged ones over the rest at the pointer
+    let lift = match &v.drag { Some(Drag::RowMove { ids, to, y, off, moved: true, .. }) => Some((ids.clone(), *to, *y, *off)), _ => None };
+    let mut lifted: Vec<AnyElement> = vec![];
+    let (mut left_i, mut lift_i) = (0usize, 0usize);
+    let (first, last) = match &lift {
+        // every row may move by the dragged ones' height: lay them all out (counting places from the top)
+        Some((ids, ..)) => (0, (last + ids.len()).min(v.result.rows.len())),
+        None => (first, last),
+    };
+    if let Some((ids, to, ..)) = &lift {
+        let gap_top = *to as f32 * row_h - sy;
+        body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(ids.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
+    }
     for ri in first..last {
-        let top = v.tops[ri] - sy;
+        let mut top = v.tops[ri] - sy;
+        // the place it shows at, numbered so while rows are dragged
+        let mut place = None;
+        if let (Some((ids, to, y, off)), query::Row::Record(i)) = (&lift, &v.result.rows[ri]) {
+            if ids.contains(&t.records[*i].id) {
+                top = y - f32::from(v.body.get().origin.y) - off + lift_i as f32 * row_h;
+                place = Some(to + lift_i);
+                lift_i += 1;
+            } else {
+                let at = left_i + if left_i >= *to { ids.len() } else { 0 };
+                top = at as f32 * row_h - sy;
+                place = Some(at);
+                left_i += 1;
+            }
+            if top + row_h < 0. || top > vs.height { continue }
+        }
         match &v.result.rows[ri] {
             query::Row::Group(g) => body = body.child(group_row(v, t, g, top, cols.frozen_w, cx)),
             query::Row::Record(i) => {
                 let r = &t.records[*i];
                 let rid = r.id;
                 let pos = rec_pos(*i).unwrap_or(0);
+                let number = place.unwrap_or(pos) + 1;
                 let checked = v.rows_sel.contains(&rid);
                 let tint = query::row_color(base, t, r, view, today);
                 let in_fill = fill_to.zip(sel).is_some_and(|(to, (r0, r1, _, _))| (pos > r1 && pos <= to) || (pos < r0 && pos >= to));
@@ -533,25 +565,20 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             v.commit_edit(true, window, cx);
                             let ids: Vec<RecId> = if v.rows_sel.contains(&rid) { v.rows_sel.iter().copied().collect() } else { vec![rid] };
                             let y = f32::from(ev.position.y);
-                            v.drag = Some(Drag::RowMove { ids, to: 0, y0: y, y, moved: false });
+                            // the rows ride the pointer stacked in their order, this one where it was pressed
+                            let above = ids.iter().filter(|r| v.order.get(r).is_some_and(|p| *p < pos)).count() as f32;
+                            let off = y - f32::from(v.body.get().origin.y) + v.scroll.y - top - v.scroll.y + above * row_h;
+                            v.drag = Some(Drag::RowMove { ids, to: pos, y0: y, y, off, moved: false });
                         }))))
-                    .child(div().id(("tb-check", rid as usize)).absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(18.)).flex().items_center().justify_center().cursor_pointer()
+                    // its number at rest; the checkbox in its place on hover, and while ticked
+                    .when(!checked, |d| d.child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().group_hover("tb-row", |s| s.invisible())
+                        .text_size(px(12.)).text_color(Theme::text_caption()).child(format!("{number}"))))
+                    .child(div().id(("tb-check", rid as usize)).absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().cursor_pointer()
                         .when(!checked, |d| d.invisible().group_hover("tb-row", |s| s.visible())).child(checkbox(checked))
-                        .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
-                            cx.stop_propagation();
-                            v.commit_edit(true, window, cx);
-                            // ⇧: everything from the last ticked row to this one
-                            if ev.modifiers.shift && let (Some(to), Some(from)) = (v.order.get(&rid).copied(), v.rows_sel.iter().filter_map(|r| v.order.get(r).copied()).max()) {
-                                let ids: Vec<RecId> = { let st = v.state.read(cx); st.doc.base.table(v.table).map(|t| (from.min(to)..=from.max(to)).map(|p| t.records[v.result.records[p]].id).collect()).unwrap_or_default() };
-                                v.rows_sel.extend(ids);
-                            } else if !v.rows_sel.remove(&rid) { v.rows_sel.insert(rid); }
-                            v.sel = None;
-                            v.col_sel.clear();
-                            cx.notify();
-                        })))
+                        .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| { cx.stop_propagation(); v.tick_row(rid, ev.modifiers.shift, window, cx); })))
 
                     // 展开: the record, in 记录详情 (as Supabase's row ⤢; 飞书 hangs a 查看 on the title cell, over its text)
-                    .child(div().absolute().left(px(CHECK_X + 22.)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
+                    .child(div().absolute().left(px(CHECK_X + NUM_W)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
                         .child({ use crate::ui::TipExt; crate::design::Button::ghost(("tb-open", rid as usize)).icon("expand").sized(crate::design::ButtonSize::Xs).tip(&crate::settings::label("查看详情"), None) }
                             .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))));
                 let cell = |ci: usize| {
@@ -563,14 +590,14 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     let corner = sel.is_some_and(|(_, r1, _, c1)| pos == r1 && ci == c1) && !editing && v.drag.as_ref().is_none_or(|d| matches!(d, Drag::Fill(_)));
                     let filling = in_fill && sel.is_some_and(|(_, _, c0, c1)| ci >= c0 && ci <= c1);
                     let found = hits.contains(&id);
-                    // text is edited in a box laid over the cell (`edit_overlay`), the cell left blank under it
+                    // text is edited in the cell grown to fit it (`edit_overlay`), the cell left blank under it
                     let content: AnyElement = if editing && f.ty.textual() { div().into_any_element() } else if editing { div().w_full().child(v.input.clone()).into_any_element() } else { cell::content(v, base, t, f, r, row_h, cx) };
                     div().id(("tb-cell", (rid as usize) << 12 | (f.id as usize & 0xfff))).relative().flex_none().w(px(cols.w[ci])).h_full().flex().items_start().px(px(cell_pad_x())).overflow_hidden()
                         .border_b_1().border_r_1().border_color(line())
                         .when(v.col_sel.contains(&f.id), |d| d.bg(sel_bg()))
                         .when(found, |d| d.bg(if hit_now == Some(id) { found_current() } else { found_bg() }))
-                        // the range is filled except its active cell, which the ring marks inside the frame (as Excel)
-                        .when((in_sel && multi && v.sel.is_none_or(|s| s.head != id)) || filling, |d| d.bg(range_bg()))
+                        // a range is filled, all of it, and not framed (`cursor_ring`)
+                        .when((in_sel && multi) || filling, |d| d.bg(range_bg()))
                         .when(editing, |d| d.bg(Theme::bg_body()))
                         .child(div().w_full().h(px(row_h.min(one_line_h()) - 1.)).flex().items_center().when(row_h > one_line_h(), |d| d.h_full().items_start().py(px(10.))).child(content))
                         .when(corner, |d| d.child(div().id(("tb-fill", rid as usize)).absolute().right(px(-1.)).bottom(px(-1.)).size(px(7.)).bg(ring()).border_1().border_color(Theme::bg_body())
@@ -609,11 +636,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 for ci in 0..cols.frozen { fz = fz.child(cell(ci)); }
                 let mut sc = div().flex().h_full().ml(px(-sx));
                 for ci in cols.frozen..fields.len() { sc = sc.child(cell(ci)); }
-                body = body.child(div().group("tb-row").absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(top)).h(px(row_h)).flex()
+                let row = div().group("tb-row").absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(top)).h(px(row_h)).flex()
                     .when_some(tint, |d, slot| d.bg(row_tint(slot)))
                     .when(checked, |d| d.bg(sel_bg()))
-                    .when(dragging, |d| d.opacity(0.4))
-                    .child(fz).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(sc)));
+                    // lifted: over the rest, a card riding the pointer
+                    .when(dragging, |d| d.bg(Theme::bg_body()).opacity(0.92).shadow(crate::design::shadow::popover()))
+                    .child(fz).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(sc));
+                if dragging { lifted.push(row.into_any_element()); } else { body = body.child(row); }
             }
         }
     }
@@ -628,19 +657,12 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .child(div().flex_none().w(px(GUTTER_W)).flex().items_center().justify_center().child(icon("plus", 15., Theme::text_placeholder())))
             .on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx))));
     }
-    // gesture feedback: where a dragged column or row will land, a width being dragged
-    match &v.drag {
-        Some(Drag::ColMove { to: Some(to), .. }) => {
-            let edge = if *to >= cols.ids.len() { cols.total } else { cols.x[*to] };
-            let x = if *to <= cols.frozen { edge } else { edge - sx };
-            if *to <= cols.frozen || x >= cols.frozen_w { body = body.child(div().absolute().top_0().bottom_0().left(px(x - 1.)).w(px(2.)).bg(Theme::primary())); }
-        }
-        Some(Drag::RowMove { to, moved: true, .. }) => {
-            let row = v.result.records.get(*to).and_then(|i| rec_pos(*i)).and_then(|p| v.row_of.get(p)).copied().filter(|r| *r != usize::MAX);
-            let y = row.map_or(v.tops.last().copied().unwrap_or(0.), |r| v.tops[r]) - sy;
-            body = body.child(div().absolute().left_0().right_0().top(px(y - 1.)).h(px(2.)).bg(Theme::primary()));
-        }
-        _ => {}
+    body = body.children(lifted);
+    // gesture feedback: where a dragged column will land
+    if let Some(Drag::ColMove { to: Some(to), .. }) = &v.drag {
+        let edge = if *to >= cols.ids.len() { cols.total } else { cols.x[*to] };
+        let x = if *to <= cols.frozen { edge } else { edge - sx };
+        if *to <= cols.frozen || x >= cols.frozen_w { body = body.child(div().absolute().top_0().bottom_0().left(px(x - 1.)).w(px(2.)).bg(Theme::primary())); }
     }
     let empty = v.result.records.is_empty() && !t.records.is_empty();
 
@@ -690,7 +712,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .children(cursor_ring(v, &cols, row_h).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
-            .children(edit_overlay(v, &cols, &fields, row_h, vs.width, cx))
+            .children(edit_overlay(v, &cols, &fields, row_h))
             .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline)))
         .child(footer)
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
@@ -768,52 +790,42 @@ fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
     let ring_at = |x0: f32, x1: f32, y0: f32, y1: f32, w: f32| div().absolute().left(px(x0 - w - cx0)).top(px(y0 - w - cy0)).w(px(x1 - x0 + 2. * w - 1.)).h(px(y1 - y0 + 2. * w - 1.))
         .border(px(w)).border_color(ring());
     let y = |r: usize| header_h() + v.tops[r] - v.scroll.y;
-    let mut clip = div().absolute().left(px(cx0)).top(px(cy0)).right_0().bottom_0().overflow_hidden()
-        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, RING_W));
-    if r0 != r1 || c0 != c1 {
-        let (hr, hc) = (v.order.get(&s.head.0).and_then(|p| row(*p))?, cols.index(s.head.1)?);
-        clip = clip.child(ring_at(left(hc), left(hc) + cols.w[hc], y(hr), y(hr) + row_h, RING_W));
-    }
-    Some(clip.into_any_element())
+    // a range is shown by its fill alone; only a cell picked by itself is framed
+    if r0 != r1 || c0 != c1 || s.anchor != s.head { return None }
+    Some(div().absolute().left(px(cx0)).top(px(cy0)).right_0().bottom_0().overflow_hidden()
+        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, RING_W)).into_any_element())
 }
 
-/// A text cell being edited: a box over the cell, its top left on the cell's, at least the
-/// column's width (and `EDIT_MIN_W`), growing with the text to `EDIT_MAX_H`, then scrolling; under
-/// it the keys and 展开 (the record, in 记录详情). As Supabase's cell editor, where a long value in a
-/// 36pt row has room.
-fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32, view_w: f32, cx: &Context<TableView>) -> Option<AnyElement> {
+/// A text cell being edited, in place: the cell itself, its width the column's, grown down over the
+/// rows below as the text needs (to `EDIT_MAX_H`, then scrolling), and back to its row's height once
+/// saved. Framed as the active cell is.
+fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32) -> Option<AnyElement> {
     let cell = v.editing?;
     let ci = cols.index(cell.1)?;
     if !fields.get(ci).is_some_and(|f| f.ty.textual()) { return None }
     let row = *v.row_of.get(*v.order.get(&cell.0)?)?;
     if row == usize::MAX { return None }
     let scrolled = ci >= cols.frozen;
-    let w = cols.w[ci].max(EDIT_MIN_W);
-    let x = (cols.x[ci] - if scrolled { v.scroll.x } else { 0. }).min(view_w - w - 8.).max(0.);
+    let x = cols.x[ci] - if scrolled { v.scroll.x } else { 0. };
+    if scrolled && x + cols.w[ci] <= cols.frozen_w { return None }
     let y = header_h() + v.tops[row] - v.scroll.y;
-    let rid = cell.0;
-    let keys = format!("⏎ {} · Esc {}", crate::settings::label("保存"), crate::settings::label("取消"));
-    Some(div().absolute().left(px(x - 1.)).top(px(y - 1.)).w(px(w + 1.)).child(crate::design::Popover::new("tb-cell-editor").occlude().p_0().flex().flex_col()
-        .child(div().id("tb-cell-editor-text").min_h(px(row_h)).max_h(px(EDIT_MAX_H)).overflow_y_scroll().px(px(cell_pad_x())).py(px((row_h.min(one_line_h()) - 20.) / 2.)).child(v.input.clone()))
-        .child(crate::design::Separator::new())
-        .child(div().flex_none().h(px(32.)).pl(px(cell_pad_x())).pr(px(4.)).flex().items_center().justify_between()
-            .child(div().text_size(px(text_xs())).text_color(Theme::text_placeholder()).child(keys))
-            .child(crate::design::Button::ghost("tb-cell-expand").icon("expand").label(crate::settings::label("展开")).sized(crate::design::ButtonSize::Xs)
-                .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))))
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+    Some(div().id("tb-cell-editor").absolute().left(px(x - RING_W / 2.)).top(px(y - RING_W / 2.)).w(px(cols.w[ci] + RING_W)).min_h(px(row_h + RING_W)).max_h(px(EDIT_MAX_H))
+        .overflow_y_scroll().bg(Theme::bg_body()).border(px(RING_W)).border_color(ring())
+        .px(px(cell_pad_x() - RING_W)).py(px((row_h.min(one_line_h()) - 20.) / 2. - RING_W / 2.)).child(v.input.clone())
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .into_any_element())
 }
-const EDIT_MIN_W: f32 = 280.;
-const EDIT_MAX_H: f32 = 200.;
+const EDIT_MAX_H: f32 = 240.;
 
-/// The selection frame's weight: 1pt, laid on the grid lines round the cells (Supabase's 1px ring).
-const RING_W: f32 = 1.;
+/// The picked cell's frame: 2pt, laid on the grid lines round it.
+const RING_W: f32 = 2.;
 
 /// Below the header, every column edge drags its width too, down to the last row: the line it
 /// lights (`col_edge`) is the whole edge, so the whole edge takes the drag.
 fn col_grips(v: &TableView, cols: &Cols, fields: &[&Field], cx: &Context<TableView>) -> Vec<AnyElement> {
     let end = header_h() + v.tops.last().copied().unwrap_or(0.) - v.scroll.y;
-    if end <= header_h() { return vec![] }
+    // a range being dragged passes over the edges without lighting them
+    if end <= header_h() || v.drag.as_ref().is_some_and(|d| !matches!(d, Drag::ColWidth { .. })) { return vec![] }
     let mut out = vec![];
     for (ci, f) in fields.iter().enumerate() {
         let scrolled = ci >= cols.frozen;
@@ -834,12 +846,29 @@ fn col_grips(v: &TableView, cols: &Cols, fields: &[&Field], cx: &Context<TableVi
 }
 
 /// Where a row's checkbox sits in its controls (and the header's, above them).
-const CHECK_X: f32 = 22.;
+const CHECK_X: f32 = 20.;
+/// The slot its number (or checkbox) takes.
+const NUM_W: f32 = 26.;
+
+impl TableView {
+    /// A row in or out of the ticked ones; ⇧, everything from the last ticked row to this one.
+    pub(crate) fn tick_row(&mut self, rid: RecId, shift: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_edit(true, window, cx);
+        window.focus(&self.focus, cx);
+        if shift && let (Some(to), Some(from)) = (self.order.get(&rid).copied(), self.rows_sel.iter().filter_map(|r| self.order.get(r).copied()).max()) {
+            let ids: Vec<RecId> = { let st = self.state.read(cx); st.doc.base.table(self.table).map(|t| (from.min(to)..=from.max(to)).map(|p| t.records[self.result.records[p]].id).collect()).unwrap_or_default() };
+            self.rows_sel.extend(ids);
+        } else if !self.rows_sel.remove(&rid) { self.rows_sel.insert(rid); }
+        self.sel = None;
+        self.col_sel.clear();
+        cx.notify();
+    }
+}
 
 /// The column edge being dragged (or under the pointer, ready to drag): lit from the header to the last row,
 /// not past it (the add-record line and the blank under it have no columns).
 fn col_edge(v: &TableView, cols: &Cols) -> Option<AnyElement> {
-    let fid = match v.drag { Some(Drag::ColWidth { field, .. }) => field, _ => v.grip_hover? };
+    let fid = match v.drag { Some(Drag::ColWidth { field, .. }) => field, Some(_) => return None, None => v.grip_hover? };
     let ci = cols.index(fid)?;
     let scrolled = ci >= cols.frozen;
     let edge = cols.x[ci] + cols.w[ci] - if scrolled { v.scroll.x } else { 0. };
