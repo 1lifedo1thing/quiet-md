@@ -530,15 +530,15 @@ fn finished_days_are_sent_and_forgotten() {
 }
 
 /// Two top-level folders, as the app keeps them: folders `Work` and `Home` and a
-/// `roots.json` of their own (`QUIET_MD_ROOTS`, so this computer's list is untouched).
+/// `folders.json` of their own (`QUIET_MD_FOLDERS`, so this computer's list is untouched).
 fn two_folders(work: &[(&str, &str)], home: &[(&str, &str)]) -> (PathBuf, PathBuf, PathBuf) {
     let (mut dirs, file) = top_folders(&[("Work", work), ("Home", home)]);
     (dirs.remove(0), dirs.remove(0), file)
 }
 
-/// Top-level folders named and filled as given, in that order, and their `roots.json`.
+/// Top-level folders named and filled as given, in that order, and their `folders.json`.
 fn top_folders(list: &[(&str, &[(&str, &str)])]) -> (Vec<PathBuf>, PathBuf) {
-    let base = library(&[]).with_extension("roots");
+    let base = library(&[]).with_extension("folders");
     let _ = std::fs::remove_dir_all(&base);
     let mut dirs = vec![];
     for (name, docs) in list {
@@ -550,15 +550,15 @@ fn top_folders(list: &[(&str, &[(&str, &str)])]) -> (Vec<PathBuf>, PathBuf) {
         }
         dirs.push(dir);
     }
-    let list = serde_json::json!({ "v": 1, "roots": dirs.iter().enumerate().map(|(i, d)| serde_json::json!({ "key": format!("k{i}"), "path": d })).collect::<Vec<_>>() });
-    let file = base.join("roots.json");
+    let list = serde_json::json!({ "v": 1, "folders": dirs.iter().enumerate().map(|(i, d)| serde_json::json!({ "key": format!("k{i}"), "path": d })).collect::<Vec<_>>() });
+    let file = base.join("folders.json");
     std::fs::write(&file, list.to_string()).unwrap();
     (dirs, file)
 }
 
 /// `quiet` on the top-level folders in `file`, as it runs beside the app (no --library).
 fn folders_run(file: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_quiet")).env("QUIET_NO_TELEMETRY", "1").env_remove("QUIET_MD_HOME").env("QUIET_MD_ROOTS", file).args(args).output().unwrap()
+    Command::new(env!("CARGO_BIN_EXE_quiet")).env("QUIET_NO_TELEMETRY", "1").env_remove("QUIET_MD_HOME").env("QUIET_MD_FOLDERS", file).args(args).output().unwrap()
 }
 
 fn folders_ok(file: &Path, args: &[&str]) -> String {
@@ -666,7 +666,7 @@ fn a_missing_folder_is_listed_and_the_rest_work() {
     let o = folders_run(&file, &["--folder", "Work", "ls"]);
     assert!(String::from_utf8_lossy(&o.stderr).contains("error[unavailable]"));
     // No top-level folders at all.
-    std::fs::write(&file, r#"{"v":1,"roots":[]}"#).unwrap();
+    std::fs::write(&file, r#"{"v":1,"folders":[]}"#).unwrap();
     let o = folders_run(&file, &["ls"]);
     assert!(String::from_utf8_lossy(&o.stderr).contains("error[no_library]"));
 }

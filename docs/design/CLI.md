@@ -26,7 +26,7 @@
 
 ## 现状
 
-- **文档库在哪：** 和应用一样，是这台电脑上应用打开的全部顶层文件夹（主页下的文件夹，见 [workspaces.md](workspaces.md)）。CLI 用 core 的 `Workspace::entries()` 读同一份 `roots.json`（设了 `QUIET_MD_HOME` 就只有那一个文件夹，测试用 `QUIET_MD_ROOTS` 指向临时的列表），顺序也一样；不写 `roots.json`。每个顶层文件夹用 `Store::open_for_tools` 打开：文件夹不在了就标为不可用，不会新建；崩溃留下的副本留给应用恢复。
+- **文档库在哪：** 和应用一样，是这台电脑上应用打开的全部顶层文件夹（主页下的文件夹，见 [workspaces.md](workspaces.md)）。CLI 用 core 的 `Workspace::entries()` 读同一份 `folders.json`（设了 `QUIET_MD_HOME` 就只有那一个文件夹，测试用 `QUIET_MD_FOLDERS` 指向临时的列表），顺序也一样；不写 `folders.json`。每个顶层文件夹用 `Store::open_for_tools` 打开：文件夹不在了就标为不可用，不会新建；崩溃留下的副本留给应用恢复。
   - `quiet folders`：列出顶层文件夹（名字、路径、key、文档数，或打不开的原因）。
   - `--folder 名字|路径|key`：只看这一个顶层文件夹。名字按文件夹名，不分大小写；找不到报 `no_folder`，提示里列出所有顶层文件夹。`--folder` 选的是顶层文件夹，`--in FOLDER` 和 `FOLDER` 参数指其中的文件夹。
   - `--library DIR`：只操作这一个文件夹。

@@ -65,7 +65,7 @@ impl Session {
     /// Every top-level folder's 回收站 (each top-level folder keeps its own), as (top-level folder key, entry).
     fn all_trash(&mut self) -> Vec<(String, fdl_core::store::TrashEntry)> {
         let only = self.only.clone();
-        self.ws.roots.iter_mut().filter(|r| only.as_ref().is_none_or(|k| k == &r.key)).filter_map(|r| Some((r.key.clone(), r.store.as_mut()?)))
+        self.ws.folders.iter_mut().filter(|r| only.as_ref().is_none_or(|k| k == &r.key)).filter_map(|r| Some((r.key.clone(), r.store.as_mut()?)))
             .flat_map(|(k, s)| s.list_trash().into_iter().map(move |t| (k.clone(), t))).collect()
     }
 
