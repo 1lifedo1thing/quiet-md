@@ -747,7 +747,7 @@ The whiteboard (`crates/core/src/board/` and `src/board/`) ports code from the p
 | [points-on-path](https://github.com/pshihn/points-on-path) | 0.2.1 | MIT (Preet Shihn) | Path sampling in `rough/path_data.rs` |
 | [path-data-parser](https://github.com/pshihn/path-data-parser) | 0.1.0 | MIT (Preet Shihn) | SVG path parsing and normalization in `rough/path_data.rs` |
 | [perfect-freehand](https://github.com/steveruizok/perfect-freehand) | 1.2.0 | MIT (Steve Ruiz) | Stroke outlines in `freehand.rs` |
-| [fractional-indexing](https://github.com/rocicorp/fractional-indexing) (via Excalidraw's bundled copy) | — | CC0 | `fractional_index.rs` |
+| [fractional-indexing](https://github.com/rocicorp/fractional-indexing) (via Excalidraw's bundled copy) | — | CC0 | `fractional_index.rs` (also the 数据表's row order, `table/order.rs`) |
 | [nanoid](https://github.com/ai/nanoid) | — | MIT (Andrey Sitnik) | ID alphabet only, in `random.rs` |
 
 Excalidraw license notice:
