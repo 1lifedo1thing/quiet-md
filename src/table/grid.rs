@@ -185,7 +185,8 @@ impl TableView {
             FieldType::Rating => if let Some(n) = typed.and_then(|s| s.parse::<f64>().ok()) { let tid = self.table; self.edit(cx, |d| d.set_cells(tid, vec![(cell.0, cell.1, Value::Number(n))])); },
             _ => {
                 let text = typed.map_or(text, str::to_string);
-                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.set_text(&text, cx); });
+                // text wraps in its box over the cell (`edit_overlay`); a number stays on its line, right-aligned
+                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.wrap = ty.textual(); t.set_text(&text, cx); });
                 window.focus(&self.input.focus_handle(cx), cx);
                 self.editing = Some(cell);
             }
@@ -257,9 +258,9 @@ impl TableView {
 }
 
 /// Pointer moved anywhere over the view: carry on the gesture in progress.
-pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<TableView>) {
+pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<TableView>) {
     if v.drag.is_none() { return; }
-    if ev.pressed_button != Some(MouseButton::Left) { mouse_up_inner(v, cx); return; }
+    if ev.pressed_button != Some(MouseButton::Left) { mouse_up_inner(v, window, cx); return; }
     let state = v.state.clone();
     let st = state.read(cx);
     let Some(t) = st.doc.base.table(v.table) else { return };
@@ -294,6 +295,12 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, _window: &mut W
                 *to = Some(gap);
             }
         }
+        Drag::ColSelect { from } => {
+            let lx = px_ - f32::from(body.origin.x);
+            let cx_ = if lx < cols.frozen_w { lx } else { lx + v.scroll.x };
+            let under = (0..cols.ids.len()).find(|i| cx_ < cols.x[*i] + cols.w[*i]).unwrap_or(cols.ids.len().saturating_sub(1));
+            if let Some(a) = cols.index(*from) { v.col_sel = cols.ids[a.min(under)..=a.max(under)].to_vec(); }
+        }
         Drag::RowMove { y, to, moved, y0, .. } => {
             *y = py_;
             if (py_ - *y0).abs() > 4. { *moved = true; }
@@ -307,9 +314,9 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, _window: &mut W
     cx.notify();
 }
 
-pub(crate) fn mouse_up(v: &mut TableView, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<TableView>) { mouse_up_inner(v, cx); }
+pub(crate) fn mouse_up(v: &mut TableView, _: &MouseUpEvent, window: &mut Window, cx: &mut Context<TableView>) { mouse_up_inner(v, window, cx); }
 
-fn mouse_up_inner(v: &mut TableView, cx: &mut Context<TableView>) {
+fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
     let Some(drag) = v.drag.take() else { return };
     let tid = v.table;
     match drag {
@@ -355,12 +362,14 @@ fn mouse_up_inner(v: &mut TableView, cx: &mut Context<TableView>) {
             };
             v.edit_view(cx, |view| view.opts.order = order);
         }
-        Drag::ColMove { field, .. } => {
-            // a click, not a drag: select the column
+        Drag::ColMove { field, rename, .. } => {
+            // a click, not a drag: the column alone picked; a second click on it edits its name
+            if rename { v.begin_rename(Rename::Field(field), window, cx); return; }
             v.col_sel = vec![field];
             v.sel = None;
             v.rows_sel.clear();
         }
+        Drag::ColSelect { .. } => {}
         Drag::RowMove { ids, to, moved, .. } => if moved {
             let target = {
                 let st = v.state.read(cx);
@@ -401,9 +410,22 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         div().id(("tb-hdr", fid)).group("tb-hdr").relative().flex_none().w(px(w)).h_full().flex().items_center().gap(px(4.)).px(px(cell_pad_x()))
             .border_r_1().border_color(line())
             .when(on, |d| d.bg(sel_header()))
-            .child(icon(field_glyph(f.ty), 16., Theme::text_placeholder()))
-            // shadcn's table head: `foreground` names by a `muted-foreground` glyph
-            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(header_text()).child(ui_text(f.name.clone())))
+            // the type's icon is a button: the field's settings (its type, options, format)
+            .child(div().id(("tb-hdr-type", fid)).flex_none().size(px(22.)).ml(px(-3.)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center().cursor_pointer()
+                .hover(|s| s.bg(Theme::fill_hover_strong())).child(icon(field_glyph(f.ty), 16., Theme::text_placeholder()))
+                .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    window.focus(&v.focus, cx);
+                    v.col_sel = vec![fid];
+                    v.sel = None;
+                    menus::edit_field(v, fid, point(ev.position.x - px(12.), ev.position.y + px(16.)), window, cx);
+                })))
+            // shadcn's table head: `foreground` names by a `muted-foreground` glyph; renaming, the name's box in its place
+            .child(if matches!(v.rename, Some(Rename::Field(r)) if r == fid) {
+                div().flex_1().min_w_0().child(menus::rename_box(v, cx).w_full()).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).into_any_element()
+            } else {
+                div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(header_text()).child(ui_text(f.name.clone())).into_any_element()
+            })
             .when_some(sorted, |d, desc| d.child(icon(if desc { "caret-down" } else { "caret-up" }, 12., Theme::primary())))
             .child(div().id(("tb-hdr-menu", fid)).flex_none().flex().items_center().justify_center().size(px(18.)).rounded(px(4.)).cursor_pointer()
                 .hover(|s| s.bg(Theme::fill_hover_strong())).when(!on, |d| d.invisible().group_hover("tb-hdr", |s| s.visible()))
@@ -418,7 +440,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                 v.commit_edit(true, window, cx);
                 window.focus(&v.focus, cx);
-                if ev.click_count >= 2 { menus::edit_field(v, fid, ev.position, window, cx); return; }
+                // a double click edits the name in place (the type's icon opens the field's settings)
+                if ev.click_count >= 2 { v.drag = None; v.col_sel = vec![fid]; v.begin_rename(Rename::Field(fid), window, cx); return; }
                 // ⇧: every column from the last picked one to this; ⌘: this one in or out
                 if ev.modifiers.shift || ev.modifiers.platform {
                     v.sel = None;
@@ -433,8 +456,16 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     cx.notify();
                     return;
                 }
+                // a picked header drags its column along; another starts picking columns, as cells are picked
                 let x = f32::from(ev.position.x);
-                v.drag = Some(Drag::ColMove { field: fid, x0: x, x, to: None });
+                if v.col_sel.contains(&fid) {
+                    v.drag = Some(Drag::ColMove { field: fid, x0: x, x, to: None, rename: v.col_sel == [fid] });
+                } else {
+                    v.col_sel = vec![fid];
+                    v.sel = None;
+                    v.rows_sel.clear();
+                    v.drag = Some(Drag::ColSelect { from: fid });
+                }
                 cx.notify();
             }))
             .on_mouse_down(MouseButton::Right, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
@@ -454,8 +485,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 })))
     };
     let mut hdr_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line())
-        .child(div().id("tb-hdr-check").group("tb-hdr-all").flex_none().w(px(GUTTER_W)).h_full().flex().items_center().justify_center().border_r_1().border_color(line()).cursor_pointer()
-            .child(div().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
+        .child(div().id("tb-hdr-check").group("tb-hdr-all").relative().flex_none().w(px(GUTTER_W)).h_full().border_r_1().border_color(line()).cursor_pointer()
+            .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(18.)).flex().items_center().justify_center().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
             .on_click(cx.listener(|v, _, _, cx| {
                 let ids: Vec<RecId> = { let st = v.state.read(cx); st.doc.base.table(v.table).map(|t| v.result.records.iter().map(|i| t.records[*i].id).collect()).unwrap_or_default() };
                 if v.rows_sel.len() == ids.len() { v.rows_sel.clear(); } else { v.rows_sel = ids.into_iter().collect(); }
@@ -467,9 +498,10 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     for ci in cols.frozen..fields.len() { hdr_scroll = hdr_scroll.child(hdr_cell(ci)); }
     hdr_scroll = hdr_scroll.child(div().id("tb-add-field").flex_none().w(px(ADD_FIELD_W)).h_full().flex().items_center().justify_center()
         .cursor_pointer().hover(|s| s.bg(Theme::fill_hover())).child(icon("plus", 15., Theme::icon()))
-        .on_click(cx.listener(|v, ev: &ClickEvent, window, cx| { let p = ev.position(); menus::add_field(v, None, point(p.x - px(160.), p.y + px(16.)), window, cx); })));
+        // a 文本 column at once, its name ready to type; its type's icon changes the type
+        .on_click(cx.listener(|v, _, window, cx| v.add_text_field(window, cx))));
     // in a page the fill follows the frame's top corners
-    let header = div().flex_none().flex().h(px(header_h())).bg(hdr_bg).border_b_1().border_color(line()).when(inline, |d| d.rounded_t(px(frame_r())))
+    let header = div().flex_none().flex().h(px(header_h())).bg(hdr_bg).border_b_1().border_color(header_line()).when(inline, |d| d.rounded_t(px(frame_r())))
         .child(hdr_frozen).child(div().flex_1().min_w_0().h_full().overflow_hidden().child(hdr_scroll));
 
     // ---- rows in sight ----
@@ -493,8 +525,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 let gutter = div().id(("tb-gutter", rid as usize)).relative().flex_none().w(px(GUTTER_W)).h_full().flex().items_center().justify_center()
                     .border_r_1().border_b_1().border_color(line())
                     .when(checked, |d| d.bg(sel_bg()))
-                    .child(div().when(checked, |d| d.invisible()).group_hover("tb-row", |s| s.invisible()).text_size(px(12.)).text_color(Theme::text_placeholder()).child(format!("{}", pos + 1)))
-                    .when(manual, |d| d.child(div().id(("tb-grab", rid as usize)).absolute().left(px(2.)).top_0().bottom_0().w(px(16.)).flex().items_center().justify_center()
+                    .when(manual, |d| d.child(div().id(("tb-grab", rid as usize)).absolute().left(px(4.)).top_0().bottom_0().w(px(16.)).flex().items_center().justify_center()
                         .invisible().group_hover("tb-row", |s| s.visible()).cursor(CursorStyle::OpenHand)
                         .child(icon("grip-vertical", 14., Theme::text_placeholder()))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
@@ -504,7 +535,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             let y = f32::from(ev.position.y);
                             v.drag = Some(Drag::RowMove { ids, to: 0, y0: y, y, moved: false });
                         }))))
-                    .child(div().id(("tb-check", rid as usize)).absolute().left(px(20.)).top_0().bottom_0().w(px(18.)).flex().items_center().justify_center().cursor_pointer()
+                    .child(div().id(("tb-check", rid as usize)).absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(18.)).flex().items_center().justify_center().cursor_pointer()
                         .when(!checked, |d| d.invisible().group_hover("tb-row", |s| s.visible())).child(checkbox(checked))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                             cx.stop_propagation();
@@ -518,7 +549,11 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             v.col_sel.clear();
                             cx.notify();
                         })))
-;
+
+                    // 展开: the record, in 记录详情 (as Supabase's row ⤢; 飞书 hangs a 查看 on the title cell, over its text)
+                    .child(div().absolute().left(px(CHECK_X + 22.)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
+                        .child({ use crate::ui::TipExt; crate::design::Button::ghost(("tb-open", rid as usize)).icon("expand").sized(crate::design::ButtonSize::Xs).tip(&crate::settings::label("查看详情"), None) }
+                            .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))));
                 let cell = |ci: usize| {
                     let f = fields[ci];
                     let id: CellId = (rid, f.id);
@@ -528,7 +563,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     let corner = sel.is_some_and(|(_, r1, _, c1)| pos == r1 && ci == c1) && !editing && v.drag.as_ref().is_none_or(|d| matches!(d, Drag::Fill(_)));
                     let filling = in_fill && sel.is_some_and(|(_, _, c0, c1)| ci >= c0 && ci <= c1);
                     let found = hits.contains(&id);
-                    let content: AnyElement = if editing { div().w_full().child(v.input.clone()).into_any_element() } else { cell::content(v, base, t, f, r, row_h, cx) };
+                    // text is edited in a box laid over the cell (`edit_overlay`), the cell left blank under it
+                    let content: AnyElement = if editing && f.ty.textual() { div().into_any_element() } else if editing { div().w_full().child(v.input.clone()).into_any_element() } else { cell::content(v, base, t, f, r, row_h, cx) };
                     div().id(("tb-cell", (rid as usize) << 12 | (f.id as usize & 0xfff))).relative().flex_none().w(px(cols.w[ci])).h_full().flex().items_start().px(px(cell_pad_x())).overflow_hidden()
                         .border_b_1().border_r_1().border_color(line())
                         .when(v.col_sel.contains(&f.id), |d| d.bg(sel_bg()))
@@ -537,11 +573,6 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                         .when((in_sel && multi && v.sel.is_none_or(|s| s.head != id)) || filling, |d| d.bg(range_bg()))
                         .when(editing, |d| d.bg(Theme::bg_body()))
                         .child(div().w_full().h(px(row_h.min(one_line_h()) - 1.)).flex().items_center().when(row_h > one_line_h(), |d| d.h_full().items_start().py(px(10.))).child(content))
-                        // the title cell offers 查看 (the record) while the row is hovered, as 飞书
-                        .when(ci == 0 && !editing, |d| d.child(div().absolute().right(px(6.)).top_0().h(px(row_h.min(one_line_h()))).flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
-                            .child(div().id(("tb-open", rid as usize)).h(px(22.)).px(px(6.)).flex().items_center().gap(px(4.)).rounded(px(crate::design::geo().tool_r)).border_1().border_color(Theme::line_border()).bg(Theme::bg_body()).shadow(crate::design::shadow::xs()).cursor_pointer()
-                                .hover(|s| s.bg(Theme::fill_hover())).child(icon("expand", 12., Theme::icon())).child(div().text_size(px(12.)).text_color(Theme::text()).child(crate::settings::label("查看")))
-                                .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); })))))
                         .when(corner, |d| d.child(div().id(("tb-fill", rid as usize)).absolute().right(px(-1.)).bottom(px(-1.)).size(px(7.)).bg(ring()).border_1().border_color(Theme::bg_body())
                             .cursor(CursorStyle::Crosshair)
                             .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Fill(rid)); cx.notify(); }))))
@@ -654,9 +685,12 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         .child(div().relative().flex_1().min_h_0().flex().flex_col().when(inline, |d| d.rounded(px(frame_r())).bg(Theme::bg_body()).shadow(crate::design::shadow::frame()))
             .child(header)
             .child(body.when(empty, |d| d.child(div().absolute().left_0().right_0().top(px(48.)).flex().justify_center().text_color(Theme::text_placeholder()).child(crate::settings::label("没有符合筛选条件的记录")))))
-            .children(cursor_ring(v, &cols, row_h))
+            // the frame only while the grid has the keys (or a cell, menu or list of its own is open):
+            // with the record panel, a note or another pane in front, no cell is about to take them
+            .children(cursor_ring(v, &cols, row_h).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
+            .children(edit_overlay(v, &cols, &fields, row_h, f32::from(vs.width), cx))
             .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline)))
         .child(footer)
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
@@ -735,13 +769,45 @@ fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
         .border(px(w)).border_color(ring());
     let y = |r: usize| header_h() + v.tops[r] - v.scroll.y;
     let mut clip = div().absolute().left(px(cx0)).top(px(cy0)).right_0().bottom_0().overflow_hidden()
-        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, 2.));
+        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, RING_W));
     if r0 != r1 || c0 != c1 {
         let (hr, hc) = (v.order.get(&s.head.0).and_then(|p| row(*p))?, cols.index(s.head.1)?);
-        clip = clip.child(ring_at(left(hc), left(hc) + cols.w[hc], y(hr), y(hr) + row_h, 2.));
+        clip = clip.child(ring_at(left(hc), left(hc) + cols.w[hc], y(hr), y(hr) + row_h, RING_W));
     }
     Some(clip.into_any_element())
 }
+
+/// A text cell being edited: a box over the cell, its top left on the cell's, at least the
+/// column's width (and `EDIT_MIN_W`), growing with the text to `EDIT_MAX_H`, then scrolling; under
+/// it the keys and 展开 (the record, in 记录详情). As Supabase's cell editor, where a long value in a
+/// 36pt row has room.
+fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32, view_w: f32, cx: &Context<TableView>) -> Option<AnyElement> {
+    let cell = v.editing?;
+    let ci = cols.index(cell.1)?;
+    if !fields.get(ci).is_some_and(|f| f.ty.textual()) { return None }
+    let row = *v.row_of.get(*v.order.get(&cell.0)?)?;
+    if row == usize::MAX { return None }
+    let scrolled = ci >= cols.frozen;
+    let w = cols.w[ci].max(EDIT_MIN_W);
+    let x = (cols.x[ci] - if scrolled { v.scroll.x } else { 0. }).min(view_w - w - 8.).max(0.);
+    let y = header_h() + v.tops[row] - v.scroll.y;
+    let rid = cell.0;
+    let keys = format!("⏎ {} · Esc {}", crate::settings::label("保存"), crate::settings::label("取消"));
+    Some(div().absolute().left(px(x - 1.)).top(px(y - 1.)).w(px(w + 1.)).child(crate::design::Popover::new("tb-cell-editor").occlude().p_0().flex().flex_col()
+        .child(div().id("tb-cell-editor-text").min_h(px(row_h)).max_h(px(EDIT_MAX_H)).overflow_y_scroll().px(px(cell_pad_x())).py(px((row_h.min(one_line_h()) - 20.) / 2.)).child(v.input.clone()))
+        .child(crate::design::Separator::new())
+        .child(div().flex_none().h(px(32.)).pl(px(cell_pad_x())).pr(px(4.)).flex().items_center().justify_between()
+            .child(div().text_size(px(text_xs())).text_color(Theme::text_placeholder()).child(keys))
+            .child(crate::design::Button::ghost("tb-cell-expand").icon("expand").label(crate::settings::label("展开")).sized(crate::design::ButtonSize::Xs)
+                .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+        .into_any_element())
+}
+const EDIT_MIN_W: f32 = 280.;
+const EDIT_MAX_H: f32 = 200.;
+
+/// The selection frame's weight: 1pt, laid on the grid lines round the cells (Supabase's 1px ring).
+const RING_W: f32 = 1.;
 
 /// Below the header, every column edge drags its width too, down to the last row: the line it
 /// lights (`col_edge`) is the whole edge, so the whole edge takes the drag.
@@ -766,6 +832,9 @@ fn col_grips(v: &TableView, cols: &Cols, fields: &[&Field], cx: &Context<TableVi
     }
     out
 }
+
+/// Where a row's checkbox sits in its controls (and the header's, above them).
+const CHECK_X: f32 = 22.;
 
 /// The column edge being dragged (or under the pointer, ready to drag): lit from the header to the last row,
 /// not past it (the add-record line and the blank under it have no columns).

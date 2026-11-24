@@ -35,10 +35,11 @@ db.close()
 
 # where things are in a 1300×850 window (light theme, Chinese)
 TABLE_ROW = "62 135"            # 书单 in the sidebar: the first row, its notes under it once it has some
-ADD_FIELD = "820 111"
-TYPE_BOX = "830 257"
-TYPE_NOTE = "725 559"           # 笔记, the type list scrolled to its end
-NOTE_1, NOTE_2 = "837 149", "837 185"   # the 笔记 cells of rows 1 and 2
+ADD_FIELD = "844 111"            # 「+」: a 文本 column at once, its name ready to type
+NEW_TYPE = "795 119"            # the new column's type icon: its settings
+TYPE_BOX = "953 265"
+TYPE_NOTE = "848 567"           # 笔记, the type list scrolled to its end
+NOTE_1, NOTE_2 = "861 149", "861 185"   # the 笔记 cells of rows 1 and 2
 PANEL_CLOSE = "1273 115"
 NOTE_BODY, NOTE_TITLE = "885 581", "875 518"
 NOTE_FULL = "1273 422"
@@ -50,12 +51,16 @@ wait 1200
 ADD_COLUMN = f"""click {ADD_FIELD}
 wait 500
 type 读书笔记
+key enter
+wait 300
+click {NEW_TYPE}
+wait 500
 click {TYPE_BOX}
 wait 300
-move 830 420
-wheel 830 420 600
+move 953 420
+wheel 953 420 600
 wait 100
-wheel 830 420 600
+wheel 953 420 600
 wait 300
 shot types
 click {TYPE_NOTE}
@@ -148,7 +153,7 @@ wait 200
 rclick {NOTE_1}
 wait 400
 shot cell-menu
-click 900 401
+click 924 401
 wait 500
 shot ask
 click 797 464
@@ -167,10 +172,10 @@ more = run("point", OPEN + ADD_COLUMN + WRITE + f"""click {NOTE_2}
 wait 200
 rclick {NOTE_2}
 wait 400
-click 913 305
+click 937 305
 wait 500
 shot pick
-click 905 306
+click 929 306
 wait 500
 move 1200 800
 shot pointed

@@ -190,9 +190,12 @@ pub(crate) enum Drag {
     Select,
     /// The fill handle: from the selection to this record's row.
     Fill(RecId),
-    /// A header pressed, then (past a few pixels) dragged: `to` is the gap
-    /// it would drop into, as a column index. Released unmoved, it was a click.
-    ColMove { field: FieldId, x0: f32, x: f32, to: Option<usize> },
+    /// A picked header pressed, then (past a few pixels) dragged: `to` is the gap
+    /// it would drop into, as a column index. Released unmoved, it was a click: on the one picked
+    /// header (`rename`), its name is edited.
+    ColMove { field: FieldId, x0: f32, x: f32, to: Option<usize>, rename: bool },
+    /// Pressed on a header not picked, then dragged along the headers: the columns from `from` to the one under the pointer are picked.
+    ColSelect { from: FieldId },
     /// Row handles dragged: lands before the record at place `to` of the view's order.
     RowMove { ids: Vec<RecId>, to: usize, y0: f32, y: f32, moved: bool },
 }
@@ -238,7 +241,7 @@ impl DropItem {
 }
 
 /// Renaming in place: a view tab, a table tab.
-pub(crate) enum Rename { Table(TableId) }
+pub(crate) enum Rename { Table(TableId), Field(FieldId) }
 
 pub struct TableView {
     pub state: Entity<BaseState>,
@@ -524,10 +527,33 @@ impl TableView {
         if save && !name.is_empty() {
             match r {
                 Rename::Table(t) => { self.edit(cx, |d| d.rename_table(t, &name)); }
+                Rename::Field(f) => {
+                    let tid = self.table;
+                    let field = self.state.read(cx).doc.base.table(tid).and_then(|t| t.field(f)).cloned();
+                    if let Some(mut field) = field.filter(|x| x.name != name) { field.name = name; self.edit(cx, |d| d.change_field(tid, field)); }
+                }
             }
             cx.emit(TableEvent::Shown);
         }
         cx.notify();
+    }
+
+    /// 「+」 in the header: a 文本 column at the end, picked, its name in its box to type over;
+    /// scrolled into sight.
+    pub(crate) fn add_text_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_edit(true, window, cx);
+        let tid = self.table;
+        let Some(fid) = self.edit(cx, |d| d.add_field(tid, None, "", FieldType::Text, field::default_opts(FieldType::Text))) else { return };
+        self.col_sel = vec![fid];
+        self.sel = None;
+        self.rows_sel.clear();
+        self.scroll.x = f32::MAX;
+        let state = self.state.clone();
+        if let Some(t) = state.read(cx).doc.base.table(tid) && let Some(view) = t.view(self.view) {
+            let cols = self.cols(t, view);
+            self.clamp_scroll(&cols, row_px(view.opts.row_height));
+        }
+        self.begin_rename(Rename::Field(fid), window, cx);
     }
 
     pub(crate) fn begin_rename(&mut self, r: Rename, window: &mut Window, cx: &mut Context<Self>) {
@@ -535,6 +561,7 @@ impl TableView {
             let base = &self.state.read(cx).doc.base;
             match r {
                 Rename::Table(t) => base.table(t).map(|t| t.name.clone()),
+                Rename::Field(f) => base.table(self.table).and_then(|t| t.field(f)).map(|f| f.name.clone()),
             }
         };
         let Some(name) = name else { return };

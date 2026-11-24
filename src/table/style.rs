@@ -37,8 +37,9 @@ impl Theme {
     pub fn scrollbar_thumb() -> Hsla { crate::theme::Theme::scrollbar_thumb() }
 }
 
-/// Row-number / checkbox column.
-pub const GUTTER_W: f32 = 48.;
+/// The row's controls (no numbers: sorted and filtered, a row's place says nothing): its handle,
+/// its checkbox and 展开, shown as the row is hovered, a ticked box staying.
+pub const GUTTER_W: f32 = 72.;
 /// Field header row (Vega's table head, h-10).
 pub fn header_h() -> f32 { geo().table_head }
 /// A row's height: the view's choice, the two short ones Vega's (36 / 44).
@@ -73,8 +74,11 @@ pub fn text_xs() -> f32 { geo().text_xs }
 
 /// Grid lines (`border`).
 pub fn line() -> Hsla { color::border() }
-/// The header row's fill: none (shadcn's table head sits on the page).
-pub fn header_bg() -> Hsla { gpui::transparent_black() }
+/// The header row's fill: a step off the page (neutral-50; white at 3% in the dark), so the
+/// names read as a header and not as a first row (as Supabase's grid head).
+pub fn header_bg() -> Hsla { if crate::theme::dark() { crate::design::alpha(rgb(crate::design::neutral::N0).into(), 0.03) } else { rgb(crate::design::neutral::N50).into() } }
+/// The line under the header: a step darker than the grid's (neutral-300; white at 16%).
+pub fn header_line() -> Hsla { if crate::theme::dark() { crate::design::alpha(rgb(crate::design::neutral::N0).into(), 0.16) } else { rgb(crate::design::neutral::N300).into() } }
 /// A field's name in the header: `foreground`.
 pub fn header_text() -> Hsla { color::foreground() }
 /// A table in a page: its frame's corners (Vega's card, rounded-xl).
@@ -85,8 +89,9 @@ pub fn frozen_line() -> Hsla { color::border() }
 pub fn sel_bg() -> Hsla { color::muted() }
 /// A picked column's header.
 pub fn sel_header() -> Hsla { color::muted() }
-/// The selection's frame (`ring`).
-pub fn ring() -> Hsla { color::ring() }
+/// The selection's frame: `primary`, at 1pt (`grid::RING_W`); shadcn's `ring` grey reads as
+/// nothing picked at that weight.
+pub fn ring() -> Hsla { color::primary() }
 /// A range selection's fill over the cells.
 pub fn range_bg() -> Hsla { color::muted() }
 pub fn star() -> Hsla { crate::theme::c(crate::theme::craft::O350) }

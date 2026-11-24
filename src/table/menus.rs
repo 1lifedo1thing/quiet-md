@@ -86,7 +86,7 @@ pub(crate) fn inline_header(v: &TableView, t: &Table, view: &View, cx: &Context<
 }
 
 /// The rename box: the name, all of it selected, in `rename_frame`.
-fn rename_box(v: &TableView, cx: &Context<TableView>) -> Div {
+pub(crate) fn rename_box(v: &TableView, cx: &Context<TableView>) -> Div {
     rename_frame(div().flex_none().w(px(160.)).h(px(28.)).px(px(8.)), cx).child(div().flex_1().child(v.aux.clone()))
 }
 
