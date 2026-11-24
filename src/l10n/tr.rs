@@ -790,6 +790,7 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("更新信息无法识别", "Güncelleme bilgileri tanınamadı"),
     ("更新信息无效", "Geçersiz güncelleme bilgileri"),
     ("更新包校验失败", "Güncelleme paketi doğrulaması başarısız oldu"),
+    ("下载到的安装包和预期不一致，可能是网络缓存造成的。可以到官网下载最新版直接安装。", "İndirilen yükleme paketi beklenenle eşleşmiyor; bunun nedeni bir ağ önbelleği olabilir. En son sürümü web sitesinden indirip doğrudan yükleyebilirsiniz."),
     ("无法连接更新服务器", "Güncelleme sunucusuna ulaşılamıyor"),
     ("找不到正在运行的应用", "Çalışan uygulama bulunamadı"),
     ("请先把 Quiet.md 移到「应用程序」文件夹，再更新", "Güncellemeden önce Quiet.md'yi Uygulamalar klasörüne taşıyın"),

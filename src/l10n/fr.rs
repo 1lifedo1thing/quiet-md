@@ -803,6 +803,7 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("更新信息无法识别", "Informations de mise à jour non reconnues"),
     ("更新信息无效", "Informations de mise à jour non valides"),
     ("更新包校验失败", "La vérification du paquet de mise à jour a échoué"),
+    ("下载到的安装包和预期不一致，可能是网络缓存造成的。可以到官网下载最新版直接安装。", "Le paquet téléchargé ne correspond pas à ce qui était attendu, peut-être à cause d’un cache réseau. Vous pouvez télécharger la dernière version depuis le site et l’installer directement."),
     ("无法连接更新服务器", "Impossible de joindre le serveur de mise à jour"),
     ("找不到正在运行的应用", "Impossible de trouver l’app en cours d’exécution"),
     ("请先把 Quiet.md 移到「应用程序」文件夹，再更新", "Placez d’abord Quiet.md dans le dossier Applications, puis mettez à jour"),
