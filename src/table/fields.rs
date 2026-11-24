@@ -291,7 +291,8 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
         for g in [FieldGroup::General, FieldGroup::Business, FieldGroup::Advanced] {
             list = list.child(menu_title(label(g.label())));
             // a file is one table: 关联 and 查找引用 (which reach into another) are not offered, only kept where a file has them
-            let other_table = |ty: FieldType| matches!(ty, FieldType::Link | FieldType::Lookup) && ty != f.ty;
+            // (笔记 isn't offered until its cells open their notes)
+            let other_table = |ty: FieldType| matches!(ty, FieldType::Link | FieldType::Lookup | FieldType::Note) && ty != f.ty;
             for (i, ty) in FieldType::ALL.iter().copied().enumerate().filter(|(_, ty)| ty.group() == g && !other_table(*ty)) {
                 let ok = !f.primary || title_ok(ty);
                 list = list.child(menu_row(("tb-ff-ty", i))
@@ -393,7 +394,7 @@ fn settings(f: &FieldForm, base: &Base, t: &Table, problem: &Option<String>, cx:
     let default = || block("默认值", text_input(&f.default));
     match f.ty {
         Text | Phone | Email | Url | Location | Barcode => vec![default()],
-        Attachment | Checkbox => vec![],
+        Attachment | Checkbox | Note => vec![],
         SingleSelect | MultiSelect | Person => vec![options(f, cx)],
         Number => vec![number_format("数字格式", o, cx), default()],
         Currency => {

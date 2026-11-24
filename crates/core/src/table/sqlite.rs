@@ -25,7 +25,7 @@ const README: &str = "\
 Quiet.md 数据表。每张数据表就是一张同名的 SQL 表，列名就是字段名，值就是界面上看到的内容。
 - 每张表开头的七列：`id` 是记录的编号（主键），一个随机整数（小于 2^53）；`_order` 是手动排序的排序键，按字符串比较从小到大就是行的顺序（相同时按 id）；`_created_at`、`_updated_at` 是这条记录的创建、最后修改时间，UTC 的 ISO 8601，如 2027-01-15T00:02:03.123Z（也认 2027-01-15 08:02:03+08:00 这样带时区的写法，不带时区按 UTC）；`_created_by`、`_updated_by` 是谁建的、谁最后改的（`user` 是在 Quiet.md 里改的，`agent:名字` 是 Agent 写的），空表示不知道；`_auto` 是自动编号。
 - 表、字段、视图、选项的 id 也是随机整数，整个文件里不重复；新加的行不填 id 和 `_order` 也行，Quiet.md 读到时补上，排在最后；时间不填就按现在算，`_auto` 不填就发新号。
-- 单选存选项名；多选、人员存选项名的 JSON 数组；关联存对方表记录 id 的 JSON 数组；附件存 {path, name} 的 JSON 数组；日期是 2026-11-17 或 2026-11-17 09:30；复选框是 1 / 0；空格子是 NULL。
+- 单选存选项名；多选、人员存选项名的 JSON 数组；关联存对方表记录 id 的 JSON 数组；附件存 {path, name} 的 JSON 数组；笔记存那篇笔记相对这个文件所在文件夹的路径（如 `三体.xml`、`../别处/笔记.xml`）；日期是 2026-11-17 或 2026-11-17 09:30；复选框是 1 / 0；空格子是 NULL。
 - `_fields` 里 type 为 formula、lookup、auto_number、created_time、modified_time 的列是算出来的，直接改会被覆盖。
 - 别的列可以直接改，也可以加行、删行、加列、加表：Quiet.md 下次读取时照单全收，没见过的选项名会加进选项。
 - 选项的颜色、数字和日期的显示格式、公式、是否唯一键（`unique`，只是标记，不阻止重复）在 `_fields.options`；视图（筛选、排序、分组、列宽等）在 `_views.config`；表的顺序在 `_tables`。
@@ -33,7 +33,7 @@ Quiet.md 数据表。每张数据表就是一张同名的 SQL 表，列名就是
 A Quiet.md data table file. Every data table is a SQL table of the same name; its columns are the fields and its values are what the app shows.
 - Seven leading columns: `id` is the record's id (primary key), a random integer below 2^53; `_order` is its sort key in manual order: the rows sorted by it as strings are in order (equal keys by id); `_created_at` and `_updated_at` are when the record was made and last changed, UTC ISO 8601 such as 2027-01-15T00:02:03.123Z (2027-01-15 08:02:03+08:00, with an offset, reads too; no zone means UTC); `_created_by` and `_updated_by` say who made it and who changed it last (`user`: in Quiet.md; `agent:<name>`: an agent), empty when not known; `_auto` is its auto number.
 - Table, field, view and option ids are random integers too, each used once in the file. A row added without an id or `_order` is fine: Quiet.md fills them in when it reads it, and puts the row last; with no times it is taken as made now, with no `_auto` it gets a new number.
-- A single select holds the option's name; multi selects and people hold a JSON array of names; links hold a JSON array of the other table's record ids; attachments hold a JSON array of {path, name}; dates read 2026-11-17 or 2026-11-17 09:30; checkboxes are 1 / 0; an empty cell is NULL.
+- A single select holds the option's name; multi selects and people hold a JSON array of names; links hold a JSON array of the other table's record ids; attachments hold a JSON array of {path, name}; a note holds the path of its note relative to the folder this file is in (`三体.xml`, `../elsewhere/note.xml`); dates read 2026-11-17 or 2026-11-17 09:30; checkboxes are 1 / 0; an empty cell is NULL.
 - Columns whose `_fields.type` is formula, lookup, auto_number, created_time or modified_time are computed: edits to them are overwritten.
 - Every other column can be edited directly, and rows, columns and tables added or removed: Quiet.md takes it all in the next time it reads the file, adding option names it has not seen.
 - Option colours, number and date formats, formulas and whether a field is a unique key (`unique`: a mark, duplicates are not refused) are in `_fields.options`; views (filter, sort, group, widths…) in `_views.config`; the order of tables in `_tables`.";
@@ -524,13 +524,14 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
         let name = safe_name(&cols[i], "字段", |x| t.fields.iter().any(|f| f.name.eq_ignore_ascii_case(x)) || free[k + 1..].iter().any(|j| cols[*j].eq_ignore_ascii_case(x)));
         let decl = info.iter().find(|r| text(&r[1]) == cols[i]).map(|r| text(&r[2]).to_ascii_uppercase()).unwrap_or_default();
         let ty = guess(conn, &n, &cols[i], &decl);
-        t.fields.push(Field { id: ids.fresh(), name, ty, opts: field::default_opts(ty), desc: String::new() });
+        // an id every reader of the file gives it (`stable_id`), like the rest of what is made here
+        t.fields.push(Field { id: ids.stable(IdKind::Field, 0, t.id, i as u64), name, ty, opts: field::default_opts(ty), desc: String::new() });
         at.push(Some(i));
     }
     // the first field is the title
     if guessed && let Some(f) = t.fields.first_mut().filter(|f| matches!(f.ty, FieldType::SingleSelect | FieldType::Checkbox)) { f.ty = FieldType::Text; }
     if t.fields.is_empty() {
-        t.fields.push(Field { id: ids.fresh(), name: "文本".into(), ty: FieldType::Text, opts: FieldOpts::default(), desc: String::new() });
+        t.fields.push(Field { id: ids.stable(IdKind::Field, 0, t.id, cols.len() as u64), name: "文本".into(), ty: FieldType::Text, opts: FieldOpts::default(), desc: String::new() });
         at.push(None);
     }
 
@@ -614,7 +615,7 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
     marked.extend(super::order::repair(&mut t.records));
     if described { for id in marked { dirty.row(t.id, id); } }
     if t.views.is_empty() {
-        t.views.push(View { id: ids.fresh(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
+        t.views.push(View { id: ids.stable(IdKind::View, 0, t.id, 0), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
     }
     Some(t)
 }
@@ -634,6 +635,7 @@ fn read(f: &mut Field, v: ValueRef, ids: &mut IdGen) -> Value {
         (_, ValueRef::Null) | (Formula | Lookup, _) => Value::Empty,
         (t, v) if t.textual() => Value::Text(string(v)).normal(),
         (_, ValueRef::Blob(_)) => Value::Empty,
+        (Note, v) => Value::Text(string(v).trim().to_string()).normal(),
         (Checkbox, ValueRef::Integer(i)) => Value::Bool(i != 0).normal(),
         (Checkbox, ValueRef::Real(x)) => Value::Bool(x != 0.).normal(),
         (Checkbox, v) => field::parse(f, &string(v)),
@@ -650,7 +652,8 @@ fn read(f: &mut Field, v: ValueRef, ids: &mut IdGen) -> Value {
             let ids = names.iter().filter(|n| !n.is_empty()).map(|n| match f.option_named(n) {
                 Some(o) => o.id,
                 None => {
-                    let (id, color) = (ids.fresh(), (f.opts.options.len() % 10) as u8);
+                    // the field's id where the others have their table's: an option is its field's
+                    let (id, color) = (ids.stable(IdKind::Option, 0, f.id, f.opts.options.len() as u64), (f.opts.options.len() % 10) as u8);
                     f.opts.options.push(SelectOption { id, name: n.clone(), color });
                     id
                 }
@@ -1158,6 +1161,10 @@ mod tests {
         assert!(t.records.iter().all(|r| (1..ID_LIMIT).contains(&r.id)) && t.records[0].id != t.records[1].id);
         // and the same ones each time the file is read (`stable_id`)
         assert_eq!(load(&path).unwrap().tables[2].records.iter().map(|r| r.id).collect::<Vec<_>>(), t.records.iter().map(|r| r.id).collect::<Vec<_>>());
+        // so is everything else made for a file nobody described: tables, the fields guessed, the view each is given
+        let again = load(&path).unwrap();
+        assert!(again.all_ids().eq(got.all_ids()));
+        assert!(got.all_ids().all(|i| (1..ID_LIMIT).contains(&i)) && got.all_ids().collect::<HashSet<_>>().len() == got.all_ids().count());
         // a table with no columns of its own still has a title field
         let t = &got.tables[3];
         assert_eq!((t.fields.len(), t.fields[0].ty, t.records.iter().map(|r| r.id).collect::<Vec<_>>()), (1, Text, vec![5, 9]));
@@ -1378,6 +1385,41 @@ mod tests {
         assert!(doc.undo());
         sync(&mut doc, &path);
         assert_eq!(orders(), before);
+    }
+
+    /// A 笔记 cell is its note's path, as text; option names another program wrote get the same ids on every read.
+    #[test]
+    fn note_cells_hold_paths() {
+        let dir = Tmp::new("notes");
+        let path = dir.file("读书.sqlite");
+        let mut doc = Doc::new(Base::blank_seeded(T0, 9));
+        let t = doc.base.tables[0].id;
+        let note = doc.add_field(t, None, "读书笔记", FieldType::Note, FieldOpts::default()).unwrap();
+        let pick = doc.add_field(t, None, "状态", FieldType::SingleSelect, FieldOpts::default()).unwrap();
+        let rows: Vec<RecId> = doc.base.tables[0].records.iter().map(|r| r.id).collect();
+        assert!(doc.set_cells(t, vec![(rows[0], note, Value::Text("三体.xml".into())), (rows[1], note, Value::Text("../别处/球状 闪电.xml".into()))]));
+        create(&path, &doc.base).unwrap();
+        assert_eq!(reload(&path), doc.base);
+        let conn = Connection::open(&path).unwrap();
+        assert_eq!(grid(&conn, r#"select "读书笔记" from "未命名数据表" order by _order limit 3"#), [[Sql::Text("三体.xml".into())], [Sql::Text("../别处/球状 闪电.xml".into())], [Sql::Null]]);
+        assert_eq!(grid(&conn, "select type from _fields where name = '读书笔记'"), [[Sql::Text("note".into())]]);
+        // another program points a row at a note, and writes option names the field hasn't got
+        conn.execute_batch(&format!(r#"UPDATE "未命名数据表" SET "读书笔记" = ' 新的.xml ', "状态" = '在读' WHERE id = {}; UPDATE "未命名数据表" SET "状态" = '读完' WHERE id = {};"#, rows[2], rows[3])).unwrap();
+        drop(conn);
+        let got = load(&path).unwrap();
+        assert_eq!(got.tables[0].record(rows[2]).unwrap().get(note), &Value::Text("新的.xml".into()));
+        let options = |b: &Base| b.tables[0].field(pick).unwrap().opts.options.clone();
+        assert_eq!(options(&got).iter().map(|o| o.name.as_str()).collect::<Vec<_>>(), ["在读", "读完"]);
+        assert_eq!(options(&load(&path).unwrap()), options(&got));
+        // what the engine does with them: shown, searched and exported by title; never copied to another cell
+        let mut doc = Doc::new(got);
+        assert_eq!(crate::table::csv::plain_text(&doc.base, &doc.base.tables[0]).lines().next(), Some("三体"));
+        let copy = doc.duplicate_records(t, &[rows[0]])[0];
+        assert!(doc.base.tables[0].record(copy).unwrap().get(note).is_empty());
+        assert!(!doc.fill(t, &[rows[0]], &[rows[4]], &[note]));
+        assert!(!doc.paste(t, &rows[4..], &[note], &[vec!["x.xml".into()]]));
+        let twin = doc.duplicate_field(t, note).unwrap();
+        assert!(doc.base.tables[0].records.iter().all(|r| r.get(twin).is_empty()));
     }
 
     /// Ids that can't stay (2^53 or more, 0, a duplicate) are replaced as they are read,

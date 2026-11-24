@@ -24,6 +24,8 @@ pub enum FieldType {
     Text, SingleSelect, MultiSelect, Person, Date, Attachment, Number, Checkbox, Url, Formula, Lookup,
     AutoNumber, Phone, Email, Location, Barcode, Progress, Currency, Rating,
     Link, CreatedTime, ModifiedTime,
+    /// 笔记: a cell is one note, a document of the library; the cell holds where it is (`field::note_rel`).
+    Note,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,7 +42,7 @@ impl FieldType {
         use FieldType::*;
         &[Text, SingleSelect, MultiSelect, Person, Date, Attachment, Number, Checkbox, Url, Formula, Lookup,
           AutoNumber, Phone, Email, Location, Barcode, Progress, Currency, Rating,
-          Link, CreatedTime, ModifiedTime]
+          Link, CreatedTime, ModifiedTime, Note]
     };
 
     pub fn label(self) -> &'static str {
@@ -50,7 +52,7 @@ impl FieldType {
             Attachment => "附件", Number => "数字", Checkbox => "复选框", Url => "超链接", Formula => "公式",
             Lookup => "查找引用", AutoNumber => "自动编号", Phone => "电话号码", Email => "Email",
             Location => "地理位置", Barcode => "条码", Progress => "进度", Currency => "货币", Rating => "评分",
-            Link => "关联", CreatedTime => "创建时间", ModifiedTime => "最后更新时间",
+            Link => "关联", CreatedTime => "创建时间", ModifiedTime => "最后更新时间", Note => "笔记",
         }
     }
 
@@ -62,7 +64,7 @@ impl FieldType {
             Attachment => "attachment", Number => "number", Checkbox => "checkbox", Url => "url", Formula => "formula",
             Lookup => "lookup", AutoNumber => "auto_number", Phone => "phone", Email => "email",
             Location => "location", Barcode => "barcode", Progress => "progress", Currency => "currency", Rating => "rating",
-            Link => "link", CreatedTime => "created_time", ModifiedTime => "modified_time",
+            Link => "link", CreatedTime => "created_time", ModifiedTime => "modified_time", Note => "note",
         }
     }
 
@@ -73,7 +75,7 @@ impl FieldType {
         match self {
             Text | SingleSelect | MultiSelect | Person | Date | Attachment | Number | Checkbox | Url | Formula | Lookup => FieldGroup::General,
             AutoNumber | Phone | Email | Location | Barcode | Progress | Currency | Rating => FieldGroup::Business,
-            Link | CreatedTime | ModifiedTime => FieldGroup::Advanced,
+            Link | CreatedTime | ModifiedTime | Note => FieldGroup::Advanced,
         }
     }
 
@@ -81,6 +83,11 @@ impl FieldType {
     pub fn computed(self) -> bool {
         matches!(self, FieldType::Formula | FieldType::Lookup | FieldType::AutoNumber | FieldType::CreatedTime | FieldType::ModifiedTime)
     }
+
+    /// A cell's value can be put in another cell as it is (paste, fill, a
+    /// duplicated record or column). Not what is computed, and not a 笔记:
+    /// the note is one record's, a second cell would share it.
+    pub fn copies(self) -> bool { !self.computed() && self != FieldType::Note }
 
     /// Values are numbers (right-aligned, summed, formatted by `NumberFmt`).
     pub fn numeric(self) -> bool {
@@ -597,6 +604,12 @@ impl IdGen {
         loop { let id = self.raw(); if id != 0 && !busy(id) && self.taken.insert(id) { return id; } }
     }
     pub fn fresh(&mut self) -> u64 { self.fresh_unless(|_| false) }
+    /// A `stable_id` nothing here has, taken: for what a file is given as it is read.
+    pub fn stable(&mut self, kind: IdKind, old: u64, table: u64, seq: u64) -> u64 {
+        let id = stable_id(kind, old, table, seq, |x| self.taken.contains(&x));
+        self.taken.insert(id);
+        id
+    }
     /// Ids that are in use without having come from here (read from a file).
     pub fn take(&mut self, ids: impl IntoIterator<Item = u64>) { self.taken.extend(ids); }
 }

@@ -49,7 +49,7 @@ impl Doc {
         let mut n = 0;
         for (i, r) in t.records.iter().enumerate().filter(|(_, r)| ids.contains(&r.id)) {
             let mut c = self.blank_record(t, new[n as usize], n);
-            c.cells = r.cells.iter().filter(|(f, _)| t.field(**f).is_some_and(|f| !f.ty.computed())).map(|(f, v)| (*f, v.clone())).collect();
+            c.cells = r.cells.iter().filter(|(f, _)| t.field(**f).is_some_and(|f| f.ty.copies())).map(|(f, v)| (*f, v.clone())).collect();
             n += 1;
             recs.push((i + n as usize, c));
         }
@@ -169,7 +169,7 @@ impl Doc {
         let mut f = t.fields[at].clone();
         f.name = t.free_field_name(&format!("{} 副本", f.name), None);
         f.opts.back = None;
-        let cells: Vec<(RecId, Value)> = if f.ty.computed() { vec![] } else { t.records.iter().filter_map(|r| r.cells.get(&fid).map(|v| (r.id, v.clone()))).collect() };
+        let cells: Vec<(RecId, Value)> = if !f.ty.copies() { vec![] } else { t.records.iter().filter_map(|r| r.cells.get(&fid).map(|v| (r.id, v.clone()))).collect() };
         let view_ops: Vec<Op> = t.views.iter().filter(|v| v.opts.order.contains(&fid)).cloned().collect::<Vec<_>>().into_iter().map(Op::SetView).collect();
         // the copy's options are its own: ids of their own, its cells following
         let fresh: HashMap<OptId, OptId> = f.opts.options.iter().map(|o| o.id).collect::<Vec<_>>().into_iter().map(|o| (o, self.base.new_id())).collect();
@@ -344,7 +344,7 @@ impl Doc {
         for (ri, line) in text.iter().enumerate() {
             for (ci, s) in line.iter().enumerate() {
                 let Some(fid) = fields.get(ci) else { break };
-                let Some(f) = t.field(*fid).filter(|f| !f.ty.computed()) else { continue };
+                let Some(f) = t.field(*fid).filter(|f| f.ty.copies()) else { continue };
                 let f = fields_now.entry(*fid).or_insert_with(|| f.clone());
                 let v = field::parse_new(f, s, &mut ids);
                 match rows.get(ri) {
@@ -368,7 +368,7 @@ impl Doc {
         let mut cells = vec![];
         for (i, rid) in dst.iter().enumerate() {
             let Some(from) = t.record(src[i % src.len()]) else { continue };
-            for f in fields { cells.push((*rid, *f, from.get(*f).clone())); }
+            for f in fields.iter().filter(|f| t.field(**f).is_some_and(|f| f.ty.copies())) { cells.push((*rid, *f, from.get(*f).clone())); }
         }
         self.set_cells(tid, cells)
     }

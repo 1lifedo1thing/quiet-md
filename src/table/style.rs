@@ -148,6 +148,7 @@ pub fn field_glyph(ty: FieldType) -> &'static str {
         Attachment => "ft-attach",
         Person => "ft-person",
         Phone | Email => "ft-text",
+        Note => "doc",
     }
 }
 

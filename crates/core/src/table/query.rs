@@ -114,6 +114,7 @@ impl<'a> Texts<'a> {
     fn of<'v>(&self, v: &'v Value) -> Cow<'v, str> {
         match (v, &self.titles) {
             (Value::Empty, _) => Cow::Borrowed(""),
+            (Value::Text(s), _) if self.f.ty == FieldType::Note => Cow::Borrowed(field::note_title(s)),
             (Value::Text(s), _) => Cow::Borrowed(s),
             (Value::Links(ids), Some(titles)) => Cow::Owned(ids.iter().map(|id| match titles.get(id) {
                 Some(t) if !t.is_empty() => t.clone(),

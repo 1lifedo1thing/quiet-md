@@ -170,6 +170,7 @@ pub fn display_in(base: &Base, f: &Field, v: &Value) -> String { show(Some(base)
 fn show(base: Option<&Base>, f: &Field, v: &Value) -> String {
     match v {
         Value::Empty => String::new(),
+        Value::Text(s) if f.ty == FieldType::Note => note_title(s).to_string(),
         Value::Text(s) => s.clone(),
         Value::Number(n) => format_number(*n, f),
         Value::Bool(b) => if *b { "✓".into() } else { String::new() },
@@ -211,7 +212,8 @@ pub fn parse(f: &Field, text: &str) -> Value {
         }
         FieldType::Link => Value::Links(split_list(t).iter().filter_map(|s| s.trim_start_matches('#').parse().ok()).collect()).normal(),
         FieldType::Attachment => Value::Files(split_list(t).into_iter().map(|p| Attachment { name: p.rsplit('/').next().unwrap_or(&p).to_string(), path: p }).collect()).normal(),
-        FieldType::Formula | FieldType::Lookup => Value::Empty,
+        // a note isn't typed into its cell: the cell is given the note's path (`note_href`)
+        FieldType::Formula | FieldType::Lookup | FieldType::Note => Value::Empty,
         FieldType::Text | FieldType::Url | FieldType::Phone | FieldType::Email | FieldType::Location | FieldType::Barcode => Value::Text(text.to_string()),
     }
 }
@@ -261,6 +263,7 @@ pub fn convert(old: &Field, new: &mut Field, v: &Value, ids: &mut IdGen) -> Valu
         }
         (Value::Links(_), FieldType::Link) if old.opts.link_table == new.opts.link_table => v.clone(),
         (Value::Files(_), FieldType::Attachment) => v.clone(),
+        (Value::Text(_), FieldType::Note) if old.ty == FieldType::Note => v.clone(),
         // numbers go over unformatted, so `¥1,234.00` → 文本 → 数字 survives
         (Value::Number(n), _) if new.ty.textual() => Value::Text(format_number(*n, old)),
         (Value::Date(ms), _) if new.ty.textual() => Value::Text(format_date(*ms, old.opts.date, old.opts.time)),
@@ -269,6 +272,25 @@ pub fn convert(old: &Field, new: &mut Field, v: &Value, ids: &mut IdGen) -> Valu
             parse_new(new, &text, ids)
         }
     }
+}
+
+/// A 笔记 cell holds its note's path as the file has it: relative to the
+/// folder the `.sqlite` is in, like a document's `<cite type="doc" href>`
+/// (`layout::relative`), so the table and its notes can be moved together.
+/// `table` and `note` are paths from the library's top.
+pub fn note_href(table: &str, note: &str) -> String { crate::store::relative(folder_of(table), note) }
+
+/// The note a 笔记 cell of the table at `table` points at, from the library's
+/// top. None: not a path, or one that leaves the library.
+pub fn note_rel(table: &str, href: &str) -> Option<String> { crate::store::resolve(folder_of(table), href) }
+
+fn folder_of(rel: &str) -> &str { rel.rsplit_once('/').map_or("", |(d, _)| d) }
+
+/// What a 笔记 cell shows where the note itself isn't at hand (formulas,
+/// filters, export): its file's name. The app shows the note's own title.
+pub fn note_title(href: &str) -> &str {
+    let name = href.rsplit(['/', '\\']).next().unwrap_or(href);
+    name.rsplit_once('.').filter(|(s, _)| !s.is_empty()).map_or(name, |(s, _)| s)
 }
 
 /// How two cells of one field order (升序). Empties are the caller's to place.
@@ -350,6 +372,26 @@ mod tests {
     use super::*;
 
     fn f(ty: FieldType) -> Field { Field { id: 1, name: "f".into(), ty, opts: default_opts(ty), desc: String::new() } }
+
+    #[test]
+    fn note_paths_go_both_ways() {
+        for (table, note, href) in [("读书.sqlite", "三体.xml", "三体.xml"), ("读书/读书.sqlite", "读书/三体 2.xml", "三体 2.xml"), ("a/读书/读书.sqlite", "a/别处/笔记.xml", "../别处/笔记.xml"), ("a/b.sqlite", "c.xml", "../c.xml")] {
+            assert_eq!(note_href(table, note), href);
+            assert_eq!(note_rel(table, href).as_deref(), Some(note));
+        }
+        assert_eq!((note_rel("b.sqlite", "../c.xml"), note_rel("b.sqlite", "https://x/y"), note_rel("b.sqlite", "")), (None, None, None));
+        assert_eq!((note_title("../别处/读书 笔记.xml"), note_title("a.b.xml"), note_title("无扩展名")), ("读书 笔记", "a.b", "无扩展名"));
+        // a cell shows, sorts and converts by the title; nothing typed makes a note
+        let note = f(FieldType::Note);
+        let v = Value::Text("子/三体 2.xml".into());
+        assert_eq!(show(None, &note, &v), "三体 2");
+        assert_eq!((parse(&note, "三体"), compare(&note, &v, &Value::Text("z/三体 10.xml".into()))), (Value::Empty, Ordering::Less));
+        let mut ids = IdGen::seeded(1);
+        assert_eq!(convert(&note, &mut f(FieldType::Text), &v, &mut ids), Value::Text("三体 2".into()));
+        assert_eq!(convert(&f(FieldType::Text), &mut f(FieldType::Note), &Value::Text("三体".into()), &mut ids), Value::Empty);
+        assert_eq!(convert(&note, &mut f(FieldType::Note), &v, &mut ids), v);
+        assert!(!FieldType::Note.keyable() && !FieldType::Note.computed() && !FieldType::Note.copies() && FieldType::from_key("note") == Some(FieldType::Note));
+    }
 
     #[test]
     fn utc_times_go_both_ways() {

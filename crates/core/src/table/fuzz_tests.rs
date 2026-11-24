@@ -15,7 +15,8 @@ impl Rng {
 }
 
 const TYPES: &[FieldType] = &[FieldType::Text, FieldType::Number, FieldType::SingleSelect, FieldType::MultiSelect, FieldType::Date, FieldType::Checkbox,
-    FieldType::Rating, FieldType::Currency, FieldType::Progress, FieldType::Url, FieldType::Formula, FieldType::Link, FieldType::Lookup, FieldType::AutoNumber, FieldType::CreatedTime];
+    FieldType::Rating, FieldType::Currency, FieldType::Progress, FieldType::Url, FieldType::Formula, FieldType::Link, FieldType::Lookup, FieldType::AutoNumber, FieldType::CreatedTime, FieldType::Note];
+const NOTES: &[&str] = &["", "三体.xml", "子/读书 笔记 2.xml", "../别处/a.xml"];
 const TEXTS: &[&str] = &["", "苹果", "12", "3.5", "2026-01-30", "true", "红, 蓝", "https://a.b", "50%", "x"];
 
 /// One random edit. True: it was an undo or redo (which puts stamps back rather than making them).
@@ -33,6 +34,8 @@ fn step(d: &mut Doc, r: &mut Rng) -> bool {
             let f = t.field(fid).unwrap().clone();
             let v = match f.ty {
                 FieldType::Link => Value::Links(f.opts.link_table.and_then(|o| d.base.table(o)).map(|o| o.records.iter().map(|x| x.id).filter(|_| r.below(3) == 0).collect()).unwrap_or_default()),
+                // a note cell is given a path (made, pointed elsewhere) or emptied
+                FieldType::Note => Value::Text(r.pick(NOTES).unwrap().to_string()),
                 _ => { let mut f = f; let mut n = d.base.ids.clone(); let v = field::parse_new(&mut f, r.pick(TEXTS).unwrap(), &mut n); if f.ty.select() { Value::Empty } else { v } }
             };
             d.set_cells(tid, vec![(rid, fid, v)]);
@@ -128,7 +131,11 @@ fn check(b: &Base) {
         for r in &t.records {
             assert!(recs.insert(r.id) && (1..ID_LIMIT).contains(&r.id), "record id");
             assert!(r.created <= r.modified, "changed before it was made");
-            for (f, v) in &r.cells { assert!(t.field(*f).is_some(), "a cell of a field that is gone"); assert!(!v.is_empty(), "an empty cell is stored"); }
+            for (f, v) in &r.cells {
+                assert!(t.field(*f).is_some(), "a cell of a field that is gone");
+                assert!(!v.is_empty(), "an empty cell is stored");
+                assert!(t.field(*f).unwrap().ty != FieldType::Note || matches!(v, Value::Text(_)), "a note cell that isn't a path");
+            }
         }
         for v in &t.views {
             assert!(ids.insert(v.id), "view id twice");
