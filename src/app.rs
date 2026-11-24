@@ -350,6 +350,8 @@ pub struct Workspace {
     /// The failed change: (action, message); an empty action is page-wide.
     pub shortcut_error: Option<(String, String)>,
     pub settings_page: crate::settings::Page,
+    /// The page 设置 was opened from, where 返回 goes back to.
+    pub settings_from: View,
     /// 版本历史: snapshots kept per document (1–30), cached for the settings page.
     pub history_limit: u32,
     /// 外观's theme dropdown while open: the theme its preview shows.
@@ -661,6 +663,7 @@ impl Workspace {
             shortcut_strokes: vec![],
             shortcut_error: None,
             settings_page: Default::default(),
+            settings_from: View::Home,
             history_limit,
             theme_menu: None,
             theme_anchor: Default::default(),
@@ -1159,6 +1162,8 @@ impl Workspace {
         self.close_history(cx);
         // 阅读位置: leaving the document with ⌘H or 回收站 also counts.
         if view != View::Doc { self.remember_scroll(cx) }
+        // 设置's 返回 goes back here. 回收站 sits in 设置's sidebar: going there and back keeps it.
+        if matches!(view, View::Settings | View::Trash) && !matches!(self.view, View::Settings | View::Trash) { self.settings_from = self.view; }
         if view == View::Trash {
             self.trash = self.store.list_trash();
         }
