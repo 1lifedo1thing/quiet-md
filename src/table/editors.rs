@@ -162,7 +162,7 @@ pub(crate) fn select_popup(v: &TableView, t: &Table, rec: RecId, fid: FieldId, e
     if !query.is_empty() && !exact {
         let name = v.aux.read(cx).text.trim().to_string();
         let slot = (f.opts.options.len() % 10) as u8;
-        list = list.child(list_row("tb-opt-new").cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
+        list = list.child(list_row("tb-opt-new")
             .child(icon("plus", 14., Theme::icon())).child(div().flex_none().text_color(Theme::text_caption()).child(crate::settings::label(if person { "添加人员" } else { "新建选项" })))
             .child(if person { super::style::person(&name, slot).into_any_element() } else { tag(&name, slot).into_any_element() })
             .on_click(cx.listener(move |v, _, window, cx| {
@@ -184,8 +184,7 @@ pub(crate) fn date_popup(_v: &TableView, t: &Table, rec: RecId, fid: FieldId, ye
     let cur_day = cur.map(|d| { let (y, m, d, ..) = field::date_parts(d); (y, m, d) });
     let time = cur.map(|d| { let (.., h, mi) = field::date_parts(d); (h, mi) }).unwrap_or((0, 0));
     let (ty, tm, td, ..) = field::date_parts(field::today());
-    let nav = |id: &'static str, glyph: &'static str, by: i32| div().id(id).size(px(24.)).rounded(px(4.)).flex().items_center().justify_center().cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-        .child(icon(glyph, 14., Theme::icon()))
+    let nav = |id: &'static str, glyph: &'static str, by: i32| mini_btn(id, glyph)
         .on_click(cx.listener(move |v, _, _, cx| {
             if let Some((_, Popup::Date { year, month, .. })) = v.popup.as_mut() {
                 let m = *month as i32 - 1 + by;
@@ -227,10 +226,8 @@ pub(crate) fn date_popup(_v: &TableView, t: &Table, rec: RecId, fid: FieldId, ye
         .child(grid)
         .child(menu_rule())
         .child(div().px(px(12.)).flex().items_center().justify_between()
-            .child(div().id("tb-date-today").h(px(26.)).px(px(8.)).rounded(px(4.)).flex().items_center().cursor_pointer().text_color(Theme::primary()).hover(|s| s.bg(Theme::fill_hover()))
-                .child(crate::settings::label("今天")).on_click(cx.listener(move |v, _, window, cx| set(v, Value::Date(field::today()), window, cx))))
-            .child(div().id("tb-date-clear").h(px(26.)).px(px(8.)).rounded(px(4.)).flex().items_center().cursor_pointer().text_color(Theme::text_caption()).hover(|s| s.bg(Theme::fill_hover()))
-                .child(crate::settings::label("清除")).on_click(cx.listener(move |v, _, window, cx| set(v, Value::Empty, window, cx)))))
+            .child(crate::design::Button::ghost("tb-date-today").sized(crate::design::ButtonSize::Xs).label(crate::settings::label("今天")).on_click(cx.listener(move |v, _, window, cx| set(v, Value::Date(field::today()), window, cx))))
+            .child(crate::design::Button::ghost("tb-date-clear").sized(crate::design::ButtonSize::Xs).label(crate::settings::label("清除")).on_click(cx.listener(move |v, _, window, cx| set(v, Value::Empty, window, cx)))))
         .into_any_element()
 }
 
@@ -250,7 +247,7 @@ pub(crate) fn links_popup(v: &TableView, base: &Base, t: &Table, rec: RecId, fid
         shown += 1;
         if shown > 200 { break; }
         let (oid, on) = (o.id, linked.contains(&o.id));
-        list = list.child(list_row(("tb-link", oid as usize)).h(px(34.)).cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
+        list = list.child(list_row(("tb-link", oid as usize))
             .child(checkbox(on))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(title.is_empty(), |d| d.text_color(Theme::text_placeholder()))
                 .child(ui_text(if title.is_empty() { crate::settings::label("未命名记录") } else { title })))

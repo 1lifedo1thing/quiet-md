@@ -288,7 +288,8 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
     let head = crate::design::Field::new("tb-ff-type").focused(open).cursor_pointer()
         .child(icon(field_glyph(f.ty), 15., Theme::icon()))
         .child(div().flex_1().min_w_0().child(label(f.ty.label())))
-        .child(icon(if open { "chevron-up" } else { "chevron-down" }, 13., Theme::icon()))
+        // (there is no chevron-up in the set: the one chevron, turned)
+        .child(icon("chevron-down", 13., Theme::icon()).map(|g| if open { g.with_transformation(Transformation::rotate(percentage(0.5))) } else { g }))
         .on_click(cx.listener(|v, _, _, cx| with(v, cx, |f| f.types_open = !f.types_open)));
     let mut out = div().flex().flex_col().gap(px(4.)).child(head);
     if open {
@@ -324,8 +325,7 @@ fn options(f: &FieldForm, cx: &Context<TableView>) -> Div {
                 .child(icon("triangle-down", 8., fg))
                 .on_click(cx.listener(move |v, _, _, cx| with(v, cx, |f| f.palette = if f.palette == Some(i) { None } else { Some(i) })))))
             .child(text_input(row).flex_1().min_w_0())
-            .child(div().id(("tb-ff-opt-del", i)).flex_none().size(px(24.)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center().cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-                .child(icon("x", 13., Theme::icon()))
+            .child(close_btn(("tb-ff-opt-del", i))
                 .on_click(cx.listener(move |v, _, _, cx| with(v, cx, |f| if i < f.rows.len() && i < f.opts.options.len() { f.opts.options.remove(i); drop(f.rows.remove(i)); f.palette = None; })))));
         if f.palette == Some(i) && !person {
             let mut swatches = div().flex_none().p(px(8.)).rounded(px(crate::design::geo().menu_row_r)).bg(Theme::bg_body()).border_1().border_color(Theme::line_border()).flex().flex_wrap().gap(px(6.));
@@ -338,8 +338,7 @@ fn options(f: &FieldForm, cx: &Context<TableView>) -> Div {
             list = list.child(swatches);
         }
     }
-    let add = div().id("tb-ff-opt-add").flex_none().h(px(28.)).px(px(8.)).flex().items_center().gap(px(4.)).rounded(px(crate::design::geo().tool_r)).cursor_pointer().text_color(Theme::primary()).hover(|s| s.bg(Theme::fill_hover()))
-        .child(icon("plus", 13., Theme::primary())).child(label(if person { "添加成员" } else { "添加选项" }))
+    let add = ghost_btn("tb-ff-opt-add", "plus", label(if person { "添加成员" } else { "添加选项" }))
         .on_click(cx.listener(|v, _, window, cx| add_option(v, window, cx)));
     block(if person { "成员" } else { "选项内容" }, div().p(px(8.)).rounded(px(crate::design::geo().menu_row_r)).bg(Theme::primary_fill_1()).flex().flex_col().gap(px(6.))
         .when(!f.rows.is_empty(), |d| d.child(list))

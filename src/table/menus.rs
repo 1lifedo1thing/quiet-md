@@ -28,11 +28,8 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
     row
 }
 
-/// A 28pt square icon button; `off` greys it out and makes it inert.
-fn icon_button(id: &'static str, glyph: &'static str, off: bool) -> Stateful<Div> {
-    div().id(id).flex_none().size(px(28.)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center()
-        .when(!off, |d| d.cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))).child(icon(glyph, 15., if off { Theme::text_disabled() } else { Theme::icon() }))
-}
+/// A square tool of the bar (`design::Button`, ghost, 28); `off` greys it out and makes it inert.
+fn icon_button(id: &'static str, glyph: &'static str, off: bool) -> crate::design::Button { crate::design::Button::ghost(id).icon(glyph).disabled(off) }
 
 /// A file is one table with one view: the pane's chrome is one line. Left, the tools as icons;
 /// right, 撤销, 重做, 表内搜索, the 「…」 menu (and, for a page's table opened full, back to the page).
@@ -102,23 +99,20 @@ pub(crate) fn find_bar(v: &TableView, cx: &Context<TableView>) -> Option<AnyElem
     let f = v.find.as_ref()?;
     let n = f.hits.len();
     let empty = v.find_input.read(cx).text.is_empty();
-    let step = |id: &'static str, glyph: &'static str, by: i32| div().id(id).size(px(24.)).rounded(px(4.)).flex().items_center().justify_center().cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-        .child(icon(glyph, 13., Theme::icon())).on_click(cx.listener(move |v, _, _, cx| v.find_step(by, cx)));
+    let step = |id: &'static str, glyph: &'static str, by: i32| mini_btn(id, glyph).on_click(cx.listener(move |v, _, _, cx| v.find_step(by, cx)));
     Some(div().absolute().top(px(8.)).right(px(16.)).child(crate::design::Popover::new("tb-findbar").occlude().h(px(40.)).w(px(320.)).px(px(10.)).flex().items_center().gap(px(6.))
         .child(icon("search", 14., Theme::text_placeholder()))
         .child(div().flex_1().min_w_0().child(v.find_input.clone()))
         .child(div().flex_none().text_size(px(12.)).text_color(Theme::text_caption()).child(if empty { String::new() } else if n == 0 { label("无结果") } else { format!("{}/{n}", f.at + 1) }))
         .child(step("tb-find-prev", "chevron-left", -1)).child(step("tb-find-next", "chevron-right", 1))
-        .child(div().id("tb-find-close").size(px(24.)).rounded(px(4.)).flex().items_center().justify_center().cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-            .child(icon("x", 13., Theme::icon())).on_click(cx.listener(|v, _, window, cx| v.close_find(window, cx))))).into_any_element())
+        .child(mini_btn("tb-find-close", "x").on_click(cx.listener(|v, _, window, cx| v.close_find(window, cx))))).into_any_element())
 }
 
 /// Rows are ticked: how many, and what can be done with them.
 pub(crate) fn selection_bar(v: &TableView, _t: &Table, cx: &Context<TableView>) -> Option<AnyElement> {
     let n = v.rows_sel.len();
     if n == 0 { return None; }
-    let btn = |id: &'static str, glyph: &'static str, text: &str, danger: bool| div().id(id).h(px(28.)).px(px(8.)).flex().items_center().gap(px(4.)).rounded(px(crate::design::geo().tool_r)).cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
-        .child(icon(glyph, 14., if danger { Theme::danger() } else { Theme::icon() })).child(div().text_color(if danger { Theme::danger() } else { Theme::text() }).child(label(text)));
+    let btn = |id: &'static str, glyph: &'static str, text: &str, danger: bool| ghost_btn(id, glyph, label(text)).variant(if danger { crate::design::ButtonVariant::Destructive } else { crate::design::ButtonVariant::Ghost });
     Some(div().absolute().bottom(px(footer_h() + 16.)).left_0().right_0().flex().justify_center().child(crate::design::Popover::new("tb-selbar").occlude().h(px(44.)).px(px(12.)).flex().items_center().gap(px(8.))
         .child(div().text_color(Theme::text()).child(format!("{} {n} {}", label("已选"), label("条记录"))))
         .child(div().w(px(1.)).h(px(16.)).bg(Theme::line_divider()))
@@ -187,7 +181,7 @@ pub(crate) fn dropdown(v: &TableView, cx: &Context<TableView>) -> Option<AnyElem
         .on_mouse_down_out(cx.listener(|v, _, _, cx| { v.dropdown = None; cx.notify(); }));
     for (i, it) in d.items.iter().enumerate() {
         let pick = d.pick.clone();
-        list = list.child(list_row(("tb-drop", i)).cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
+        list = list.child(list_row(("tb-drop", i))
             .when_some(it.glyph, |d, g| d.child(icon(g, 15., Theme::icon())))
             .child(match it.tag { Some(slot) => div().flex_1().min_w_0().flex().child(tag(&it.label, slot)), None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(it.on, |d| d.text_color(Theme::primary())).child(it.label.clone()) })
             .when(it.on, |d| d.child(icon("check", 14., Theme::primary())))

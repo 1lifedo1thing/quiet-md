@@ -344,7 +344,7 @@ pub(crate) fn pick_popup(v: &TableView, rec: RecId, fid: FieldId, cx: &Context<T
         let (rel, id) = (rel.clone(), n.id.clone());
         // which folder it is in, for notes of one name
         let place = rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
-        list = list.child(list_row(("tb-note", i)).h(px(34.)).cursor_pointer().hover(|s| s.bg(Theme::fill_hover()))
+        list = list.child(list_row(("tb-note", i))
             .child(icon("doc", 14., Theme::icon()))
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(title_of(n))))
             .when(!place.is_empty(), |d| d.child(div().flex_none().max_w(px(120.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(12.)).text_color(Theme::text_placeholder()).child(ui_text(place.clone()))))
@@ -419,7 +419,7 @@ pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option
     let (cell, id) = (o.cell, o.id.clone());
     let name = v.state.read(cx).doc.base.table(v.table).and_then(|t| t.field(cell.1)).map(|f| f.name.clone()).unwrap_or_default();
     let tool = |el_id: &'static str, glyph: &'static str, tip: &str| { use crate::ui::TipExt; crate::design::Button::ghost(el_id).icon(glyph).tip(tip, None) };
-    let bar = div().flex_none().h(px(40.)).px(px(12.)).flex().items_center().gap(px(4.)).border_t_1().border_b_1().border_color(Theme::line_divider())
+    let bar = div().flex_none().h(px(40.)).px(px(12.)).flex().items_center().gap(px(4.))
         .child(icon("doc", 15., Theme::icon()))
         .child(div().flex_1().min_w_0().pl(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(Theme::text_caption()).child(ui_text(name)))
         .child(tool("tb-note-point", "link", "指向已有笔记").on_click(cx.listener(move |v, ev: &ClickEvent, window, cx| {
@@ -428,7 +428,9 @@ pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option
         })))
         .child(tool("tb-note-full", "expand", "整页打开").on_click(cx.listener(move |v, _, _, cx| open_full(v, id.clone(), cx))));
     Some(div().flex_1().min_h(px(200.)).flex().flex_col()
+        .child(crate::design::Separator::new())
         .child(bar)
+        .child(crate::design::Separator::new())
         .child(div().id("tb-note-editor").flex_1().min_h_0().overflow_hidden().child(o.editor.clone()))
         .into_any_element())
 }

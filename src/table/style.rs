@@ -117,7 +117,13 @@ pub fn row_tint(slot: u8) -> Hsla {
 }
 
 /// A select option's tag (`design::Badge` in the slot's colours).
-pub fn tag(name: &str, slot: u8) -> Badge { Badge::colored(name.to_string(), tag_colors(slot)) }
+pub fn tag(name: &str, slot: u8) -> Badge {
+    // the design system's ten chips; the deeper row files may also hold keeps 飞书's fills
+    match slot as usize % SLOTS { s @ 0..10 => Badge::chip(name.to_string(), s), _ => Badge::colored(name.to_string(), tag_colors(slot)) }
+}
+
+/// A small square tool: a glyph on a ghost button (`icon-xs`, 24).
+pub fn mini_btn(id: impl Into<ElementId>, glyph: &str) -> Button { Button::ghost(id).icon(glyph.to_string()).sized(ButtonSize::Xs) }
 
 /// A 人员 chip: initial in a circle, then the name, on a `secondary` pill.
 pub fn person(name: &str, slot: u8) -> Div {
