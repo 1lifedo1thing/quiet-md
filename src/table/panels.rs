@@ -27,15 +27,17 @@ pub(crate) struct Panel {
     inputs: Vec<(Entity<TextField>, Subscription)>,
     /// 填色: the rule whose colours are laid out under it.
     palette: Option<usize>,
+    /// 字段配置, a row being dragged: it and the place among the others it would land at.
+    drop_at: Option<(FieldId, usize)>,
 }
 
 /// A 字段配置 row being carried to another place: GPUI's drag payload, drawn as the row lifted.
 #[derive(Clone)]
-struct FieldDrag { id: FieldId, at: usize, name: String, glyph: &'static str }
+struct FieldDrag { id: FieldId, name: String, glyph: &'static str }
 
 impl Render for FieldDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().h(px(34.)).w(px(236.)).px(px(8.)).flex().items_center().gap(px(6.)).rounded(px(crate::design::geo().tool_r))
+        div().h(px(34.)).w(px(FIELD_ROW_W)).px(px(8.)).flex().items_center().gap(px(6.)).rounded(px(crate::design::geo().menu_row_r))
             .bg(crate::theme::raised(Theme::bg_body())).shadow(crate::theme::shadow_menu()).opacity(0.96)
             .font_family(crate::theme::ui_family()).text_size(px(text_sm())).text_color(Theme::text())
             .child(icon(self.glyph, 15., Theme::icon()))
@@ -55,7 +57,7 @@ pub(crate) fn open(v: &mut TableView, kind: Kind, pos: Point<Pixels>, window: &m
         window.focus(&input.focus_handle(cx), cx);
         (input, sub)
     });
-    v.open_popup(pos, Popup::Panel(Panel { kind, search, inputs: vec![], palette: None }), cx);
+    v.open_popup(pos, Popup::Panel(Panel { kind, search, inputs: vec![], palette: None, drop_at: None }), cx);
     sync_inputs(v, window, cx);
     // 填色 with no rule opens on one, ready to fill in (left empty, it goes again as the panel closes)
     if kind == Kind::Color && peek(v, cx, |_, view| view.opts.colors.is_empty()).unwrap_or(false) { add_color_rule(v, window, cx); }
@@ -187,14 +189,18 @@ fn sorts(view: &View, kind: Kind) -> &Vec<SortBy> { if kind == Kind::Group { &vi
 fn sorts_mut(view: &mut View, kind: Kind) -> &mut Vec<SortBy> { if kind == Kind::Group { &mut view.opts.groups } else { &mut view.opts.sorts } }
 
 /// A 字段配置 row dropped on another: it takes that row's place (the title stays first).
-fn move_field(v: &mut TableView, src: FieldId, dst: FieldId, cx: &mut Context<TableView>) {
+/// 字段配置: `src` to place `to` among the other fields (the title column staying first).
+fn move_field(v: &mut TableView, src: FieldId, to: usize, cx: &mut Context<TableView>) {
     let Some(mut ids) = peek(v, cx, |t, view| t.ordered_fields(view).iter().skip(1).map(|f| f.id).collect::<Vec<_>>()) else { return };
-    let (Some(a), Some(b)) = (ids.iter().position(|f| *f == src), ids.iter().position(|f| *f == dst)) else { return };
-    if a == b { return; }
+    let Some(a) = ids.iter().position(|f| *f == src) else { return };
+    if a == to { return; }
     let id = ids.remove(a);
-    ids.insert(b, id);
+    ids.insert(to.min(ids.len()), id);
     v.edit_view(cx, |view| view.opts.order = ids);
 }
+
+/// A 字段配置 row's width: the panel's, less the rows' inset (its drag and its gap the same).
+const FIELD_ROW_W: f32 = 272.;
 
 // ---- pickers ----
 
@@ -318,12 +324,26 @@ fn cond_controls(t: &Table, kind: Kind, i: usize, c: &Cond, panel: &Panel, field
 fn field_list(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
     let query = panel.search.as_ref().map(|(e, _)| e.read(cx).text.trim().to_lowercase()).unwrap_or_default();
     let primary = t.fields.first().map(|f| f.id);
-    let mut list = div().id("tb-pl-list").max_h(px(420.)).overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("tb-pl-list").max_h(px(420.)).overflow_y_scroll().flex().flex_col()
+        // let go anywhere over the list: where the gap is
+        .on_drop(cx.listener(|v, d: &FieldDrag, _, cx| {
+            let to = panel_mut(v).and_then(|p| p.drop_at.take()).filter(|(id, _)| *id == d.id).map(|(_, to)| to);
+            if let Some(to) = to { move_field(v, d.id, to, cx); } else { cx.notify(); }
+        }));
     let mut any = false;
-    for (at, f) in t.ordered_fields(view).into_iter().enumerate() {
+    let fields = t.ordered_fields(view);
+    // a row being dragged (only with no search): taken out, a gap of its size where it would land
+    let carried = panel.drop_at.filter(|_| cx.has_active_drag() && query.is_empty());
+    let others: Vec<&&Field> = fields.iter().filter(|f| Some(f.id) != primary && carried.is_none_or(|(id, _)| f.id != id)).collect();
+    let gap = || div().flex_none().h(px(34.)).mx(px(4.)).rounded(px(crate::design::geo().menu_row_r)).bg(Theme::fill_hover());
+    for f in fields.iter() {
         if !query.is_empty() && !f.name.to_lowercase().contains(&query) { continue; }
         any = true;
         let (fid, first, hidden) = (f.id, Some(f.id) == primary, view.opts.hidden.contains(&f.id));
+        if carried.is_some_and(|(id, _)| id == fid) { continue; }
+        // its place among the rest (the title column and the carried row left out)
+        let place = others.iter().position(|o| o.id == fid).unwrap_or(0);
+        if let Some((_, to)) = carried && !first && to == place { list = list.child(gap()); }
         let row = div().id(("tb-pl", fid)).flex_none().h(px(34.)).mx(px(4.)).px(px(8.)).flex().items_center().gap(px(6.)).rounded(px(crate::design::geo().menu_row_r)).hover(|s| s.bg(Theme::fill_hover()))
             .when(!first, |d| d.child(icon("grip-vertical", 14., Theme::text_placeholder())))
             .child(icon(field_glyph(f.ty), 15., if hidden { Theme::text_disabled() } else { Theme::icon() }))
@@ -338,11 +358,16 @@ fn field_list(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) ->
                     v.edit_view(cx, |view| if !view.opts.hidden.remove(&fid) { view.opts.hidden.insert(fid); });
                     v.col_sel.retain(|f| *f != fid);
                 })))
-            .on_drag(FieldDrag { id: fid, at, name: f.name.clone(), glyph: field_glyph(f.ty) }, |d, _, _, cx| cx.new(|_| d.clone()))
-            // the line it would land on: under a row below where it came from, over one above
-            .drag_over::<FieldDrag>(move |s, d, _, _| if d.id == fid { s } else if d.at < at { s.border_b_2().border_color(Theme::primary()) } else { s.border_t_2().border_color(Theme::primary()) })
-            .on_drop(cx.listener(move |v, d: &FieldDrag, _, cx| move_field(v, d.id, fid, cx))));
+            .on_drag(FieldDrag { id: fid, name: f.name.clone(), glyph: field_glyph(f.ty) }, |d, _, _, cx| cx.new(|_| d.clone()))
+            // over a row, the gap goes before it (its upper half) or after it: the rest make room
+            .on_drag_move(cx.listener(move |v, ev: &DragMoveEvent<FieldDrag>, _, cx| {
+                if !ev.bounds.contains(&ev.event.position) { return }
+                let carried = ev.drag(cx).id;
+                let to = if carried == fid { place } else { place + usize::from(ev.event.position.y > ev.bounds.center().y) };
+                if let Some(p) = panel_mut(v) && p.drop_at != Some((carried, to)) { p.drop_at = Some((carried, to)); cx.notify(); }
+            })));
     }
+    if let Some((_, to)) = carried && to >= others.len() { list = list.child(gap()); }
     if !any { list = list.child(div().px(px(12.)).py(px(10.)).text_color(Theme::text_placeholder()).child(label("无结果"))); }
     let every = |id: &'static str, text: &str, hide: bool| text_btn(id, "", text).on_click(cx.listener(move |v, _, _, cx| {
         let ids: Vec<FieldId> = if hide { peek(v, cx, |t, _| t.fields.iter().skip(1).map(|f| f.id).collect()).unwrap_or_default() } else { vec![] };

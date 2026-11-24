@@ -19,7 +19,7 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
     tools.push(("tb-t-height", "list", "行高", 0, panels::Kind::RowHeight));
     tools.push(("tb-t-color", "palette", "填色", o.colors.len(), panels::Kind::Color));
     // the pane's bar (`add`) has room to name its main tools; a page's one line keeps to icons
-    let named = |id: &str| add && matches!(id, "tb-t-fields" | "tb-t-filter" | "tb-t-group" | "tb-t-sort");
+    let named = |id: &str| add && matches!(id, "tb-t-fields" | "tb-t-filter" | "tb-t-group" | "tb-t-sort" | "tb-t-height" | "tb-t-color");
     let mut row = div().flex_none().flex().items_center().gap(px(4.));
     for (id, glyph, tip, n, kind) in tools {
         let b = if named(id) {

@@ -95,6 +95,8 @@ pub struct TextField {
     pub mono: bool,
     /// Fonts by run (`TextSpec::font_runs`).
     pub font_runs: Option<crate::editor::text::FontRuns>,
+    /// A family of its own instead of the UI's (a table's cell: the text where the cell draws it).
+    pub font: Option<&'static str>,
     /// Longest text in chars (longer input is cut off).
     pub max_len: Option<usize>,
     /// Only ASCII digits get in (number inputs).
@@ -142,6 +144,7 @@ impl TextField {
             multiline: false,
             mono: false,
             font_runs: None,
+            font: None,
             max_len: None,
             digits: false,
             tab_events: false,
@@ -570,6 +573,7 @@ impl Render for TextField {
         spec.wrap = self.wrap;
         spec.mono = self.mono;
         spec.font_runs = self.font_runs.clone();
+        spec.font = self.font;
         let el = RichTextElement {
             id: self.id,
             text: RichText::plain(self.text.clone()),

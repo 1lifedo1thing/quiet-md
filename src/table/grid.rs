@@ -187,7 +187,7 @@ impl TableView {
                 let text = typed.map_or(text, str::to_string);
                 // text wraps in the cell, which grows down while it is edited (`edit_overlay`), ⇧⏎ breaking
                 // the line; a number stays on its line, right-aligned
-                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.wrap = ty.textual(); t.shift_newline = ty == FieldType::Text; t.set_text(&text, cx); });
+                self.input.update(cx, |t, cx| { t.align = if ty.numeric() { crate::model::Align::Right } else { crate::model::Align::Left }; t.wrap = ty.textual(); t.shift_newline = ty == FieldType::Text; t.font = Some(crate::theme::DOC_UI_FONT); t.set_text(&text, cx); });
                 window.focus(&self.input.focus_handle(cx), cx);
                 self.editing = Some(cell);
             }
@@ -901,7 +901,8 @@ fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32) -> Op
     // the frame on the same lines as the picked cell's (`cursor_ring`): each side over the grid line and one point out
     Some(div().id("tb-cell-editor").absolute().left(px(x - RING_W)).top(px(y - RING_W)).w(px(cols.w[ci] + 2. * RING_W - 1.)).min_h(px(row_h + 2. * RING_W - 1.)).max_h(px(EDIT_MAX_H))
         .overflow_y_scroll().bg(Theme::bg_body()).border(px(RING_W)).border_color(ring())
-        .pl(px(cell_pad_x())).pr(px(cell_pad_x() - 1.)).py(px((row_h.min(one_line_h()) - 20.) / 2. - 0.5)).child(v.input.clone())
+        // the text exactly where the cell shows it: centred in a one-line row, 10 from the top of a taller one
+        .pl(px(cell_pad_x())).pr(px(cell_pad_x() - 1.)).py(px(if row_h > one_line_h() { 10. } else { (row_h - 21.) / 2. })).child(v.input.clone())
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .into_any_element())
 }
