@@ -353,16 +353,16 @@ impl Workspace {
                     .on_click(cx.listener(|w, ev: &ClickEvent, _, cx| { let pos = w.home.anchor("create-sidebar").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })));
         }
         // 我的文档 (#421) does not fold: the heading is a row of its own, like a folder's, that
-        // opens the 我的文档 page (every root, or the one root's top level). Its 批量操作 and "+"
-        // keep their clicks to themselves. Its wash stops `ROW_GAP` above the first row, as rows do.
+        // opens 主页 on its 我的文档 tab, which lists every top-level folder (主页 is 我的文档).
+        // One page, so one active row: 主页 lights, the heading only answers the pointer. Its
+        // 批量操作 and "+" keep their clicks to themselves. Its wash stops `ROW_GAP` above the
+        // first row, as rows do.
         if idx == 1 {
-            let on = self.view == View::Library;
             return div().h(px(SECTION_H)).pt(px(SECTION_TOP)).flex().child(
                 div().id("section-library").flex_1().h(px(SECTION_H - SECTION_TOP - ROW_GAP)).pl(px(8.)).flex().items_center().rounded(px(ROW_R)).cursor_pointer()
-                    .when(on, |d| d.bg(Theme::sidebar_selected()))
-                    .when(!on, |d| d.hover(|s| s.bg(Theme::sidebar_hover())).when(self.sidebar_drop_top(), |d| d.bg(Theme::sidebar_selected())))
+                    .hover(|s| s.bg(Theme::sidebar_hover())).when(self.sidebar_drop_top(), |d| d.bg(Theme::sidebar_selected()))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(theme::ui_font())).line_height(px(theme::ui_font() + 7.))
-                        .font_weight(FontWeight::SEMIBOLD).text_color(if on { Theme::text() } else { Theme::sidebar_section() }).child(crate::settings::label(title)))
+                        .font_weight(FontWeight::SEMIBOLD).text_color(Theme::sidebar_section()).child(crate::settings::label(title)))
                     .child(trigger("section-batch", "batch").tip(crate::settings::text("批量操作"), None)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(|w, _, _, cx| {
@@ -374,7 +374,7 @@ impl Workspace {
                     .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(|w, ev: &ClickEvent, _, cx| { cx.stop_propagation(); let pos = w.home.anchor("create-sidebar").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
-                    .on_click(cx.listener(|w, _, _, cx| w.show_view(View::Library, cx))),
+                    .on_click(cx.listener(|w, _, _, cx| { w.home.tab = crate::home::HomeTab::Recent; w.home.sort_menu = false; w.show_view(View::Home, cx); })),
             );
         }
         row.child(
