@@ -261,8 +261,8 @@ fn body_hit(e: &Entry, q: &str) -> bool { !q.is_empty() && !e.title.to_lowercase
 /// The glyph of a file titled by its name: Markdown, a 画板; else a page.
 pub(crate) fn file_glyph(m: &crate::store::Meta) -> &'static str {
     match m.kind {
-        crate::store::DocKind::Board => "whiteboard",
-        crate::store::DocKind::Table => "storage",
+        crate::store::DocKind::Board => "board",
+        crate::store::DocKind::Table => "doc-table",
         _ if m.markdown => "doc-md",
         _ => "doc",
     }
