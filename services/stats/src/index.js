@@ -31,7 +31,7 @@
 
 const HOST = 'download.quiet.md', SITE = 'quiet.md';
 const CRAWLER = /bot|crawl|spider|slurp|curl|wget|python|go-http|java\/|headless|preview|monitor|scan/i;
-const PLATFORMS = { 'macos-arm64.zip': 'macos-arm64', 'windows-x64-setup.exe': 'windows-x64', 'macos-x86_64.zip': 'macos-x86_64', 'x86_64.AppImage': 'linux-x86_64' };
+const PLATFORMS = { 'macos-arm64.dmg': 'macos-arm64', 'macos-arm64.zip': 'macos-arm64', 'windows-x64-setup.exe': 'windows-x64', 'macos-x86_64.dmg': 'macos-x86_64', 'macos-x86_64.zip': 'macos-x86_64', 'x86_64.AppImage': 'linux-x86_64' };
 const PAGE = 5000; // Bound each analytics response; split full windows below.
 
 export default {
@@ -133,9 +133,9 @@ async function run(env, source, day, f) {
 export function classify(path, userAgent) {
   let m = path.match(/^\/latest\/update-(.+)\.json$/);
   if (m) return { kind: 'check', platform: m[1] };
-  m = path.match(/^\/latest\/quiet-md-(macos-arm64\.zip|macos-x86_64\.zip|windows-x64-setup\.exe|x86_64\.AppImage)$/);
+  m = path.match(/^\/latest\/quiet-md-(macos-arm64\.(?:dmg|zip)|macos-x86_64\.(?:dmg|zip)|windows-x64-setup\.exe|x86_64\.AppImage)$/);
   if (m) return { kind: 'download', platform: PLATFORMS[m[1]], version: 'latest', channel: 'cdn' };
-  m = path.match(/^\/v(\d+\.\d+\.\d+)\/quiet-md-(\d+\.\d+\.\d+)-(macos-arm64\.zip|macos-x86_64\.zip|windows-x64-setup\.exe|x86_64\.AppImage)$/);
+  m = path.match(/^\/v(\d+\.\d+\.\d+)\/quiet-md-(\d+\.\d+\.\d+)-(macos-arm64\.(?:dmg|zip)|macos-x86_64\.(?:dmg|zip)|windows-x64-setup\.exe|x86_64\.AppImage)$/);
   if (m && m[1] === m[2]) return { kind: 'download', platform: PLATFORMS[m[3]], version: m[1], channel: /^curl\//.test(userAgent || '') ? 'update' : 'cdn' };
   return null;
 }

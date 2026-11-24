@@ -1,5 +1,6 @@
 #!/bin/bash
-# Build, sign, notarize and package this checkout; never launches the app.
+# Build, sign, notarize and package this checkout as a .dmg (the download) and a .zip (the in-app
+# updater's package, latest/update-*.json); never launches the app.
 # MACOS_TARGET=x86_64-apple-darwin cross-compiles Intel on Apple Silicon.
 # SIGNING_IDENTITY=- creates an ad-hoc signed, unnotarized CI package only.
 set -euo pipefail
@@ -108,4 +109,44 @@ archive="$out/quiet-md-$version-macos-$arch$suffix.zip"
 ditto -c -k --norsrc --noextattr --noqtn --keepParent "$app" "$archive"
 if unzip -l "$archive" | grep '/\._' >/dev/null; then echo "AppleDouble entries in $archive" >&2; exit 1; fi
 (cd "$out" && shasum -a 256 "$(basename "$archive")" > "$(basename "$archive").sha256")
-printf 'Release artifact: %s\nDebug symbols (keep, do not publish): %s\n' "$archive" "$out/dSYM-quiet-md-$version-macos-$arch.zip"
+# The download people install from: the same stapled .app beside an /Applications link to drag it onto,
+# LZMA-compressed (ULMO, macOS 10.15+), about a fifth smaller than the zip.
+# The zip above stays the in-app updater's package (latest/update-*.json); both hold the same bundle.
+dmg="$out/quiet-md-$version-macos-$arch$suffix.dmg"
+stage="$out/dmg-root"
+mkdir "$stage"
+ditto --norsrc --noextattr --noqtn "$app" "$stage/quiet.md.app"
+ln -s /Applications "$stage/Applications"
+# hdiutil now and then fails with "Resource busy" on CI runners; a retry gets through.
+for try in 1 2 3; do
+  hdiutil create -quiet -volname "Quiet.md" -srcfolder "$stage" -fs HFS+ -format ULMO "$dmg" && break
+  [ $try = 3 ] && exit 1; rm -f "$dmg"; sleep 5
+done
+rm -rf "$stage"
+if [ "$SIGNING_IDENTITY" = - ]; then
+  codesign --force --sign - "$dmg"
+else
+  codesign --force --timestamp --sign "$SIGNING_IDENTITY" "$dmg"
+  xcrun notarytool submit "$dmg" --keychain-profile "$NOTARY_PROFILE" --wait --output-format json > "$out/notarization-dmg.json"
+  python3 - "$out/notarization-dmg.json" <<'PYTHON'
+import json, sys
+result = json.load(open(sys.argv[1]))
+if result.get("status") != "Accepted":
+    raise SystemExit("DMG notarization was not accepted; see " + sys.argv[1])
+print("DMG notarization accepted:", result["id"])
+PYTHON
+  xcrun stapler staple "$dmg"
+  xcrun stapler validate "$dmg"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+fi
+codesign --verify --strict --verbose=2 "$dmg"
+hdiutil verify -quiet "$dmg"
+# Mounted read-only, the copy inside must still pass the strict signature check.
+mount=$(mktemp -d)
+hdiutil attach -quiet -readonly -nobrowse -noautoopen -mountpoint "$mount" "$dmg"
+check=0
+codesign --verify --deep --strict "$mount/quiet.md.app" && [ -L "$mount/Applications" ] || check=1
+hdiutil detach -quiet "$mount"; rmdir "$mount"
+[ $check = 0 ] || { echo "$dmg: the app inside does not verify" >&2; exit 1; }
+(cd "$out" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
+printf 'Release artifacts: %s (download), %s (in-app update)\nDebug symbols (keep, do not publish): %s\n' "$dmg" "$archive" "$out/dSYM-quiet-md-$version-macos-$arch.zip"
