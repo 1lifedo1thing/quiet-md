@@ -403,6 +403,9 @@ struct Synced {
     /// Read, not written, since: `seen` is what the files said, which the
     /// index need not say back field for field, so the next write compares all.
     whole: bool,
+    /// Entries `list` left out because their files are not here (yet): the
+    /// disk is memory plus these while none of their files has arrived.
+    absent: HashSet<String>,
 }
 
 /// What switching documents remembers in memory only: each write of it is an
@@ -1380,7 +1383,7 @@ impl Store {
         } else if v5 {
             let mut warnings = vec![];
             store.load_meta(&mut warnings);
-            store.mark_synced(true);
+            store.mark_synced(true, HashSet::new());
             store.warnings.extend(warnings);
             store.load_parsed();
         } else {
@@ -1470,8 +1473,11 @@ impl Store {
     }
 
     /// Whether memory is still as `s` found it (`Synced`).
+    /// An entry left out whose file has arrived is read in again, so the file
+    /// keeps what its device set.
     fn holds(&self, s: &Synced) -> bool {
         s.read == self.merged.borrow().read && s.local == self.local_stamp() && s.index == self.index && s.foreign == self.foreign && s.trash == self.trash
+            && !s.absent.iter().any(|k| self.abs(k.trim_end_matches('/')).fs_exists())
     }
 
     /// `holds` checked against reading everything again: the same entries by
@@ -1480,7 +1486,8 @@ impl Store {
     fn check_held(&self) {
         let merged = self.merged.borrow();
         let mut disk = merged.disk_index();
-        disk.retain(|k, _| listed(k));
+        let absent = self.synced.borrow().as_ref().map(|s| s.absent.clone()).unwrap_or_default();
+        disk.retain(|k, _| listed(k) && !absent.contains(k));
         let mut fresh = self.from_disk(&disk, &self.read_local());
         // `begin_write` puts back the times not written yet either way.
         for (id, t) in &self.view.borrow().opened { if let Some(m) = fresh.get_mut(id) { m.opened = m.opened.max(*t); } }
@@ -1501,10 +1508,11 @@ impl Store {
         assert_eq!(shape(&self.index), shape(&fresh), "load_meta skipped, but reading again differs");
     }
 
-    /// Memory and the disk agree now: `whole` after reading, not after writing.
-    fn mark_synced(&self, whole: bool) {
+    /// Memory and the disk agree now, but for `absent` (`Synced`): `whole`
+    /// after reading, not after writing.
+    fn mark_synced(&self, whole: bool, absent: HashSet<String>) {
         let read = self.merged.borrow().read;
-        *self.synced.borrow_mut() = Some(Synced { read, local: self.local_stamp(), index: self.index.clone(), foreign: self.foreign.clone(), trash: self.trash.clone(), whole });
+        *self.synced.borrow_mut() = Some(Synced { read, local: self.local_stamp(), index: self.index.clone(), foreign: self.foreign.clone(), trash: self.trash.clone(), whole, absent });
     }
 
     /// This computer's file about the library as `meta::files` tells a device file.
@@ -1519,6 +1527,8 @@ impl Store {
     fn save_meta(&self) -> Result<()> {
         // Not known again until written.
         let synced = self.synced.borrow_mut().take();
+        // Written or not, what `list` left out stays out (`seen` has none of it).
+        let absent = synced.as_ref().map(|s| s.absent.clone()).unwrap_or_default();
         let (now, gone, changes) = match synced.as_ref().filter(|s| !s.whole && s.foreign == self.foreign) {
             Some(s) => self.meta_changes(s),
             None => {
@@ -1546,7 +1556,7 @@ impl Store {
             if self.merged.borrow().read != read { return self.save_local(&self.local_state()) }
         }
         self.save_local(&self.local_state())?;
-        self.mark_synced(false);
+        self.mark_synced(false, absent);
         Ok(())
     }
 
@@ -1642,7 +1652,7 @@ impl Store {
         let before = std::mem::take(&mut self.index);
         self.load_meta(&mut vec![]);
         self.reclaim_open(before);
-        self.mark_synced(true);
+        self.mark_synced(true, HashSet::new());
         Ok(())
     }
 
@@ -1924,7 +1934,7 @@ impl Store {
         }
         if !self.v6 && let Some(trash) = reread(&self.trash_index_file()) { self.trash = trash; }
         self.apply_pending_opened();
-        if read { self.mark_synced(true); }
+        if read { self.mark_synced(true, HashSet::new()); }
         Ok(lock)
     }
 
@@ -2280,14 +2290,14 @@ impl Store {
         let mut keys: HashSet<String> = found.dirs.iter().map(|d| format!("{d}/")).collect();
         keys.extend(found.docs.iter().cloned());
         keys.extend(found.pending.iter().cloned());
-        let before = disk.len();
+        let mut left_out = HashSet::new();
         if !found.partial {
             // Not here (yet, or gone outside the app): left out, not removed, so
             // another device's entry for a file still on its way keeps its settings.
             let seen = self.seen.get_mut();
-            disk.retain(|k, a| keys.contains(k) || { seen.remove(&a.id); false });
+            disk.retain(|k, a| keys.contains(k) || { seen.remove(&a.id); left_out.insert(k.clone()); false });
         }
-        let disk_left_out = disk.len() != before;
+        let disk_left_out = !left_out.is_empty();
         let mut dirty = disk_left_out;
         for key in &keys {
             if disk.contains_key(key) { continue; }
@@ -2363,9 +2373,11 @@ impl Store {
             let _ = self.save_index();
         }
         // Entries for files not here are left out of memory but not of the
-        // disk: the next write reads them back in (a file arriving then keeps
-        // what its device set), so memory and the disk differ until then.
-        if disk_left_out { *self.synced.get_mut() = None; }
+        // disk: memory and the disk still agree but for them (`Synced::absent`),
+        // so the next write reads nothing again until one of their files
+        // arrives (and then keeps what its device set) or a device file changes.
+        // Written just above (`save_index` marked memory as the disk); unwritten, read next time.
+        if disk_left_out && _lock.is_some() && let Some(s) = self.synced.get_mut() { s.absent.extend(left_out); }
         out
     }
 
@@ -4228,6 +4240,32 @@ mod tests {
         // Another device writes: the next look reads again, and only that once.
         other_pins(&lib, "bbbb", &x, true);
         assert!(pinned(&mut a, &x));
+        assert_eq!(loads(), n + 1);
+        a.list();
+        assert_eq!(loads(), n + 1);
+    }
+
+    #[test]
+    fn a_file_not_here_yet_keeps_nothing_read_again_until_it_arrives() {
+        // Another device's entry for a file still on its way (or gone there).
+        let lib = Lib::new("meta-absent");
+        let mut a = Store::open_as(lib.0.clone(), &library_key(&lib.0), dev("aaaa")).unwrap();
+        let x = a.create_from(&doc("甲")).unwrap();
+        meta::commit(&lib.0, &dev("bbbb"), &Default::default(), vec![("far".into(), "path".into(), "远方.md".into()), ("far".into(), "pinned".into(), true.into())], &mut vec![]).unwrap();
+        assert!(a.list().iter().all(|e| e.id != "far"), "not here: not listed");
+        let n = loads();
+        a.list();
+        a.list();
+        assert_eq!(loads(), n, "only its file is missing: nothing read again");
+        // This device's writes keep it out of memory and leave its entry on disk.
+        a.set_starred(&x, true).unwrap();
+        a.list();
+        assert_eq!(loads(), n);
+        assert_eq!(meta::load(&lib.0, "aaaa", &mut vec![]).get("far", "pinned"), Some(&serde_json::Value::Bool(true)));
+        // The file arrives: read again once, and it keeps what its device set.
+        crate::vfs::write(lib.0.join("远方.md"), "# 远方\n").unwrap();
+        let far = a.list().into_iter().find(|e| e.id == "far").expect("arrived: listed by its device's id");
+        assert!(far.meta.pinned);
         assert_eq!(loads(), n + 1);
         a.list();
         assert_eq!(loads(), n + 1);
