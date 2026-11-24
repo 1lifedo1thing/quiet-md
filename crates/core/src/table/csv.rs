@@ -126,7 +126,8 @@ pub fn import(base: &mut Base, name: &str, text: &str) -> Table {
     let now = field::now();
     let mut ids = base.take_ids();
     for (row, ord) in rows.iter().zip(super::order::keys_between(None, None, rows.len())) {
-        let mut r = Record { id: ids.fresh(), created: now, modified: now, auto: t.next_auto, ord, ..Default::default() };
+        let by = Some(base.writer.0.clone());
+        let mut r = Record { id: ids.fresh(), created: now, modified: now, created_by: by.clone(), updated_by: by, auto: t.next_auto, ord, ..Default::default() };
         for (f, cell) in t.fields.iter_mut().zip(row) { r.set(f.id, field::parse_new(f, cell, &mut ids)); }
         t.records.push(r);
         t.next_auto += 1;

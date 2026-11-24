@@ -96,6 +96,12 @@ impl FieldType {
     }
 
     pub fn is_date(self) -> bool { matches!(self, FieldType::Date | FieldType::CreatedTime | FieldType::ModifiedTime) }
+
+    /// Can be marked 唯一键 (`FieldOpts::unique`): a value people key records by.
+    /// Not what is computed (自动编号 is unique as it is), dates, links or files.
+    pub fn keyable(self) -> bool {
+        matches!(self, FieldType::Text | FieldType::Number | FieldType::Url | FieldType::Email | FieldType::Phone | FieldType::Barcode | FieldType::SingleSelect)
+    }
 }
 
 /// A 单选 / 多选 / 人员 option. `color` is a slot of the tag palette.
@@ -205,6 +211,10 @@ pub struct FieldOpts {
     /// 新记录's value, as text the field parses (`field::parse`).
     #[serde(skip_serializing_if = "String::is_empty")]
     pub default: String,
+    /// 唯一键: records are told apart by this field's value (`Table::find_unique`).
+    /// Only marked: nothing stops two records sharing a value. `FieldType::keyable` fields only.
+    #[serde(skip_serializing_if = "is_default")]
+    pub unique: bool,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool { *v == T::default() }
@@ -279,6 +289,9 @@ pub struct Record {
     /// Wall-clock milliseconds.
     pub created: i64,
     pub modified: i64,
+    /// Who made it and who changed it last (`Base::writer`); None: not known (a row another program wrote).
+    pub created_by: Option<String>,
+    pub updated_by: Option<String>,
     /// 自动编号's number: handed out once, never reused.
     pub auto: u64,
     /// Sort key of the manual order (`order.rs`): rises strictly along `Table::records`.
@@ -473,6 +486,28 @@ impl Table {
     pub fn view_mut(&mut self, id: ViewId) -> Option<&mut View> { self.views.iter_mut().find(|v| v.id == id) }
     pub fn record(&self, id: RecId) -> Option<&Record> { self.records.iter().find(|r| r.id == id) }
     pub fn record_mut(&mut self, id: RecId) -> Option<&mut Record> { self.records.iter_mut().find(|r| r.id == id) }
+
+    /// The first record whose value of `field` is `v` (by `unique_key`): what an
+    /// upsert by 唯一键 updates. None for an empty value or a field that can't be a key.
+    pub fn find_unique(&self, field: FieldId, v: &Value) -> Option<RecId> {
+        let f = self.field(field)?;
+        let k = unique_key(f, v)?;
+        self.records.iter().find(|r| unique_key(f, r.get(field)).as_ref() == Some(&k)).map(|r| r.id)
+    }
+
+    /// The records that share a value of `field` with another, a group per value,
+    /// in row order (groups by their first record). Empty values share nothing.
+    pub fn duplicates(&self, field: FieldId) -> Vec<Vec<RecId>> {
+        let Some(f) = self.field(field) else { return vec![] };
+        let mut groups: Vec<Vec<RecId>> = vec![];
+        let mut at: HashMap<Key, usize> = HashMap::new();
+        for r in &self.records {
+            let Some(k) = unique_key(f, r.get(field)) else { continue };
+            match at.get(&k) { Some(&i) => groups[i].push(r.id), None => { at.insert(k, groups.len()); groups.push(vec![r.id]); } }
+        }
+        groups.retain(|g| g.len() > 1);
+        groups
+    }
     pub fn index_of(&self, id: RecId) -> Option<usize> { self.records.iter().position(|r| r.id == id) }
 
     /// The fields a view shows, in its order.
@@ -510,6 +545,26 @@ impl Table {
 }
 
 /// `want`, or `want 2`, `want 3`… until `ok`.
+/// A value as a 唯一键 compares: text trimmed, then exactly (case counts);
+/// numbers by value (1 is 1.0); a 单选 by its option's name. None: empty, or not a key.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Key { Text(String), Number(u64) }
+
+pub fn unique_key(f: &Field, v: &Value) -> Option<Key> {
+    let text = |s: &str| Some(s.trim()).filter(|s| !s.is_empty()).map(|s| Key::Text(s.to_string()));
+    match (f.ty, v) {
+        (t, _) if !t.keyable() => None,
+        // + 0.0: -0 is 0
+        (FieldType::Number, Value::Number(n)) if n.is_finite() => Some(Key::Number((n + 0.).to_bits())),
+        (FieldType::Number, Value::Text(s)) => super::field::parse_number(s).filter(|n| n.is_finite()).map(|n| Key::Number((n + 0.).to_bits())),
+        (FieldType::SingleSelect, Value::Select(ids)) => ids.first().and_then(|id| f.option(*id)).and_then(|o| text(&o.name)),
+        (FieldType::Number, _) => None,
+        (_, Value::Text(s)) => text(s),
+        (_, Value::Number(n)) => text(&super::field::plain_number(*n)),
+        _ => None,
+    }
+}
+
 pub fn free_name(want: &str, ok: impl Fn(&str) -> bool) -> String {
     // what no file can carry as a name is dropped first (`sqlite_name_ok`), so a number always helps
     let want = want.trim().trim_start_matches('_').replace('\0', "");
@@ -554,11 +609,25 @@ impl std::fmt::Debug for IdGen {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "IdGen({} taken)", self.taken.len()) }
 }
 
+/// Who edits (`Record::created_by` / `updated_by`): `user` in the app; an
+/// agent writing through the app's interface gives its name (`agent:<name>`).
+#[derive(Clone)]
+pub struct Writer(pub String);
+
+impl Default for Writer { fn default() -> Writer { Writer("user".into()) } }
+// who is editing now, not content
+impl PartialEq for Writer { fn eq(&self, _: &Writer) -> bool { true } }
+impl std::fmt::Debug for Writer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result { write!(f, "Writer({:?})", self.0) }
+}
+
 /// One file: its tables, in tab order.
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Base {
     pub tables: Vec<Table>,
     pub ids: IdGen,
+    /// Who the edits made now are by: not saved as such, stamped on the records they touch.
+    pub writer: Writer,
 }
 
 impl Base {
@@ -599,7 +668,7 @@ impl Base {
         }
         // the table isn't in the base yet: its ids only have to differ from each other
         for ord in super::order::keys_between(None, None, 5) {
-            t.records.push(Record { id: self.ids.fresh(), created: now, modified: now, auto: t.next_auto, ord, ..Default::default() });
+            t.records.push(Record { id: self.ids.fresh(), created: now, modified: now, created_by: Some(self.writer.0.clone()), updated_by: Some(self.writer.0.clone()), auto: t.next_auto, ord, ..Default::default() });
             t.next_auto += 1;
         }
         t.views.push(View { id: self.new_id(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
@@ -623,5 +692,76 @@ impl Base {
         let t = b.blank_table_in(name, column, now);
         b.tables.push(t);
         b
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unique_keys_find_and_clash() {
+        let mut d = super::super::Doc::new(Base::blank_seeded(0, 3));
+        let t = d.base.tables[0].id;
+        let text = d.base.tables[0].fields[0].id;
+        let num = d.add_field(t, None, "数", FieldType::Number, FieldOpts::default()).unwrap();
+        let pick = d.add_field(t, None, "选", FieldType::SingleSelect, FieldOpts::default()).unwrap();
+        let ids: Vec<RecId> = d.base.tables[0].records.iter().map(|r| r.id).collect();
+        let s = |x: &str| Value::Text(x.into());
+        d.paste(t, &ids, &[text, num, pick], &[
+            vec!["https://x.com/1".into(), "1".into(), "红".into()],
+            vec![" https://x.com/1 ".into(), "1.0".into(), "红".into()],
+            vec!["HTTPS://x.com/1".into(), "2".into(), "蓝".into()],
+            vec!["   ".into(), "".into(), "".into()],
+            vec!["".into(), "-0".into(), "".into()],
+        ]);
+        let tb = &d.base.tables[0];
+        // text: trimmed, then exact (case counts); empty finds nothing
+        assert_eq!(tb.find_unique(text, &s("https://x.com/1")), Some(ids[0]));
+        assert_eq!(tb.find_unique(text, &s("  https://x.com/1\n")), Some(ids[0]));
+        assert_eq!(tb.find_unique(text, &s("HTTPS://x.com/1")), Some(ids[2]));
+        assert_eq!(tb.find_unique(text, &s("https://X.com/1")), None);
+        assert_eq!((tb.find_unique(text, &s("   ")), tb.find_unique(text, &Value::Empty)), (None, None));
+        assert_eq!(tb.duplicates(text), [vec![ids[0], ids[1]]]);
+        // numbers by value: 1 is 1.0, -0 is 0; text that reads as one finds it
+        assert_eq!(tb.find_unique(num, &Value::Number(1.)), Some(ids[0]));
+        assert_eq!(tb.find_unique(num, &s("1.00")), Some(ids[0]));
+        assert_eq!(tb.find_unique(num, &Value::Number(0.)), Some(ids[4]));
+        assert_eq!(tb.find_unique(num, &s("一")), None);
+        assert_eq!(tb.duplicates(num), [vec![ids[0], ids[1]]]);
+        // a 单选 by its option's name
+        let red = tb.field(pick).unwrap().option_named("红").unwrap().id;
+        assert_eq!(tb.find_unique(pick, &Value::Select(vec![red])), Some(ids[0]));
+        assert_eq!(tb.find_unique(pick, &s("蓝")), Some(ids[2]));
+        assert_eq!(tb.duplicates(pick), [vec![ids[0], ids[1]]]);
+        // not a key: nothing found, nothing clashes
+        let made = d.add_field(t, None, "建", FieldType::CreatedTime, FieldOpts::default()).unwrap();
+        assert_eq!((d.base.tables[0].find_unique(made, &Value::Date(0)), d.base.tables[0].duplicates(made).len()), (None, 0));
+    }
+
+    #[test]
+    fn the_unique_mark_is_undone_and_dropped_with_the_type() {
+        let mut d = super::super::Doc::new(Base::blank_seeded(0, 4));
+        let t = d.base.tables[0].id;
+        let f = d.base.tables[0].fields[1].id;
+        let unique = |d: &super::super::Doc| d.base.tables[0].field(f).unwrap().opts.unique;
+        assert!(d.set_unique(t, f, true) && unique(&d));
+        assert!(!d.set_unique(t, f, true));
+        // only `_fields` changes: the table's rows are left alone
+        assert!(d.dirty.meta && d.dirty.schema.is_empty());
+        d.undo();
+        assert!(!unique(&d));
+        d.redo();
+        assert!(unique(&d));
+        // to a type that can't be a key, the mark goes; it doesn't come back with the type
+        let mut g = d.base.tables[0].field(f).unwrap().clone();
+        g.ty = FieldType::Date;
+        assert!(d.change_field(t, g.clone()) && !unique(&d));
+        let mut g = d.base.tables[0].field(f).unwrap().clone();
+        g.ty = FieldType::Text;
+        assert!(d.change_field(t, g) && !unique(&d));
+        let day = d.add_field(t, None, "日", FieldType::Date, FieldOpts { unique: true, ..Default::default() }).unwrap();
+        assert!(!d.set_unique(t, day, true));
+        assert!(!d.base.tables[0].fields.last().unwrap().opts.unique);
     }
 }
