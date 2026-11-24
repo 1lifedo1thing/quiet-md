@@ -107,7 +107,8 @@ New blocks from Markdown; at the end by default. DOC#REF alone means
 --after REF. --into puts them inside REF (a list item, quote, callout,
 column) after its last child; --end-of at the end of heading REF's section.
 A document that is one empty line is replaced. [[path or title]] mentions
-another document.
+another document: in its own root first, then in the other roots (several
+there: ambiguous; write [[id]]).
 
   quiet insert 周报 --after '#3~k7f2' --md '- [ ] 补测试'
   quiet insert 方案 --end-of 风险 --md '- 许可证需要审核，见 [[法务/清单]]'"),

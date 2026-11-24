@@ -37,7 +37,8 @@ quiet run script.js                    a JavaScript script against `lib`: one tr
 ```
 
 A document is its path (`工作/周报`, extension optional) or title. New content is
-Markdown; `[[path or title]]` links to another document. Every write takes
+Markdown; `[[path or title]]` links to another document (this root's first,
+then the other roots'; `[[id]]` when a name is ambiguous). Every write takes
 `--dry-run`. Use `quiet run` instead of many commands when the steps do not
 need your judgement in between.
 

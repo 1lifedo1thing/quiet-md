@@ -91,8 +91,13 @@ quotes, code fences, tables, links, **bold** and so on; `--md -` reads stdin.
 **Links to other documents** (@mentions, which follow a document when it
 moves and show as backlinks) are written `[[path or title]]`, e.g.
 `见 [[项目/方案]]`; a Markdown link to a library file (`[方案](项目/方案.xml)`)
-becomes one too. Reading as Markdown writes mentions back as `[[path]]`, so
-copied sections keep their links.
+becomes one too. With several roots, `[[…]]` looks in the document's own root
+first (a new document's: the root it lands in), then in the others, `--root`
+or not; a name only one other document has is that one, and several are
+`ambiguous` (the error lists them with root and id: write the id, `[[id]]`).
+Reading as Markdown writes mentions back as `[[path]]`, or as `[[id]]` when
+the path would find another document from here, so copied sections keep
+their links.
 **Where the library is.** Every folder the user has open in Quiet.md on
 this computer (its sidebar's roots; `quiet roots` lists them, and says why
 one is unavailable). Documents are found in any of them; `ls` and `find`

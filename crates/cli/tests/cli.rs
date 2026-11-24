@@ -532,13 +532,19 @@ fn finished_days_are_sent_and_forgotten() {
 /// Two roots, as the app keeps them: folders `Work` and `Home` and a
 /// `roots.json` of their own (`QUIET_MD_ROOTS`, so this computer's list is untouched).
 fn two_roots(work: &[(&str, &str)], home: &[(&str, &str)]) -> (PathBuf, PathBuf, PathBuf) {
+    let (mut dirs, file) = roots(&[("Work", work), ("Home", home)]);
+    (dirs.remove(0), dirs.remove(0), file)
+}
+
+/// Roots named and filled as given, in that order, and their `roots.json`.
+fn roots(list: &[(&str, &[(&str, &str)])]) -> (Vec<PathBuf>, PathBuf) {
     let base = library(&[]).with_extension("roots");
     let _ = std::fs::remove_dir_all(&base);
     let mut dirs = vec![];
-    for (name, docs) in [("Work", work), ("Home", home)] {
+    for (name, docs) in list {
         let dir = base.join(name);
         let mut store = Store::open_at(dir.clone()).unwrap();
-        for (title, md) in docs {
+        for (title, md) in *docs {
             let blocks = fdl_core::paste::markdown_to_blocks(md, fdl_core::paste::Off { file: true, ..Default::default() });
             store.create_from(&Document { title: RichText::plain(*title), blocks, ..Default::default() }).unwrap();
         }
@@ -547,7 +553,7 @@ fn two_roots(work: &[(&str, &str)], home: &[(&str, &str)]) -> (PathBuf, PathBuf,
     let roots = serde_json::json!({ "v": 1, "roots": dirs.iter().enumerate().map(|(i, d)| serde_json::json!({ "key": format!("k{i}"), "path": d })).collect::<Vec<_>>() });
     let file = base.join("roots.json");
     std::fs::write(&file, roots.to_string()).unwrap();
-    (dirs.remove(0), dirs.remove(0), file)
+    (dirs, file)
 }
 
 /// `quiet` on the roots in `file`, as it runs beside the app (no --library).
@@ -654,4 +660,53 @@ fn a_missing_root_is_listed_and_the_rest_work() {
     std::fs::write(&file, r#"{"v":1,"roots":[]}"#).unwrap();
     let o = roots_run(&file, &["ls"]);
     assert!(String::from_utf8_lossy(&o.stderr).contains("error[no_library]"));
+}
+
+#[test]
+fn wiki_links_look_in_their_own_root_first() {
+    let (dirs, file) = roots(&[
+        ("Work", &[("Plan", "Ship it."), ("Notes", "Today.")]),
+        ("Home", &[("Plan", "Plant tomatoes."), ("Garden", "Beds."), ("Recipes", "Bread.")]),
+        ("Attic", &[("Recipes", "Old ones.")]),
+    ]);
+    let links = |doc: &str, extra: &[&str]| -> Vec<String> {
+        let mut a = extra.to_vec();
+        a.extend(["links", doc]);
+        roots_json(&file, &a)["out"].as_array().unwrap().iter().map(|l| l["to"].as_str().unwrap().to_string()).collect()
+    };
+    // The same title here and in another root: this root's.
+    roots_ok(&file, &["insert", "Notes", "--md", "See [[Plan]]."]);
+    assert_eq!(links("Notes", &[]), ["Plan.xml (in Work)"]);
+    // Only in another root: that one, --root or not.
+    roots_ok(&file, &["--root", "Work", "insert", "Notes", "--md", "And [[Garden]]."]);
+    assert_eq!(links("Notes", &[]), ["Plan.xml (in Work)", "Garden.xml (in Home)"]);
+    // In two other roots: ambiguous, both named with their root and id, nothing written.
+    let before = std::fs::read_to_string(dirs[0].join("Notes.xml")).unwrap();
+    let o = roots_run(&file, &["insert", "Notes", "--md", "Bake from [[Recipes]]."]);
+    assert_eq!(o.status.code(), Some(3));
+    let err = String::from_utf8_lossy(&o.stderr);
+    let ids: Vec<String> = roots_json(&file, &["ls"]).as_array().unwrap().iter().filter(|e| e["path"] == "Recipes.xml").map(|e| e["id"].as_str().unwrap().to_string()).collect();
+    assert!(err.contains("error[ambiguous]") && err.contains("(in Home, id ") && err.contains("(in Attic, id ") && ids.iter().all(|id| err.contains(id.as_str())) && err.contains("[["), "{err}");
+    assert_eq!(std::fs::read_to_string(dirs[0].join("Notes.xml")).unwrap(), before);
+    // An id names a document in any root.
+    let home_plan = roots_json(&file, &["ls"]).as_array().unwrap().iter().find(|e| e["root"] == "Home" && e["path"] == "Plan.xml").unwrap()["id"].as_str().unwrap().to_string();
+    roots_ok(&file, &["insert", "Notes", "--md", &format!("The other [[{home_plan}]].")]);
+    // Read out and written back, the mentions point where they did: Home's
+    // Plan by id (`[[Plan]]` would be Work's), Garden by its path.
+    let md = roots_json(&file, &["--root", "Work", "read", "Notes"])["text"].as_str().unwrap().to_string();
+    assert!(md.contains("[[Plan]]") && md.contains("[[Garden]]") && md.contains(&format!("[[{home_plan}]]")), "{md}");
+    // A new document has no root yet: its links look in the root it lands in.
+    roots_ok(&file, &["new", "Copy", "--md", &md]);
+    assert_eq!(links("Copy", &[]), links("Notes", &[]));
+    assert_eq!(links("Copy", &[]), ["Plan.xml (in Work)", "Garden.xml (in Home)", "Plan.xml (in Home)"]);
+    roots_ok(&file, &["--root", "Attic", "new", "Shelf", "--md", "[[Recipes]] and [[Garden]]"]);
+    assert_eq!(links("Shelf", &["--root", "Attic"]), ["Recipes.xml", "Garden.xml"]);
+    // Several in its own root: ambiguous as before, even with one elsewhere.
+    for f in ["A", "B"] { roots_ok(&file, &["--root", "Attic", "mkdir", f]); roots_ok(&file, &["new", "Box", "--in", f]); }
+    roots_ok(&file, &["--root", "Home", "new", "Box"]);
+    let o = roots_run(&file, &["insert", "Shelf", "--md", "[[Box]]"]);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("error[ambiguous]") && err.contains("A/Box.xml") && err.contains("B/Box.xml") && !err.contains("in Home"), "{err}");
+    // From Work, Box is only elsewhere, in two roots.
+    assert!(String::from_utf8_lossy(&roots_run(&file, &["insert", "Notes", "--md", "[[Box]]"]).stderr).contains("other roots match"));
 }

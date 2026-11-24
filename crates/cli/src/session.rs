@@ -28,6 +28,9 @@ pub struct Session {
     pub only: Option<String>,
     /// Every document and folder of the roots this run sees, each with its root's key.
     pub(crate) entries: Vec<Entry>,
+    /// Every document and folder of every open root, `--root` or not: what
+    /// `[[…]]` may point at (`find_linked`).
+    pub(crate) all: Vec<Entry>,
     pub(crate) docs: Vec<Open>,
     pub(crate) tables: Vec<crate::tables::OpenTable>,
     pub(crate) pending: Vec<Pending>,
@@ -86,6 +89,23 @@ pub(crate) fn need<'a>(a: &'a Value, k: &str) -> R<&'a str> { arg(a, k).ok_or_el
 pub(crate) fn flag(a: &Value, k: &str) -> bool { a.get(k).and_then(Value::as_bool).unwrap_or(false) }
 pub(crate) fn num(a: &Value, k: &str) -> Option<usize> { a.get(k).and_then(Value::as_u64).map(|n| n as usize) }
 
+/// The one document of `docs` path or title `s` names: Ok(None) for none,
+/// Err with them all for several.
+fn match_docs<'a>(docs: impl Iterator<Item = &'a Entry> + Clone, s: &str) -> Result<Option<&'a Entry>, Vec<&'a Entry>> {
+    let by_path: Vec<&Entry> = docs.clone().filter(|e| e.meta.rel == s).collect();
+    if by_path.len() == 1 { return Ok(Some(by_path[0])); }
+    if by_path.len() > 1 { return Err(by_path); }
+    let stem = |rel: &str| rel.rsplit_once('.').map_or(rel.to_string(), |(a, _)| a.to_string());
+    let by_stem: Vec<&Entry> = docs.clone().filter(|e| stem(&e.meta.rel) == s).collect();
+    if by_stem.len() == 1 { return Ok(Some(by_stem[0])); }
+    // The title, or the file's name without folder and extension (titles
+    // with characters a file name cannot hold differ from it).
+    let by_title: Vec<&Entry> = docs.filter(|e| e.title == s || stem(e.meta.rel.rsplit('/').next().unwrap_or("")) == s).collect();
+    if by_title.len() == 1 { return Ok(Some(by_title[0])); }
+    let many = if by_stem.len() > 1 { by_stem } else { by_title };
+    if many.len() > 1 { Err(many) } else { Ok(None) }
+}
+
 /// A root's library as it is: one whose folder is gone is an error, never
 /// made anew, and copies a crash left stay for the app to restore and report.
 fn open_root(e: &RootEntry) -> anyhow::Result<Store> {
@@ -125,7 +145,7 @@ impl Session {
         if ws.roots.is_empty() {
             return Err(fail("no_library", "Quiet.md has no folders open on this computer")).map_err(|f| f.hint("add a folder in Quiet.md (the + beside the sidebar's folders), or pass --library DIR"));
         }
-        let mut s = Session { ws, only: None, entries: vec![], docs: vec![], tables: vec![], pending: vec![], assets: vec![], sandbox: false };
+        let mut s = Session { ws, only: None, entries: vec![], all: vec![], docs: vec![], tables: vec![], pending: vec![], assets: vec![], sandbox: false };
         if let Some(spec) = root { s.only = Some(s.pick_root(spec)?); }
         s.refresh();
         Ok(s)
@@ -150,7 +170,8 @@ impl Session {
     fn root_names(&self) -> String { self.ws.roots.iter().map(|r| r.name()).collect::<Vec<_>>().join(", ") }
 
     pub(crate) fn refresh(&mut self) {
-        self.entries = self.ws.list();
+        self.all = self.ws.list();
+        self.entries = self.all.clone();
         if let Some(k) = &self.only { self.entries.retain(|e| &e.root == k); }
     }
 
@@ -196,7 +217,7 @@ impl Session {
         if roots.len() > 1 { f.hint(format!("they are in different roots: add --root ROOT (e.g. --root {:?}), or pass the document's id", roots[0])) } else { f.hint("pass the path") }
     }
 
-    fn docs_list(&self) -> impl Iterator<Item = &Entry> { self.entries.iter().filter(|e| e.meta.folder.is_none() && !e.meta.local()) }
+    fn docs_list(&self) -> impl Iterator<Item = &Entry> + Clone { self.entries.iter().filter(|e| e.meta.folder.is_none() && !e.meta.local()) }
 
     pub(crate) fn entry_by_id(&self, id: &str) -> Option<&Entry> { self.entries.iter().find(|e| e.id == id) }
 
@@ -205,22 +226,57 @@ impl Session {
         let s = spec.trim().trim_start_matches("./").trim_start_matches('/');
         // An id finds its document in whichever root it is (W14).
         if let Some(e) = self.docs_list().find(|e| e.id == s) { return Ok(e.id.clone()); }
-        let by_path: Vec<&Entry> = self.docs_list().filter(|e| e.meta.rel == s).collect();
-        if by_path.len() == 1 { return Ok(by_path[0].id.clone()); }
-        if by_path.len() > 1 { return Err(self.ambiguous("documents", s, &by_path)); }
-        let stem = |rel: &str| rel.rsplit_once('.').map_or(rel.to_string(), |(a, _)| a.to_string());
-        let by_stem: Vec<&Entry> = self.docs_list().filter(|e| stem(&e.meta.rel) == s).collect();
-        if by_stem.len() == 1 { return Ok(by_stem[0].id.clone()); }
-        // The title, or the file's name without folder and extension (titles
-        // with characters a file name cannot hold differ from it).
-        let by_title: Vec<&Entry> = self.docs_list().filter(|e| e.title == s || stem(e.meta.rel.rsplit('/').next().unwrap_or("")) == s).collect();
-        if by_title.len() == 1 { return Ok(by_title[0].id.clone()); }
-        let many = if by_stem.len() > 1 { by_stem } else { by_title };
-        if many.len() > 1 { return Err(self.ambiguous("documents", s, &many)); }
+        match match_docs(self.docs_list(), s) {
+            Ok(Some(e)) => return Ok(e.id.clone()),
+            Err(many) => return Err(self.ambiguous("documents", s, &many)),
+            Ok(None) => {}
+        }
         let low = s.to_lowercase();
         let near: Vec<String> = self.docs_list().filter(|e| e.meta.rel.to_lowercase().contains(&low) || e.title.to_lowercase().contains(&low)).take(5).map(|e| self.label(e)).collect();
         let f = fail("not_found", format!("no document {s:?}"));
         Err(if near.is_empty() { f.hint("`quiet ls -r` lists every document") } else { f.hint(format!("did you mean: {}", near.join(", "))) })
+    }
+
+    /// The document `[[spec]]` (or a link to a library file) in a document of
+    /// root `root` points at. Every `[[…]]` the CLI reads goes through here.
+    /// An id anywhere; else a path or title in `root` itself (several there:
+    /// `ambiguous`, as ever); else in the other open roots, `--root` or not,
+    /// where exactly one document may match: matches in several roots, or
+    /// several in one, are `ambiguous`, never picked.
+    pub(crate) fn find_linked(&self, spec: &str, root: &str) -> R<String> {
+        let s = spec.trim().trim_start_matches("./").trim_start_matches('/');
+        let docs = || self.all.iter().filter(|e| e.meta.folder.is_none() && !e.meta.local());
+        if let Some(e) = docs().find(|e| e.id == s) { return Ok(e.id.clone()); }
+        match match_docs(docs().filter(|e| e.root == root), s) {
+            Ok(Some(e)) => return Ok(e.id.clone()),
+            Err(many) => return Err(self.ambiguous("documents", s, &many)),
+            Ok(None) => {}
+        }
+        // Each other root on its own: a match in more than one is ambiguous,
+        // however closely each matches.
+        let mut hits: Vec<&Entry> = vec![];
+        for r in self.ws.roots.iter().filter(|r| r.key != root) {
+            match match_docs(docs().filter(|e| e.root == r.key), s) { Ok(Some(e)) => hits.push(e), Err(many) => hits.extend(many), Ok(None) => {} }
+        }
+        match hits.as_slice() {
+            [] => Err(fail("not_found", format!("[[{s}]]: no such document"))),
+            [e] => Ok(e.id.clone()),
+            many => {
+                let list = many.iter().map(|e| format!("{} (in {}, id {})", e.meta.rel, self.root_name(&e.root), e.id)).collect::<Vec<_>>().join(", ");
+                Err(fail("ambiguous", format!("[[{s}]] is no document in {}; {} in other roots match: {list}", self.root_name(root), many.len()))
+                    .hint(format!("write the one you mean by its id, e.g. [[{}]], or by a path only it has", many[0].id)))
+            }
+        }
+    }
+
+    /// How a mention of `id` in a document of root `root` reads as `[[…]]`:
+    /// the first of its path without the extension, its path, its id that
+    /// `find_linked` takes back to it, so what is read out writes back the same.
+    fn wiki_name(&self, id: &str, root: &str) -> Option<String> {
+        let e = self.all.iter().find(|e| e.id == id)?;
+        let rel = e.meta.rel.trim_end_matches('/');
+        let stem = rel.rsplit_once('.').map_or(rel, |(a, _)| a);
+        [stem, rel].into_iter().find(|c| self.find_linked(c, root).is_ok_and(|x| x == id)).map(str::to_string).or_else(|| Some(id.to_string()))
     }
 
     /// A folder by path or name, in any root this run sees; `""` / `/` the top.
@@ -503,8 +559,7 @@ impl Session {
         let mut chosen: Vec<Block> = match &picked { Some(ids) => ids.iter().filter_map(|id| blocks::find(&d.doc, *id).cloned()).collect(), None => d.doc.blocks.clone() };
         let mut names = vec![];
         if matches!(as_, "md" | "markdown") {
-            let stem = |rel: &str| rel.rsplit_once('.').map_or(rel.to_string(), |(a, _)| a.to_string());
-            names = blocks::mentions_as_wiki(&mut chosen, &|id| self.entry_by_id(id).map(|e| stem(&e.meta.rel)));
+            names = blocks::mentions_as_wiki(&mut chosen, &|id| self.wiki_name(id, &d.root));
         }
         let text = match as_ {
             // The body only: the title is the document's name, not a line of it.
@@ -571,10 +626,14 @@ impl Session {
             self.assets.push((from, to));
         });
         if let Some(e) = err { return Err(e); }
-        let missing = blocks::link_mentions(list, !markdown, &|t| {
-            let id = self.find_entry(t).ok()?;
-            self.entry_by_id(&id).map(|e| (id, e.title.clone()))
+        // `[[x]]` that is not there is reported below; a link to a file that
+        // is not a document stays a link; several that match is an error.
+        let ambiguous = std::cell::RefCell::new(None);
+        let missing = blocks::link_mentions(list, !markdown, &|t| match self.find_linked(t, root) {
+            Ok(id) => self.all.iter().find(|e| e.id == id).map(|e| (id, e.title.clone())),
+            Err(f) => { if f.code == "ambiguous" { ambiguous.borrow_mut().get_or_insert(f); } None }
         });
+        if let Some(f) = ambiguous.into_inner() { return Err(f); }
         match missing.first() {
             None => Ok(()),
             Some(t) => Err(fail("not_found", format!("[[{t}]]: no such document{}", if missing.len() > 1 { format!(" (nor {})", missing[1..].join(", ")) } else { String::new() }))
@@ -714,12 +773,13 @@ impl Session {
         let id = self.docs[i].id.clone();
         let doc = &self.docs[i].doc;
         let mut out: Vec<Value> = doc.doc_links().iter().map(|l| {
-            let to = self.entry_by_id(&l.target).map(|e| self.label(e));
+            let to = self.all.iter().find(|e| e.id == l.target).map(|e| self.label(e));
             json!({ "to": to, "broken": to.is_none(), "text": line_text(&l.line) })
         }).collect();
         // `[[…]]` as a Markdown file keeps them: links by name.
+        let root = self.docs[i].root.clone();
         for (target, text) in blocks::wiki_links(doc) {
-            let to = self.find_entry(&target).ok().and_then(|id| self.entry_by_id(&id)).map(|e| self.label(e));
+            let to = self.find_linked(&target, &root).ok().and_then(|id| self.all.iter().find(|e| e.id == id)).map(|e| self.label(e));
             out.push(json!({ "to": to, "broken": to.is_none(), "text": text }));
         }
         let back: Vec<Value> = match &id {
@@ -742,7 +802,7 @@ impl Session {
                     live.extend(doc.asset_sources());
                     doc.for_each_block(|b| if let BlockKind::DataTable(t) = &b.kind { live.push(t.src.clone()) });
                     if kind == "board" || kind == "table" { continue; }
-                    for l in doc.doc_links() { if self.entry_by_id(&l.target).is_none() { issues.push(json!({ "path": rel, "code": "broken_link", "message": format!("mentions a document that is not in the library: {}", line_text(&l.line)) })); } }
+                    for l in doc.doc_links() { if !self.all.iter().any(|e| e.id == l.target) { issues.push(json!({ "path": rel, "code": "broken_link", "message": format!("mentions a document that is not in the library: {}", line_text(&l.line)) })); } }
                     if doc.is_blank() { issues.push(json!({ "path": rel, "code": "empty", "message": "the document is empty" })); }
                 }
             }
