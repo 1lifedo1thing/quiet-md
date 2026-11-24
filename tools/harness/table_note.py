@@ -34,7 +34,7 @@ db.commit()
 db.close()
 
 # where things are in a 1300×850 window (light theme, Chinese)
-TABLE_ROW = "62 135"            # 书单 in the sidebar: the first row, its notes under it once it has some
+TABLE_ROW = "62 166"            # 书单 in the sidebar: the first row, its notes under it once it has some
 ADD_FIELD = "844 111"            # 「+」: a 文本 column at once, its name ready to type
 NEW_TYPE = "795 119"            # the new column's type icon: its settings
 TYPE_BOX = "953 265"
@@ -121,7 +121,7 @@ with sqlite3.connect(lib / "书单" / "书单.sqlite") as c:
     assert c.execute("select type from _fields where name = '读书笔记'").fetchall() == [("note",)]
 
 # 2. reopened: the cell shows the note, the search finds its words
-again = run("reopen", "click 62 135\nwait 300\nmove 1200 800\nshot reopened-at-once\n" + OPEN + """move 1200 800
+again = run("reopen", "click 62 166\nwait 300\nmove 1200 800\nshot reopened-at-once\n" + OPEN + """move 1200 800
 shot reopened
 click 1240 24
 wait 600
@@ -200,11 +200,13 @@ assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</ti
 
 # 6. the note renamed in the sidebar while the table is open: the cell follows, and the undo of another
 #    edit (the table's own ↶), then of the cell following, leaves the note where it is
-kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""click 30 135
+kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""move 30 166
+wait 400
+click 30 166
 wait 600
-rclick 100 167
+rclick 100 198
 wait 500
-click 157 451
+click 157 482
 wait 500
 key cmd-a
 type 黑暗森林
