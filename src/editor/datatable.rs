@@ -108,6 +108,10 @@ impl Editor {
                     let new = TableRef { src: old.src.clone(), table, view: shown, height: view.read(cx).height, width: old.width };
                     if !e.table_file && e.core.set_table_ref(id, new) { e.changed_preserving_viewport(window, cx); }
                 }
+                // 笔记 cells: the workspace opens, lists and keeps the notes
+                TableEvent::OpenNote(doc) => cx.emit(EditorEvent::OpenDoc(doc.clone())),
+                TableEvent::LibraryChanged => cx.emit(EditorEvent::LibraryChanged),
+                TableEvent::NoteSaved(n) => cx.emit(EditorEvent::NoteSaved(n.clone())),
             });
             self.datatables.views.insert(id, (view, sub));
         }

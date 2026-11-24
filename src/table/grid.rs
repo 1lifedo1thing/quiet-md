@@ -180,6 +180,8 @@ impl TableView {
             FieldType::Date => if let Some(p) = under { editors::open_date(self, cell, p, cx); },
             FieldType::Link => if let Some(p) = under { editors::open_links(self, cell, p, window, cx); },
             FieldType::Attachment => if let Some(p) = under { self.open_popup(p, Popup::Files { rec: cell.0, field: cell.1 }, cx); },
+            // the note opens beside the table (made first for an empty cell); typing over the cell doesn't
+            FieldType::Note => if typed.is_none() { notes::open_cell(self, cell, under.unwrap_or_default(), window, cx); },
             FieldType::Rating => if let Some(n) = typed.and_then(|s| s.parse::<f64>().ok()) { let tid = self.table; self.edit(cx, |d| d.set_cells(tid, vec![(cell.0, cell.1, Value::Number(n))])); },
             _ => {
                 let text = typed.map_or(text, str::to_string);

@@ -40,6 +40,8 @@ pub(crate) struct FieldForm {
     hint: Option<usize>,
     /// The form's bounds as last painted (dropdowns hang from its left edge).
     bounds: Rc<Cell<Bounds<Pixels>>>,
+    /// 笔记 can be picked: the table is a file of the library (`notes::allowed`).
+    notes_ok: bool,
 }
 
 fn form(v: &mut TableView) -> Option<&mut FieldForm> { match v.popup.as_mut() { Some((_, Popup::FieldForm(f))) => Some(f), _ => None } }
@@ -67,16 +69,17 @@ fn title_ok(ty: FieldType) -> bool {
 fn typed_default(ty: FieldType) -> bool { ty.textual() || matches!(ty, FieldType::Number | FieldType::Currency) }
 
 impl FieldForm {
-    pub fn add(_v: &mut TableView, at: Option<usize>, window: &mut Window, cx: &mut Context<TableView>) -> Self { Self::new(None, false, at, window, cx) }
+    pub fn add(v: &mut TableView, at: Option<usize>, window: &mut Window, cx: &mut Context<TableView>) -> Self { let ok = notes::allowed(v, cx); Self::new(None, false, at, ok, window, cx) }
 
     pub fn edit(v: &mut TableView, field: FieldId, window: &mut Window, cx: &mut Context<TableView>) -> Option<Self> {
         let (f, primary) = { let t = v.state.read(cx).doc.base.table(v.table)?; (t.field(field)?.clone(), t.fields.first().is_some_and(|p| p.id == field)) };
-        Some(Self::new(Some(f), primary, None, window, cx))
+        let ok = notes::allowed(v, cx);
+        Some(Self::new(Some(f), primary, None, ok, window, cx))
     }
 
     pub fn beside(mut self, field: FieldId, after: bool) -> Self { self.beside = Some((field, after)); self }
 
-    fn new(orig: Option<Field>, primary: bool, at: Option<usize>, window: &mut Window, cx: &mut Context<TableView>) -> Self {
+    fn new(orig: Option<Field>, primary: bool, at: Option<usize>, notes_ok: bool, window: &mut Window, cx: &mut Context<TableView>) -> Self {
         let (title, ty, opts) = match &orig { Some(f) => (f.name.clone(), f.ty, f.opts.clone()), None => (String::new(), FieldType::Text, field::default_opts(FieldType::Text)) };
         let name = input("请输入字段标题", &title, window, cx);
         let formula = input("请输入公式", &opts.formula, window, cx);
@@ -85,7 +88,7 @@ impl FieldForm {
         let default = input("请输入默认值", if typed_default(ty) { &opts.default } else { "" }, window, cx);
         if orig.is_some() { name.0.update(cx, |t, cx| t.select_all_text(cx)); }
         window.focus(&name.0.focus_handle(cx), cx);
-        let mut f = FieldForm { orig, at, beside: None, primary, ty, opts, name, formula, prefix, default, rows: vec![], types_open: false, palette: None, hint: None, bounds: Default::default() };
+        let mut f = FieldForm { orig, at, beside: None, primary, ty, opts, name, formula, prefix, default, rows: vec![], types_open: false, palette: None, hint: None, bounds: Default::default(), notes_ok };
         f.set_rows(window, cx);
         f
     }
@@ -291,11 +294,12 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
         for g in [FieldGroup::General, FieldGroup::Business, FieldGroup::Advanced] {
             list = list.child(menu_title(label(g.label())));
             // a file is one table: 关联 and 查找引用 (which reach into another) are not offered, only kept where a file has them
-            // (笔记 isn't offered until its cells open their notes)
-            let other_table = |ty: FieldType| matches!(ty, FieldType::Link | FieldType::Lookup | FieldType::Note) && ty != f.ty;
+            let other_table = |ty: FieldType| matches!(ty, FieldType::Link | FieldType::Lookup) && ty != f.ty;
             for (i, ty) in FieldType::ALL.iter().copied().enumerate().filter(|(_, ty)| ty.group() == g && !other_table(*ty)) {
-                let ok = !f.primary || title_ok(ty);
-                list = list.child(menu_row(("tb-ff-ty", i))
+                // 笔记 needs a table that is a file of the library: greyed, with why, in one kept inside a page
+                let no_notes = ty == FieldType::Note && !f.notes_ok && ty != f.ty;
+                let ok = (!f.primary || title_ok(ty)) && !no_notes;
+                list = list.child(menu_row(("tb-ff-ty", i)).when(no_notes, |d| { use crate::ui::TipExt; d.tip("独立的数据表才能加笔记列", None) })
                     .child(icon(field_glyph(ty), 15., if ok { Theme::icon() } else { Theme::text_disabled() }))
                     .child(div().flex_1().min_w_0().text_color(if ok { Theme::text() } else { Theme::text_disabled() }).child(label(ty.label())))
                     .when(ty == f.ty, |d| d.child(icon("check", 14., Theme::primary())))

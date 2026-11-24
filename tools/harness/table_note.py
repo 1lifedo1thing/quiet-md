@@ -1,0 +1,201 @@
+"""数据表's 笔记 column, end to end, in a scratch library.
+
+A table file of its own gets a 笔记 column; an empty cell makes a note
+(titled as its record) and opens it in 记录详情, where it is written in and
+saved; undo and redo take the note to the 回收站 and back; deleting the
+record asks about its note and undo restores both; a cell is pointed at a
+note there already is; a new title renames the note's file and the cell
+follows; 整页打开 opens the note as a page; a search finds what was written.
+
+Build with --release --features devtools,datatable, then run this file.
+FDL_BIN selects another build; TABLE_NOTE_SHOTS a folder to copy the screenshots to.
+"""
+import json
+import os
+from pathlib import Path
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+
+here = Path(__file__).resolve().parent
+work = Path(tempfile.mkdtemp(prefix="quiet-table-note-"))
+source = work / "source"
+(source / "docs").mkdir(parents=True)
+doc_id = "aaaaaaaa-0000-0000-0000-000000000001"
+(source / "index.json").write_text(json.dumps({doc_id: {"created": 1, "modified": 1, "opened": 1}}))
+(source / "preferences.json").write_text(json.dumps({"appearance": "light", "english": False, "seen_version": "9.9.9", "auto_update": False, "quick_hotkey": False}))
+(source / "docs" / f"{doc_id}.xml").write_text("<title>已有的笔记</title>\n<p>一段正文</p>\n")
+db = sqlite3.connect(source / "书单.sqlite")
+db.executescript("""CREATE TABLE "书单" ("书名" TEXT, "作者" TEXT); INSERT INTO "书单" VALUES ('三体','刘慈欣'),('球状闪电','刘慈欣'),('',NULL);""")
+db.commit()
+db.close()
+
+# where things are in a 1300×850 window (light theme, Chinese)
+TABLE_ROW = "62 135"            # 书单 in the sidebar, before any note is listed above it (then it is at 62 166)
+ADD_FIELD = "820 111"
+TYPE_BOX = "830 257"
+TYPE_NOTE = "725 559"           # 笔记, the type list scrolled to its end
+NOTE_1, NOTE_2 = "837 149", "837 185"   # the 笔记 cells of rows 1 and 2
+PANEL_CLOSE = "1273 115"
+NOTE_BODY, NOTE_TITLE = "885 581", "875 518"
+NOTE_FULL = "1273 422"
+
+OPEN = f"""click {TABLE_ROW}
+wait 1200
+"""
+ADD_COLUMN = f"""click {ADD_FIELD}
+wait 500
+type 读书笔记
+click {TYPE_BOX}
+wait 300
+move 830 420
+wheel 830 420 600
+wait 100
+wheel 830 420 600
+wait 300
+shot types
+click {TYPE_NOTE}
+wait 300
+key enter
+wait 500
+"""
+WRITE = f"""dclick {NOTE_1}
+wait 1200
+move 1200 800
+shot note-new
+click {NOTE_BODY}
+wait 300
+type 黑暗森林法则
+key enter
+type 第二段 /
+wait 400
+shot note-slash
+key escape
+key backspace
+wait 1500
+click {PANEL_CLOSE}
+wait 600
+move 1200 800
+shot cell-title
+"""
+
+
+def run(name, commands, library):
+    folder = work / name
+    script = work / f"{name}.txt"
+    script.write_text(f"resize 1300 850\nwait 1500\nmove 1200 800\n{commands}\nwait 600\nmove 1200 800\nshot end\n")
+    subprocess.run([sys.executable, str(here / "run.py"), str(script), str(library), str(folder)], env=dict(os.environ, FDL_NOBLINK="1"), check=True, timeout=120)
+    return folder / "lib"
+
+
+def cells(lib):
+    with sqlite3.connect(lib / "书单.sqlite") as c:
+        return c.execute('select "书名", "读书笔记" from "书单" order by _order').fetchall()
+
+
+def notes(lib):
+    return sorted(p.name for p in lib.glob("*.xml"))
+
+
+def trashed(lib):
+    """The titles of the documents in the 回收站 (kept there under their ids)."""
+    return sorted(p.read_text().split("</title>")[0].removeprefix("<title>") for p in (lib / ".quiet" / "trash").rglob("*.xml"))
+
+
+# 1. a column, a note made for an empty cell, written in, saved
+lib = run("write", OPEN + ADD_COLUMN + WRITE, source)
+assert cells(lib) == [("三体", "三体.xml"), ("球状闪电", None), (None, None)], cells(lib)
+assert notes(lib) == ["三体.xml", "已有的笔记.xml"], notes(lib)
+assert (lib / "三体.xml").read_text() == "<title>三体</title>\n<p>黑暗森林法则</p>\n<p>第二段 </p>\n", (lib / "三体.xml").read_text()
+with sqlite3.connect(lib / "书单.sqlite") as c:
+    assert c.execute("select type from _fields where name = '读书笔记'").fetchall() == [("note",)]
+
+# 2. reopened: the cell shows the note, the search finds its words
+again = run("reopen", """click 62 166
+wait 1200
+move 1200 800
+shot reopened
+click 1240 24
+wait 600
+type 黑暗森林
+wait 1000
+shot search
+key escape
+""", lib)
+assert cells(again) == cells(lib) and notes(again) == notes(lib)
+
+# 3. undo empties the cell and the note goes to the 回收站; redo brings both back
+undone = run("undo", OPEN + ADD_COLUMN + WRITE + """click 400 500
+key cmd-z
+wait 900
+""", source)
+assert cells(undone)[0] == ("三体", None), cells(undone)
+assert notes(undone) == ["已有的笔记.xml"] and trashed(undone) == ["三体"], (notes(undone), trashed(undone))
+redone = run("redo", OPEN + ADD_COLUMN + WRITE + """click 400 500
+key cmd-z
+wait 900
+key cmd-shift-z
+wait 1000
+""", source)
+assert cells(redone)[0] == ("三体", "三体.xml") and notes(redone) == ["三体.xml", "已有的笔记.xml"] and trashed(redone) == [], (cells(redone), notes(redone), trashed(redone))
+
+# 4. deleting the record asks about its note; both go, and undo restores both
+DELETE = f"""click 400 500
+wait 200
+rclick {NOTE_1}
+wait 400
+shot cell-menu
+click 900 401
+wait 500
+shot ask
+click 797 464
+wait 900
+"""
+gone = run("delete", OPEN + ADD_COLUMN + WRITE + DELETE, source)
+assert [r[0] for r in cells(gone)] == ["球状闪电", None], cells(gone)
+assert notes(gone) == ["已有的笔记.xml"] and trashed(gone) == ["三体"], (notes(gone), trashed(gone))
+back = run("undelete", OPEN + ADD_COLUMN + WRITE + DELETE + """key cmd-z
+wait 1200
+""", source)
+assert cells(back)[0] == ("三体", "三体.xml") and notes(back) == ["三体.xml", "已有的笔记.xml"] and trashed(back) == [], (cells(back), notes(back), trashed(back))
+
+# 5. a cell pointed at a note there already is; a new title renames the file and the cell follows; 整页打开
+more = run("point", OPEN + ADD_COLUMN + WRITE + f"""click {NOTE_2}
+wait 200
+rclick {NOTE_2}
+wait 400
+click 913 305
+wait 500
+shot pick
+click 905 306
+wait 500
+move 1200 800
+shot pointed
+dclick {NOTE_1}
+wait 1000
+click {NOTE_TITLE}
+wait 200
+key end
+type  II
+wait 1800
+move 1200 800
+shot renamed
+click {NOTE_FULL}
+wait 1200
+move 1200 800
+shot full-page
+""", source)
+assert cells(more) == [("三体", "三体 II.xml"), ("球状闪电", "已有的笔记.xml"), (None, None)], cells(more)
+assert notes(more) == ["三体 II.xml", "已有的笔记.xml"], notes(more)
+assert (more / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
+assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</title>\n<p>一段正文</p>\n"
+
+shots = os.environ.get("TABLE_NOTE_SHOTS")
+if shots:
+    Path(shots).mkdir(parents=True, exist_ok=True)
+    for case in ("write", "reopen", "delete", "point"):
+        for png in (work / case).glob("*.png"):
+            if png.name != "end.png": shutil.copy(png, Path(shots) / f"{case}-{png.name}")
+print("table notes ok:", work)

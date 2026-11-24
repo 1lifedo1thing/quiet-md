@@ -45,6 +45,10 @@ pub enum EditorEvent {
     Leave,
     /// Esc while 版本历史 is open: back to the live document, then close.
     HistoryEscape,
+    /// A 数据表 made, trashed or restored a note for a 笔记 cell: the library's lists are read again.
+    LibraryChanged,
+    /// A note edited in a 数据表's record panel was saved: its row follows.
+    NoteSaved(Box<crate::table::NoteSaved>),
 }
 
 /// A child page shown by 子页面列表 blocks.

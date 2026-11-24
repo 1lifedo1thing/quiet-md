@@ -123,17 +123,14 @@ pub(crate) fn selection_bar(v: &TableView, _t: &Table, cx: &Context<TableView>) 
         .child(div().text_color(Theme::text()).child(format!("{} {n} {}", label("已选"), label("条记录"))))
         .child(div().w(px(1.)).h(px(16.)).bg(Theme::line_divider()))
         .child(btn("tb-sel-dup", "copy", "创建副本", false).on_click(cx.listener(|v, _, _, cx| { let (tid, ids) = (v.table, v.rows_sel.iter().copied().collect::<Vec<_>>()); v.edit(cx, |d| d.duplicate_records(tid, &ids)); })))
-        .child(btn("tb-sel-del", "bin", "删除", true).on_click(cx.listener(|v, _, _, cx| delete_rows(v, cx))))
+        .child(btn("tb-sel-del", "bin", "删除", true).on_click(cx.listener(|v, _, window, cx| delete_rows(v, window, cx))))
         .child(btn("tb-sel-none", "x", "取消选择", false).on_click(cx.listener(|v, _, _, cx| { v.rows_sel.clear(); cx.notify(); })))).into_any_element())
 }
 
 /// Delete the ticked rows, or else the rows of the selected cells.
-pub(crate) fn delete_rows(v: &mut TableView, cx: &mut Context<TableView>) {
+pub(crate) fn delete_rows(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
     let ids = target_rows(v, None, cx);
-    let tid = v.table;
-    v.edit(cx, |d| d.remove_records(tid, &ids));
-    v.rows_sel.clear();
-    v.sel = None;
+    notes::remove_records(v, ids, window, cx);
 }
 
 /// The rows an action is about: the ticked ones, else those of the cell range, else `rec`.
@@ -175,6 +172,7 @@ pub(crate) fn popup(v: &TableView, base: &Base, t: &Table, view: &View, _window:
         Popup::Date { rec, field, year, month } => editors::date_popup(v, t, *rec, *field, *year, *month, cx),
         Popup::Links { rec, field } => editors::links_popup(v, base, t, *rec, *field, cx),
         Popup::Files { rec, field } => editors::files_popup(v, t, *rec, *field, cx),
+        Popup::NotePick { rec, field } => notes::pick_popup(v, *rec, *field, cx),
         Popup::Panel(panel) => panels::render(v, base, t, view, panel, cx),
         Popup::Stat(f) => stat_menu(t, view, *f, cx),
         Popup::More => more_menu(cx),
@@ -241,7 +239,7 @@ fn field_menu(v: &TableView, t: &Table, view: &View, fid: FieldId, pos: Point<Pi
             .child(menu_item("tb-fm-hide", "eye", if n > 1 { format!("{} {n} {}", label("隐藏"), label("个字段")) } else { label("隐藏字段/列") }, false)
                 .on_click(cx.listener(move |v, _, window, cx| { let ids = hide.clone(); v.edit_view(cx, |view| view.opts.hidden.extend(ids)); v.col_sel.clear(); close(v, window, cx); })))
             .child(menu_item("tb-fm-del", "bin", if n > 1 { format!("{} {n} {}", label("删除"), label("个字段")) } else { label("删除字段/列") }, true)
-                .on_click(cx.listener(move |v, _, window, cx| { v.edit(cx, |d| d.remove_fields(tid, &del)); v.col_sel.clear(); close(v, window, cx); }))) })
+                .on_click(cx.listener(move |v, _, window, cx| { close(v, window, cx); notes::remove_fields(v, del.clone(), window, cx); }))) })
         .into_any_element()
 }
 
@@ -262,16 +260,19 @@ fn cell_menu(v: &TableView, t: &Table, view: &View, rec: RecId, cx: &Context<Tab
             .child(menu_item("tb-cm-down", "plus", label("向下插入 1 行"), false).on_click(cx.listener(move |v, _, window, cx| insert(v, true, window, cx))))
             .child(menu_rule()))
         .child(menu_item("tb-cm-open", "expand", label("查看详情"), false).on_click(cx.listener(move |v, _, window, cx| { v.popup = None; record::open(v, rec, window, cx); })))
+        // on a 笔记 cell: point it at a note the library has
+        .when_some(v.sel.map(|s| s.head).filter(|c| c.0 == rec && t.field(c.1).is_some_and(|f| f.ty == FieldType::Note) && notes::allowed(v, cx)), |d, cell| {
+            let at = v.popup.as_ref().map(|p| p.0).unwrap_or_default();
+            d.child(menu_item("tb-cm-note", "link", label("指向已有笔记"), false).on_click(cx.listener(move |v, _, window, cx| notes::open_pick(v, cell, at, window, cx))))
+        })
         .child(menu_item("tb-cm-copy", "copy", label("复制"), false).on_click(cx.listener(|v, _, window, cx| { keys::copy(v, false, cx); v.close_popup(window, cx); })))
         .child(menu_item("tb-cm-paste", "file-text", label("粘贴"), false).on_click(cx.listener(|v, _, window, cx| { keys::paste(v, cx); v.close_popup(window, cx); })))
         .child(menu_item("tb-cm-dup", "copy", label("创建副本"), false).on_click(cx.listener(move |v, _, window, cx| { let ids = target_rows(v, Some(rec), cx); v.edit(cx, |d| d.duplicate_records(tid, &ids)); v.close_popup(window, cx); })))
         .child(menu_rule())
         .child(menu_item("tb-cm-del", "bin", if n > 1 { format!("{} {n} {}", label("删除"), label("条记录")) } else { label("删除记录") }, true).on_click(cx.listener(move |v, _, window, cx| {
             let ids = target_rows(v, Some(rec), cx);
-            v.edit(cx, |d| d.remove_records(tid, &ids));
-            v.rows_sel.clear();
-            v.sel = None;
             v.close_popup(window, cx);
+            notes::remove_records(v, ids, window, cx);
         })))
         .into_any_element()
 }

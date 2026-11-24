@@ -43,12 +43,15 @@ pub(crate) fn open(v: &mut TableView, rec: RecId, window: &mut Window, cx: &mut 
         v.record.input = Some(input);
     }
     v.record.menu = None;
+    // another record: its own note, when one is opened
+    if v.expanded != Some(rec) { notes::close(v, cx); }
     v.expanded = Some(rec);
     cx.notify();
 }
 
 fn close(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) {
     commit(v, true, window, cx);
+    notes::close(v, cx);
     v.record.menu = None;
     v.expanded = None;
     cx.notify();
@@ -101,6 +104,7 @@ fn activate(v: &mut TableView, cell: CellId, at: Point<Pixels>, window: &mut Win
         FieldType::Date => editors::open_date(v, cell, under, cx),
         FieldType::Link => editors::open_links(v, cell, under, window, cx),
         FieldType::Attachment => v.open_popup(under, Popup::Files { rec: cell.0, field: cell.1 }, cx),
+        FieldType::Note => notes::open_cell(v, cell, under, window, cx),
         // the stars take their own clicks
         FieldType::Rating => {}
         _ => begin(v, cell, window, cx),
@@ -115,6 +119,7 @@ fn placeholder(ty: FieldType) -> &'static str {
         FieldType::Date => "请选择日期",
         FieldType::Link => "请选择记录",
         FieldType::Attachment => "添加附件",
+        FieldType::Note => "新建笔记",
         _ if ty.computed() => "空",
         _ => "请输入",
     }
@@ -184,6 +189,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, r: &Rec
                         v.edit(cx, |d| d.set_cells(tid, vec![(rid, fid, if s as f64 == n { Value::Empty } else { Value::Number(s as f64) })]));
                     })))).into_any_element())
             }
+            FieldType::Note if !val.is_empty() => Some(notes::row_value(v, cell, val)),
             _ if val.is_empty() => Some(empty(placeholder(f.ty)).into_any_element()),
             // what the table works out is read, not edited: a shade lighter
             _ if f.ty.computed() => Some(div().w_full().opacity(0.7).child(value(base, f, val)).into_any_element()),
@@ -231,11 +237,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, r: &Rec
                 v.edit(cx, |d| d.duplicate_records(tid, &[rid]));
             })))
             .child(menu_item("tb-rec-del", "bin", label("删除记录"), true).on_click(cx.listener(move |v, _, window, cx| {
-                close(v, window, cx);
-                let tid = v.table;
-                v.edit(cx, |d| d.remove_records(tid, &[rid]));
-                v.rows_sel.remove(&rid);
-                if v.sel.is_some_and(|s| s.anchor.0 == rid || s.head.0 == rid) { v.sel = None; }
+                commit(v, true, window, cx);
+                v.record.menu = None;
+                notes::remove_records(v, vec![rid], window, cx);
             }))))).with_priority(5));
 
     if modal {
@@ -251,9 +255,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, r: &Rec
                     .child(div().id("tb-rec-body").flex_1().min_h_0().overflow_y_scroll().px(px(40.)).pb(px(24.)).child(list))
                     .children(menu)))).with_priority(4).into_any_element();
     }
-    div().id("tb-record").flex_none().w(px(RECORD_W)).h_full().flex().flex_col().bg(Theme::bg_body()).border_l_1().border_color(line())
+    // a note open in the panel takes the room under the fields, which keep to the top (and scroll there)
+    let note = notes::pane(v, rid, cx);
+    div().id("tb-record").relative().flex_none().w(px(notes::panel_w(v))).h_full().flex().flex_col().bg(Theme::bg_body()).border_l_1().border_color(line())
         .child(head)
-        .child(div().id("tb-rec-body").flex_1().min_h_0().overflow_y_scroll().child(list))
+        .child(div().id("tb-rec-body").min_h_0().overflow_y_scroll().map(|d| if note.is_some() { d.flex_none().max_h(relative(0.4)) } else { d.flex_1() }).child(list))
+        .children(note)
+        .child(notes::grip(v, cx))
         .children(menu)
         .into_any_element()
 }

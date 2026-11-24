@@ -929,6 +929,23 @@ impl Workspace {
                 }
             }
             EditorEvent::Leave => cx.defer_in(window, |this, window, cx| this.leave_board(window, cx)),
+            // a 数据表's 笔记 cells (`table::notes`) work on the library directly: the lists follow
+            EditorEvent::LibraryChanged => {
+                this.entries = this.store.list();
+                this.sort();
+                this.sync_sub_pages(cx);
+                this.trash = this.store.list_trash();
+                this.sync_peers(cx, &this.entries, Some(&this.trash));
+                cx.notify();
+            }
+            EditorEvent::NoteSaved(n) => {
+                if let Some(e) = this.entries.iter_mut().find(|e| e.id == n.id) {
+                    (e.title, e.icon, e.body) = (n.title.clone(), n.icon.clone(), n.body.clone());
+                    e.meta = this.store.as_row(&n.id, n.meta.clone());
+                }
+                this.sort();
+                cx.notify();
+            }
             EditorEvent::Catalogue(pinned) => {
                 if let Some(id) = this.current.clone() {
                     if let Some(e) = this.entries.iter_mut().find(|e| e.id == id) {

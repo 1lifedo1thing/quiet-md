@@ -20,6 +20,7 @@ mod fields;
 mod grid;
 mod keys;
 mod menus;
+mod notes;
 mod panels;
 mod record;
 
@@ -154,6 +155,22 @@ pub enum TableEvent {
     Expand,
     /// The table or view shown changed: the block remembers which.
     Shown,
+    /// 笔记: open this note over the whole pane (整页打开).
+    OpenNote(String),
+    /// 笔记: a note was made, trashed or restored; the library's lists are stale.
+    LibraryChanged,
+    /// 笔记: the note in the record panel was saved.
+    NoteSaved(Box<NoteSaved>),
+}
+
+/// A note as its save left it, for the rows that list it.
+#[derive(Clone)]
+pub struct NoteSaved {
+    pub id: String,
+    pub title: String,
+    pub icon: Option<String>,
+    pub body: std::sync::Arc<str>,
+    pub meta: crate::store::Meta,
 }
 
 /// A cell: record and field.
@@ -189,6 +206,8 @@ pub(crate) enum Popup {
     Date { rec: RecId, field: FieldId, year: i64, month: u32 },
     Links { rec: RecId, field: FieldId },
     Files { rec: RecId, field: FieldId },
+    /// 指向已有笔记: the library's documents, searched.
+    NotePick { rec: RecId, field: FieldId },
     Panel(panels::Panel),
     /// The view list under a table-in-a-page's view name.
     Stat(FieldId),
@@ -258,6 +277,8 @@ pub struct TableView {
     /// 记录详情.
     pub(crate) expanded: Option<RecId>,
     pub(crate) record: record::RecordUi,
+    /// 笔记 cells: the library's documents they point at, the note open in the record panel.
+    pub(crate) notes: notes::NotesUi,
     /// 表内搜索: the text, its matches, the current one.
     pub(crate) find: Option<Find>,
     pub(crate) find_input: Entity<TextField>,
@@ -309,7 +330,7 @@ impl TableView {
         // another program may write the file: look again every couple of seconds while shown
         let refresh = cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_secs(2)).await;
-            if this.update(cx, |v, cx| v.state.update(cx, |s, cx| s.refresh(cx))).is_err() { break; }
+            if this.update(cx, |v, cx| { v.state.update(cx, |s, cx| s.refresh(cx)); notes::refresh(v, cx); }).is_err() { break; }
         });
         let (table, view) = {
             let base = &state.read(cx).doc.base;
@@ -320,7 +341,7 @@ impl TableView {
             result: Default::default(), tops: Default::default(), order: Default::default(), row_of: Default::default(), result_key: (u64::MAX, 0, 0, 0),
             sel: None, rows_sel: HashSet::new(), col_sel: vec![], editing: None, input, aux, scroll: point(0., 0.),
             body: Rc::new(Cell::new(Bounds::default())), drag: None, popup: None, dropdown: None, rename: None,
-            expanded: None, record: Default::default(), find: None, find_input,
+            expanded: None, record: Default::default(), notes: Default::default(), find: None, find_input,
             grip_hover: None, _refresh: refresh, _subs: subs,
         }
     }
@@ -415,12 +436,13 @@ impl TableView {
         cx.notify();
     }
 
-    pub(crate) fn undo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.undo()); }
-    pub(crate) fn redo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.redo()); }
+    pub(crate) fn undo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.undo()); notes::after_history(self, cx); }
+    pub(crate) fn redo(&mut self, cx: &mut Context<Self>) { self.edit(cx, |d| d.redo()); notes::after_history(self, cx); }
 
     /// Keep a cell being edited and a name being typed, without a window at hand: the page is about
     /// to be left or saved, and the view may be dropped with no focus change to commit them.
     pub fn commit_pending(&mut self, cx: &mut Context<Self>) {
+        notes::save(self, cx);
         if let Some(cell) = self.editing.take() {
             let text = self.input.read(cx).text.clone();
             let tid = self.table;
@@ -563,7 +585,8 @@ impl Render for TableView {
         let side = self.expanded.and_then(|r| t.record(r)).map(|r| record::render(self, base, t, v, r, window, cx));
         let body = div().flex_1().min_h_0().flex()
             .child(div().relative().flex_1().min_w_0().h_full().flex().flex_col().child(main).children(menus::find_bar(self, cx)).children(menus::selection_bar(self, t, cx)))
-            .children(side);
+            .children(side)
+            .children(notes::ask(self, window, cx));
         // In a page, as 飞书 docx embeds a base: one quiet header line (the table's
         // name; its tools only while the pointer is over the table), no frame
         // around the block, and as tall as its rows. Full pane: the whole chrome.
