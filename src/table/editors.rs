@@ -147,7 +147,7 @@ pub(crate) fn select_popup(v: &TableView, t: &Table, rec: RecId, fid: FieldId, e
         list = list.child(div().id(("tb-opt", oid)).group("tb-opt").flex_none().h(px(32.)).mx(px(4.)).px(px(8.)).flex().items_center().gap(px(8.)).rounded(px(crate::design::geo().menu_row_r)).cursor_pointer()
             .hover(|s| s.bg(Theme::fill_hover()))
             .child(div().flex_1().min_w_0().flex().child(if person { super::style::person(&o.name, o.color).into_any_element() } else { tag(&o.name, o.color).into_any_element() }))
-            .when(on, |d| d.child(icon("check", 14., Theme::primary())))
+            .when(on, |d| d.child(icon("check", 14., crate::design::color::foreground())))
             .child(div().id(("tb-opt-more", oid)).flex_none().size(px(22.)).rounded(px(4.)).flex().items_center().justify_center().invisible().group_hover("tb-opt", |s| s.visible())
                 .hover(|s| s.bg(Theme::fill_hover_strong())).child(icon("ellipsis", 14., Theme::icon()))
                 .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| {
@@ -211,8 +211,8 @@ pub(crate) fn date_popup(_v: &TableView, t: &Table, rec: RecId, fid: FieldId, ye
             let (today, on) = ((year, month, d) == (ty, tm, td), cur_day == Some((year, month, d)));
             row = row.child(div().id(("tb-day", d as usize)).size(px(32.)).flex().items_center().justify_center().cursor_pointer()
                 .child(div().size(px(28.)).rounded_full().flex().items_center().justify_center()
-                    .when(on, |x| x.bg(Theme::primary()).text_color(Theme::bg_body()))
-                    .when(today && !on, |x| x.border_1().border_color(Theme::primary()).text_color(Theme::primary()))
+                    .when(on, |x| x.bg(crate::design::color::primary()).text_color(crate::design::color::primary_foreground()))
+                    .when(today && !on, |x| x.border_1().border_color(crate::design::color::foreground()).text_color(crate::design::color::foreground()))
                     .when(!on, |x| x.hover(|s| s.bg(Theme::fill_hover())))
                     .child(format!("{d}")))
                 .on_click(cx.listener(move |v, _, window, cx| set(v, Value::Date(field::date_ms(year, month, d, time.0, time.1)), window, cx))));

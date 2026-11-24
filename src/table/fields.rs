@@ -305,7 +305,7 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
                 list = list.child(menu_row(("tb-ff-ty", i)).when(no_notes, |d| { use crate::ui::TipExt; d.tip("独立的数据表才能加笔记列", None) })
                     .child(icon(field_glyph(ty), 15., if ok { Theme::icon() } else { Theme::text_disabled() }))
                     .child(div().flex_1().min_w_0().text_color(if ok { Theme::text() } else { Theme::text_disabled() }).child(label(ty.label())))
-                    .when(ty == f.ty, |d| d.child(icon("check", 14., Theme::primary())))
+                    .when(ty == f.ty, |d| d.child(icon("check", 14., crate::design::color::foreground())))
                     .when(ok, |d| d.cursor_pointer().hover(|s| s.bg(Theme::fill_hover())).on_click(cx.listener(move |v, _, window, cx| { if let Some(f) = form(v) { f.retype(ty, window, cx); } cx.notify(); }))));
             }
         }

@@ -78,7 +78,7 @@ pub(crate) fn inline_header(v: &TableView, t: &Table, view: &View, cx: &Context<
         .child(icon_button("tb-in-full", "maximize", false).tip_above(crate::settings::text("全屏"), None).on_click(cx.listener(|_, _, _, cx| cx.emit(TableEvent::Expand))));
     // an active filter / sort / group shows even at rest: the rows are not all there
     let hint = (!open && (!o.filter.conds.is_empty() || !o.sorts.is_empty() || !o.groups.is_empty())).then(|| div().flex_none().group_hover("tb-block", |s| s.invisible())
-        .size(px(6.)).rounded_full().bg(Theme::primary()));
+        .size(px(6.)).rounded_full().bg(crate::design::color::foreground()));
     // the dot sits where the tools will appear, at the right end
     div().id("tb-inline-head").flex_none().h(px(INLINE_HEAD_H)).flex().items_center().justify_between()
         .child(left).child(div().relative().flex_none().flex().items_center().child(right).children(hint.map(|h| div().absolute().right(px(4.)).top(px(11.)).child(h))))
@@ -189,8 +189,8 @@ pub(crate) fn dropdown(v: &TableView, cx: &Context<TableView>) -> Option<AnyElem
         let pick = d.pick.clone();
         list = list.child(list_row(("tb-drop", i))
             .when_some(it.glyph, |d, g| d.child(icon(g, 15., Theme::icon())))
-            .child(match it.tag { Some(slot) => div().flex_1().min_w_0().flex().child(tag(&it.label, slot)), None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(it.on, |d| d.text_color(Theme::primary())).child(it.label.clone()) })
-            .when(it.on, |d| d.child(icon("check", 14., Theme::primary())))
+            .child(match it.tag { Some(slot) => div().flex_1().min_w_0().flex().child(tag(&it.label, slot)), None => div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(it.on, |d| d.text_color(crate::design::color::foreground())).child(it.label.clone()) })
+            .when(it.on, |d| d.child(icon("check", 14., crate::design::color::foreground())))
             .on_click(cx.listener(move |v, _, window, cx| { v.dropdown = None; pick(v, i, window, cx); cx.notify(); })));
     }
     Some(deferred(anchored().position(d.pos).snap_to_window_with_margin(px(8.)).child(list)).with_priority(6).into_any_element())
@@ -281,7 +281,7 @@ fn cell_menu(v: &TableView, t: &Table, view: &View, rec: RecId, cx: &Context<Tab
 fn stat_menu(t: &Table, view: &View, fid: FieldId, cx: &Context<TableView>) -> AnyElement {
     let Some(f) = t.field(fid) else { return div().into_any_element() };
     let cur = view.opts.stats.get(&fid).copied();
-    let row = |id: usize, text: String, on: bool, stat: Option<Stat>| menu_item(("tb-stat-item", id), "", text, false).when(on, |d| d.child(icon("check", 14., Theme::primary())))
+    let row = |id: usize, text: String, on: bool, stat: Option<Stat>| menu_item(("tb-stat-item", id), "", text, false).when(on, |d| d.child(icon("check", 14., crate::design::color::foreground())))
         .on_click(cx.listener(move |v, _, window, cx| { v.edit_view(cx, |view| { match stat { Some(s) => { view.opts.stats.insert(fid, s); } None => { view.opts.stats.remove(&fid); } } }); v.close_popup(window, cx); }));
     let mut m = shell("tb-stat-menu", 180., cx).child(row(0, label("不展示"), cur.is_none(), None));
     for (i, s) in query::stats_for(f.ty).iter().enumerate() { m = m.child(row(i + 1, label(s.label()), cur == Some(*s), Some(*s))); }
