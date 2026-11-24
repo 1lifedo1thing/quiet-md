@@ -144,7 +144,7 @@ fn to_calls(cmd: &str, a: &mut Args, input: &mut Input) -> R<(Vec<(String, Value
         ("blocks", _) => { with_doc(&mut v, false)?; put(&mut v, "kind", a.get("kind")); put(&mut v, "grep", a.get("grep")); put(&mut v, "done", done(a)); "blocks" }
         ("links", _) => { with_doc(&mut v, false)?; "links" }
         ("check", _) => "check",
-        ("roots", _) => "roots",
+        ("folders", _) => "folders",
         ("history", _) => { with_doc(&mut v, false)?; put(&mut v, "version", a.pos.get(1).cloned()); "history" }
         ("restore", _) => { with_doc(&mut v, false)?; v["version"] = json!(a.nth(1, "a version (from `quiet history DOC`)")?); "restore" }
         ("trash", _) => { if !a.pos.is_empty() { return Err(fail("usage", "`quiet trash` lists the trash; `quiet rm DOC` moves a document there")); } "trash_list" }
@@ -245,7 +245,7 @@ pub fn execute(raw: Vec<String>, mut input: Input, out: &mut String) -> R<()> {
     }
     let json_out = a.has("json");
     let dry = a.has("dry-run");
-    let mut s = Session::open(a.get("library"), a.get("root"))?;
+    let mut s = Session::open(a.get("library"), a.get("folder"))?;
     let multi = s.multi();
     if cmd == "run" {
         let code = match (a.get("code"), a.pos.first().map(String::as_str)) {
