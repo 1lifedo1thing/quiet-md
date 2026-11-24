@@ -535,19 +535,18 @@ impl Workspace {
 
     /// Creation inside a folder: "+" opens the same 新建 menu as 我的文档's, hung
     /// from the button; 文件夹 is its last entry, so a folder needs no own button.
-    fn add_button(&self, e: &Entry, key: &str, cx: &mut Context<Self>) -> Stateful<Div> {
+    fn add_button(&self, e: &Entry, key: &str, cx: &mut Context<Self>) -> Button {
         let id = e.id.clone();
         let slot = format!("add-{key}-{}", e.id);
         let (record, lookup) = (self.more_bounds.clone(), self.more_bounds.clone());
         let anchor = |b: Bounds<Pixels>| point(b.left(), b.bottom() + px(4.));
         let open = self.create_menu.as_ref().is_some_and(|(p, pos)| p.as_deref() == Some(e.id.as_str()) && self.more_bounds.borrow().get(&slot).is_some_and(|b| anchor(*b) == *pos));
-        div()
-            .id(SharedString::from(format!("add-{key}-{}", e.id)))
+        Button::ghost(SharedString::from(format!("add-{key}-{}", e.id)))
+            .sized(ButtonSize::Xs)
             .relative()
             .opacity(if open { 1. } else { self.folder_drag.reveal(&e.id) })
-            .when(open, |d| d.bg(Theme::sidebar_selected()))
-            .hover(|s| s.bg(Theme::sidebar_selected()))
-            .child(icon("plus", 16., Theme::icon()))
+            .selected(open)
+            .icon("plus")
             .child({ let slot = slot.clone(); canvas(move |b, _, _| { record.borrow_mut().insert(slot.clone(), b); }, |_, _, _, _| {}).absolute().inset_0() })
             .tip(crate::settings::tr("新建", "New"), None)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -572,7 +571,7 @@ impl Workspace {
         let lib_batch = self.batch.is_some() && key == "doc";
         let float = key == "doc" && !lib_batch && self.rename.as_ref().is_none_or(|r| r.id != e.id);
         let menu_open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && !m.batch && m.pos.x < px(0.)) || (folder && self.create_menu.as_ref().is_some_and(|(p, _)| p.as_deref() == Some(e.id.as_str())));
-        let give = if float { (if folder || child { 52. } else { 28. }) * if menu_open { 1. } else { self.folder_drag.reveal(&e.id) } } else { 0. };
+        let give = if float { (if folder { 52. } else { 28. }) * if menu_open { 1. } else { self.folder_drag.reveal(&e.id) } } else { 0. };
         let selected = (self.view == View::Doc && (self.current.as_deref() == Some(e.id.as_str()) || (note.is_some() && self.current.as_deref() == note))) || (self.view == View::Folder && self.folder_current.as_deref() == Some(e.id.as_str()));
         let renaming = self.rename.as_ref().filter(|r| r.id == e.id).map(|r| r.field.clone());
         let title = match renaming {
@@ -698,7 +697,6 @@ impl Workspace {
             .when(float, |d| {
                 let end = div().absolute().top_0().bottom_0().right_0().flex().items_center();
                 d.child(if folder { end.child(self.more_button(e, key, cx).mr(px(0.))).child(self.add_button(e, key, cx).ml(px(2.)).mr(px(4.))) }
-                    else if child { end.child(self.more_button(e, key, cx).mr(px(0.))).child(self.child_button(e, key, cx).ml(px(2.)).mr(px(4.))) }
                     else { end.child(self.more_button(e, key, cx)) })
             })
             .when(!renaming && key != "doc" && batch.is_none(), |d| d.child(self.more_button(e, key, cx)))

@@ -246,7 +246,7 @@ impl Workspace {
         // The row's "…" only manages the folder (新建 is the "+" beside it); a
         // right-click still creates straight from the menu.
         let create = !(m.pos.x < px(0.));
-        vec![deferred(anchored().position(pos).snap_to_window_with_margin(px(8.)).child(popover().id("folder-row-menu").occlude().min_w(px(190.)).py(px(crate::ui::MENU_PAD_Y))
+        vec![deferred(anchored().position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().min_w(px(190.))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
             .when(create, |d| d
                 .child(row("fr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_child(&doc, window, cx); })))
