@@ -28,7 +28,7 @@ pub(crate) struct NoteInfo {
 
 /// Where the table is: its library's key and folder, and its own path from there.
 #[derive(Clone)]
-pub(crate) struct Home { root: PathBuf, rel: String, parent: Option<String> }
+pub(crate) struct Place { top: PathBuf, rel: String, parent: Option<String> }
 
 /// The note open in 记录详情.
 pub(crate) struct OpenNote {
@@ -52,7 +52,7 @@ pub(crate) struct Ask {
 pub(crate) struct NotesUi {
     /// The library's documents by their path from its top, as of the last look (`refresh`).
     index: Rc<HashMap<String, NoteInfo>>,
-    home: Option<Home>,
+    place: Option<Place>,
     /// The document each 笔记 cell was last seen pointing at: a note renamed or moved keeps its cell.
     ids: HashMap<CellId, String>,
     /// Notes this view made, or sent to the 回收站 with their records, with where they are (were;
@@ -74,7 +74,7 @@ pub(crate) struct NotesUi {
 
 impl NotesUi {
     /// The library hasn't been looked at yet.
-    pub fn unseen(&self) -> bool { self.home.is_none() && self.index.is_empty() }
+    pub fn unseen(&self) -> bool { self.place.is_none() && self.index.is_empty() }
 }
 
 fn store(cx: &App) -> Option<SharedStore> { cx.has_global::<SharedStore>().then(|| cx.global::<SharedStore>().clone()) }
@@ -82,27 +82,27 @@ fn store(cx: &App) -> Option<SharedStore> { cx.has_global::<SharedStore>().then(
 /// A path as the library writes them.
 fn slashed(p: &Path) -> String { p.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/") }
 
-fn home(v: &TableView, cx: &App) -> Option<Home> {
+fn place(v: &TableView, cx: &App) -> Option<Place> {
     // a table of its own in the library: not one kept inside a page (`.assets`), not a version being looked at
     if !v.standalone { return None; }
     let st = v.state.read(cx);
     if st.read_only { return None; }
     let store = store(cx)?;
-    let root = store.root_path(&store.root_of_path(&st.path)?)?;
-    let rel = slashed(st.path.strip_prefix(&root).ok()?);
+    let top = store.top_path(&store.folder_of_path(&st.path)?)?;
+    let rel = slashed(st.path.strip_prefix(&top).ok()?);
     if rel.split('/').any(|p| p.starts_with('.')) { return None; }
-    let parent = store.listed(|roots| roots.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == rel && e.meta.folder.is_none()).and_then(|e| e.meta.parent.clone()));
-    Some(Home { root, rel, parent })
+    let parent = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == rel && e.meta.folder.is_none()).and_then(|e| e.meta.parent.clone()));
+    Some(Place { top, rel, parent })
 }
 
 /// The table in a folder of its own name, where its notes are kept
 /// (`Store::table_folder`): moved there when it isn't yet, the folder taking
 /// its place in the library. Returns where the table is now.
-pub(crate) fn ensure_folder(v: &mut TableView, cx: &mut Context<TableView>) -> Option<Home> {
-    let h = home(v, cx)?;
+pub(crate) fn ensure_folder(v: &mut TableView, cx: &mut Context<TableView>) -> Option<Place> {
+    let h = place(v, cx)?;
     let store = store(cx)?;
-    let id = store.listed(|roots| roots.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == h.rel && e.meta.folder.is_none()).map(|e| e.id.clone()))?;
-    if let Ok(Some(folder)) = store.with(Some(&id), |s| Ok(s.folder_of_note(&id))) { return Some(Home { parent: Some(folder), ..h }); }
+    let id = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == h.rel && e.meta.folder.is_none()).map(|e| e.id.clone()))?;
+    if let Ok(Some(folder)) = store.with(Some(&id), |s| Ok(s.folder_of_note(&id))) { return Some(Place { parent: Some(folder), ..h }); }
     // what the table holds goes to its file before the file moves
     v.state.update(cx, |s, _| s.write());
     let moved = store.with(Some(&id), |s| s.table_folder(&id)).and_then(|folder| Ok((folder, store.file_path(&id).ok_or_else(|| anyhow::anyhow!("no file"))?)));
@@ -112,26 +112,26 @@ pub(crate) fn ensure_folder(v: &mut TableView, cx: &mut Context<TableView>) -> O
     };
     // the paths in its 笔记 cells were rewritten for where it is now: read again from there
     v.state.update(cx, |s, cx| { s.moved(&path, cx); s.refresh(cx); });
-    let rel = slashed(path.strip_prefix(&h.root).ok()?);
+    let rel = slashed(path.strip_prefix(&h.top).ok()?);
     v.notes.ids.clear();
     cx.emit(TableEvent::LibraryChanged);
-    let h = Home { root: h.root, rel, parent: Some(folder) };
-    v.notes.home = Some(h.clone());
+    let h = Place { top: h.top, rel, parent: Some(folder) };
+    v.notes.place = Some(h.clone());
     Some(h)
 }
 
 /// 笔记 columns can be added here: a table that is a file of the library.
-pub(crate) fn allowed(v: &TableView, cx: &App) -> bool { home(v, cx).is_some() }
+pub(crate) fn allowed(v: &TableView, cx: &App) -> bool { place(v, cx).is_some() }
 
 /// Look at the library again: the documents a cell can point at, and cells
 /// whose note was renamed or moved follow it.
 pub(crate) fn refresh(v: &mut TableView, cx: &mut Context<TableView>) {
-    let Some(h) = home(v, cx) else { v.notes.home = None; return };
+    let Some(h) = place(v, cx) else { v.notes.place = None; return };
     let Some(store) = store(cx) else { return };
-    let key = store.root_of_path(&h.root.join(&h.rel));
+    let key = store.folder_of_path(&h.top.join(&h.rel));
     let mut index = HashMap::new();
-    store.listed(|roots| {
-        for e in roots.iter().filter(|r| Some(&r.0) == key.as_ref()).flat_map(|r| &r.1) {
+    store.listed(|tops| {
+        for e in tops.iter().filter(|r| Some(&r.0) == key.as_ref()).flat_map(|r| &r.1) {
             if e.meta.folder.is_some() || e.meta.local() || e.meta.kind != crate::store::DocKind::Doc || e.meta.rel.is_empty() { continue; }
             index.insert(e.meta.rel.clone(), NoteInfo { id: e.id.clone(), title: e.title.clone(), empty: e.body.trim().is_empty() });
         }
@@ -167,14 +167,14 @@ pub(crate) fn refresh(v: &mut TableView, cx: &mut Context<TableView>) {
         }
     }
     v.notes.ids = ids;
-    v.notes.home = Some(h);
+    v.notes.place = Some(h);
     if changed { v.notes.index = Rc::new(index); cx.notify(); }
     if !moved.is_empty() { v.edit(cx, |d| d.set_cells(tid, moved)); }
 }
 
 /// What a 笔记 cell points at. None: nothing where it says (找不到笔记).
 pub(crate) fn info<'a>(v: &'a TableView, href: &str) -> Option<&'a NoteInfo> {
-    let h = v.notes.home.as_ref()?;
+    let h = v.notes.place.as_ref()?;
     v.notes.index.get(&field::note_rel(&h.rel, href)?)
 }
 
@@ -221,14 +221,14 @@ pub(crate) fn open_cell(v: &mut TableView, cell: CellId, at: Point<Pixels>, wind
 
 /// A new note beside the table, titled as the record is, for an empty cell. Undo empties the cell
 /// again and the note goes to the 回收站 (`after_history`).
-fn make(v: &mut TableView, h: &Home, cell: CellId, title: &str, cx: &mut Context<TableView>) -> Option<String> {
+fn make(v: &mut TableView, h: &Place, cell: CellId, title: &str, cx: &mut Context<TableView>) -> Option<String> {
     let mut store = store(cx)?;
     let mut doc = crate::model::Document::default();
     let title = title.trim();
     doc.title = crate::model::RichText::plain(if title.is_empty() { label("未命名文档") } else { title.to_string() });
     let made = store.create_from_in(&doc, h.parent.as_deref()).and_then(|id| {
         let path = store.file_path(&id).ok_or_else(|| anyhow::anyhow!("no file"))?;
-        Ok((id, slashed(path.strip_prefix(&h.root)?)))
+        Ok((id, slashed(path.strip_prefix(&h.top)?)))
     });
     let (id, rel) = match made {
         Ok(m) => m,
@@ -255,7 +255,7 @@ fn show(v: &mut TableView, cell: CellId, id: &str, window: &mut Window, cx: &mut
         Ok(d) => d,
         Err(e) => { log::error!("笔记打不开 {id}: {e:#}"); return; }
     };
-    let meta = store.listed(|roots| roots.iter().flat_map(|r| &r.1).find(|e| e.id == id).map(|e| e.meta.clone()));
+    let meta = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.id == id).map(|e| e.meta.clone()));
     let editor = cx.new(|cx| {
         let mut e = Editor::new(doc, meta.as_ref().map_or_else(crate::time::now, |m| m.modified), Default::default(), window, cx);
         if let Some(m) = &meta { e.created = m.created; }
@@ -297,7 +297,7 @@ pub(crate) fn save(v: &mut TableView, cx: &mut Context<TableView>) {
             if let Some(o) = v.notes.open.as_mut() { o.dirty = false; }
             editor.update(cx, |e, _| e.modified = meta.modified);
             // the cell follows the file; the index is put right at once so the cell never reads 找不到笔记 in between
-            if let Some(h) = v.notes.home.clone() {
+            if let Some(h) = v.notes.place.clone() {
                 let mut index = (*v.notes.index).clone();
                 index.retain(|_, n| n.id != id);
                 index.insert(meta.rel.clone(), NoteInfo { id: id.clone(), title: doc.title.text.clone(), empty: doc.plain_text().trim().is_empty() });
@@ -357,7 +357,7 @@ pub(crate) fn pick_popup(v: &TableView, rec: RecId, fid: FieldId, cx: &Context<T
             .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(title_of(n))))
             .when(!place.is_empty(), |d| d.child(div().flex_none().max_w(px(120.)).overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(12.)).text_color(Theme::text_placeholder()).child(ui_text(place.clone()))))
             .on_click(cx.listener(move |v, _, window, cx| {
-                let Some(h) = v.notes.home.clone() else { return };
+                let Some(h) = v.notes.place.clone() else { return };
                 let tid = v.table;
                 v.edit(cx, |d| d.set_cells(tid, vec![(rec, fid, Value::Text(field::note_href(&h.rel, &rel)))]));
                 v.notes.ids.insert((rec, fid), id.clone());
@@ -479,7 +479,7 @@ pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option
 
 /// The notes that are the table's own (in its folder) among these records' or fields' cells.
 fn owned(v: &TableView, records: &[RecId], fields: &[FieldId], cx: &App) -> Vec<(String, String)> {
-    let Some(h) = v.notes.home.as_ref() else { return vec![] };
+    let Some(h) = v.notes.place.as_ref() else { return vec![] };
     let dir = h.rel.rsplit_once('/').map_or("", |(d, _)| d);
     let st = v.state.read(cx);
     let Some(t) = st.doc.base.table(v.table) else { return vec![] };
@@ -563,7 +563,7 @@ fn target<'a>(n: &'a NotesUi, cell: CellId, rel: Option<&str>) -> Option<&'a Str
 /// redo, for `after_history` to see what the step did.
 pub(crate) fn pointed(v: &TableView, cx: &App) -> HashSet<String> {
     let mut out = HashSet::new();
-    let Some(h) = v.notes.home.as_ref().filter(|_| !v.notes.mine.is_empty()) else { return out };
+    let Some(h) = v.notes.place.as_ref().filter(|_| !v.notes.mine.is_empty()) else { return out };
     let Some(t) = v.state.read(cx).doc.base.table(v.table) else { return out };
     for f in t.fields.iter().filter(|f| f.ty == FieldType::Note) {
         for r in &t.records {

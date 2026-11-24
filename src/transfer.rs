@@ -155,6 +155,8 @@ fn tree(store: &mut crate::store::Store, t: &Scanned, root: &Path, parent: Optio
     // In the folder's order, as its documents are: made together, unplaced
     // folders would fall back to random ids.
     if parent.is_some() { let _ = store.set_parent(&id, parent); }
+    // Made when the folder was, else when the first file in it was.
+    if let Some(made) = fdl_core::vfs::made_time(&t.dir).or_else(|| first_made(t)) { let _ = store.update_meta(&id, |m| m.created = made); }
     for sub in &t.dirs { tree(store, sub, root, Some(&id), failed); }
     for p in &t.docs {
         let made = if crate::local_files::is_markdown_path(p) {
@@ -180,13 +182,33 @@ pub(crate) fn import_file(store: &mut crate::store::Store, p: &Path, parent: Opt
     Ok(id)
 }
 
-/// The document `id` just made from file `src` keeps that file's times: made
-/// and last changed as the file was (`vfs::file_times`), and its own file
-/// changed then too. When they cannot be read it keeps the import's time.
+/// The document `id` just made from file `src` keeps its times: those its
+/// Markdown front matter gives (`markdown::front_matter_times`), else the
+/// file's (`vfs::file_times`); its own file is changed then too. With
+/// neither it keeps the import's time.
 pub(crate) fn keep_times(store: &mut crate::store::Store, id: &str, src: &Path) {
-    let Some((made, changed)) = fdl_core::vfs::file_times(src) else { return };
+    let front = if store.is_markdown(id) { crate::markdown::front_matter_times(&store.front_matter_of(id)) } else { (None, None) };
+    let Some((made, changed)) = times(fdl_core::vfs::file_times(src), front) else { return };
     if let Some(p) = store.file_path(id) { let _ = fdl_core::vfs::set_modified(&p, changed); }
     let _ = store.update_meta(id, |m| { m.created = made; m.modified = changed; });
+}
+
+/// Made and changed from the file's times and the front matter's, which
+/// win where they parse. Never changed before made: a file made after its
+/// last change (a copy) was made then; a page whose front matter says it
+/// was made later than its file or front matter says it changed, changed then.
+fn times(file: Option<(u64, u64)>, (made, changed): (Option<u64>, Option<u64>)) -> Option<(u64, u64)> {
+    if file.is_none() && made.is_none() && changed.is_none() { return None; }
+    let now = fdl_core::time::now();
+    let (file_made, file_changed) = file.unwrap_or((now, now));
+    let changed = changed.unwrap_or(file_changed);
+    let made = made.unwrap_or(file_made.min(changed));
+    Some((made, changed.max(made)))
+}
+
+/// When the first file a scanned folder holds was made, at any depth.
+fn first_made(t: &Scanned) -> Option<u64> {
+    t.docs.iter().filter_map(|p| fdl_core::vfs::file_times(p).map(|(made, _)| made)).chain(t.dirs.iter().filter_map(first_made)).min()
 }
 
 /// What a folder import left behind, for its toast.
@@ -488,7 +510,7 @@ impl Workspace {
         if !self.save_before(cx, move |w, window, cx| w.import_paths(&again, retry.clone(), open, window, cx)) {
             return;
         }
-        let Some((key, mut writer)) = self.store.tree_writer(parent.as_deref()) else { return self.show_toast_kind(ToastKind::Error, &crate::shared_store::no_root().to_string(), cx) };
+        let Some((key, mut writer)) = self.store.tree_writer(parent.as_deref()) else { return self.show_toast_kind(ToastKind::Error, &crate::shared_store::no_folder().to_string(), cx) };
         let Some(task_guard) = self.store.begin_file_task() else { return };
         let parent = self.store.real_parent(parent.as_deref()).map(str::to_string);
         let paths = paths.to_vec();
@@ -564,8 +586,8 @@ impl Workspace {
         )).with_priority(3).into_any_element())
     }
 
-    /// The 导入 menu's rows, bringing things into `parent` (None: the root in front): that menu, and
-    /// the end of a root's "+" menu in the sidebar.
+    /// The 导入 menu's rows, bringing things into `parent` (None: the top-level folder in front): that menu, and
+    /// the end of a top-level folder's "+" menu in the sidebar.
     pub(crate) fn import_items(&self, parent: Option<String>, cx: &mut Context<Self>) -> Vec<crate::design::MenuItem> {
         let item = |id: &'static str, glyph: &'static str, label: &'static str, kind: ImportKind| {
             let parent = parent.clone();
@@ -649,7 +671,7 @@ impl Workspace {
         // Scanning and writing hundreds of files takes seconds (an fsync each),
         // so it runs on its own store off the window's thread; the library
         // lock keeps it one write, as `tree_writer` does for drags.
-        let Some((key, mut writer)) = self.store.tree_writer(parent.as_deref()) else { return self.show_toast_kind(ToastKind::Error, &crate::shared_store::no_root().to_string(), cx) };
+        let Some((key, mut writer)) = self.store.tree_writer(parent.as_deref()) else { return self.show_toast_kind(ToastKind::Error, &crate::shared_store::no_folder().to_string(), cx) };
         let Some(task_guard) = self.store.begin_file_task() else { return };
         let parent = self.store.real_parent(parent.as_deref()).map(str::to_string);
         let dir = dir.to_path_buf();
@@ -785,7 +807,7 @@ impl Workspace {
 impl Workspace {
     pub(crate) fn check_export_safety(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         use crate::model::*;
-        let root = crate::store::Store::root_dir();
+        let root = crate::store::Store::active_dir();
         assert!(std::env::var_os("FDL_SCRIPT").is_some() && std::env::var_os("QUIET_MD_HOME").is_some());
         fdl_core::vfs::create_dir_all(root.join("assets")).unwrap();
         fdl_core::vfs::write(root.join("assets/report.pdf"), b"attachment-content").unwrap();
@@ -996,6 +1018,88 @@ mod tests {
         super::keep_times(&mut store, &id, &tmp.join("no such file.md"));
         let m = store.list().into_iter().find(|e| e.id == id).unwrap().meta;
         assert!(m.created >= before && m.modified >= before);
+        std::fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[test]
+    fn front_matter_times_come_first() {
+        let (tmp, from, mut store) = places("front");
+        let t = |s| fdl_core::time::parse_date(s).unwrap();
+        let import = |store: &mut crate::store::Store, name: &str, text: &str, changed: u64| {
+            let src = from.join(name);
+            aged(&src, text, changed);
+            let id = super::import_file(store, &src, None).unwrap();
+            let e = store.list().into_iter().find(|e| e.id == id).unwrap();
+            let file = store.file_path(&id).unwrap();
+            ((e.meta.created, e.meta.modified), mtime(&file), std::fs::read_to_string(file).unwrap())
+        };
+        // Both given: both used, the library's file changed then too, the front matter kept as written.
+        let front = "---\ncreated: 2024-03-05\nupdated: \"2024-03-06T10:00:00+08:00\"\ntags: [a]\n---\n";
+        let (times, file_time, text) = import(&mut store, "both.md", &format!("{front}\nbody\n"), THEN);
+        assert_eq!(times, (t("2024-03-05"), t("2024-03-06T10:00:00+08:00")));
+        assert_eq!(file_time, t("2024-03-06T10:00:00+08:00"));
+        assert!(text.starts_with(front), "{text}");
+        // Only `date`: made then, changed when the file was …
+        let later = t("2025-01-01T00:00:00Z");
+        assert_eq!(import(&mut store, "dated.md", "---\ndate: 2024-03-05 14:30\n---\nbody\n", later).0, (t("2024-03-05 14:30"), later));
+        // … but not before it was made.
+        assert_eq!(import(&mut store, "early.md", "---\ndate: 2024-03-05\n---\nbody\n", THEN).0, (t("2024-03-05"), t("2024-03-05")));
+        // Only `lastmod`: made as the file was, no later than that.
+        assert_eq!(import(&mut store, "lastmod.md", "---\nlastmod: 2024-03-07\n---\nbody\n", THEN).0, (THEN, t("2024-03-07")));
+        // Nothing that parses: the file's times, as before.
+        assert_eq!(import(&mut store, "bad.md", "---\ndate: someday\ncreated: {{date}}\n---\nbody\n", THEN).0, (THEN, THEN));
+        assert_eq!(import(&mut store, "none.md", "body\n", THEN).0, (THEN, THEN));
+        // Not Markdown: no front matter is read.
+        assert_eq!(import(&mut store, "plain.txt", "---\ndate: 2024-03-05\n---\nbody\n", THEN).0, (THEN, THEN));
+        std::fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[test]
+    fn a_folder_import_keeps_when_its_folders_were_made() {
+        let (tmp, from, mut store) = places("folders");
+        aged(&from.join("vault/a.md"), "a", THEN + 500);
+        aged(&from.join("vault/sub/b.md"), "b", THEN);
+        aged(&from.join("vault/sub/deep/c.md"), "c", THEN + 900);
+        // Imported a second later than the folders were made, so the two differ.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let tree = super::scan_folder(&from.join("vault"), 0).unwrap();
+        let mut failed = 0;
+        store.batch(|s| super::import_tree(s, &tree, None, &mut failed)).unwrap().unwrap();
+        let entries = store.list();
+        for (name, dir, earliest) in [("vault", "vault", THEN), ("sub", "vault/sub", THEN), ("deep", "vault/sub/deep", THEN + 900)] {
+            let e = entries.iter().find(|e| e.meta.folder.is_some() && e.title == name).unwrap();
+            // Where the system keeps when a folder was made, that; else its first file's time.
+            let want = fdl_core::vfs::made_time(&from.join(dir)).unwrap_or(earliest);
+            assert_eq!(e.meta.created, want, "{name}");
+            if cfg!(any(target_os = "macos", windows)) { assert!(e.meta.created > earliest, "{name}: the folder was made now"); }
+        }
+        assert_eq!(super::first_made(&tree), Some(THEN), "the fallback: the first file in it, at any depth");
+        assert_eq!(super::first_made(&tree.dirs[0].dirs[0]), Some(THEN + 900));
+        // Kept: the next look finds the same.
+        let again = crate::store::Store::open_at(tmp.join("library")).unwrap().list();
+        let vault = |l: &[crate::store::Entry]| l.iter().find(|e| e.meta.folder.is_some() && e.title == "vault").unwrap().meta.created;
+        assert_eq!(vault(&again), vault(&entries));
+        std::fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[test]
+    fn pictures_copied_in_keep_their_change_time() {
+        let (tmp, from, _store) = places("pictures");
+        // Never the real library's assets: this library is the one in front.
+        crate::store::Store::set_active_dir(&tmp.join("library"));
+        let pic = from.join("photo.png");
+        image::RgbImage::new(2, 2).save(&pic).unwrap();
+        fdl_core::vfs::set_modified(&pic, THEN).unwrap();
+        let b = crate::editor::image::image_block_from_file(&pic).unwrap();
+        let BlockKind::Image { src, .. } = &b.kind else { panic!() };
+        let copy = std::path::Path::new(src);
+        assert!(copy.starts_with(fdl_core::vfs::temp_dir()) && copy != pic, "{src}");
+        assert_eq!((mtime(copy), mtime(&pic)), (THEN, THEN));
+        // A Markdown file's picture, imported with it.
+        aged(&from.join("page.md"), "![](photo.png)\n", THEN + 60);
+        let (doc, _) = super::read_markdown(&from.join("page.md"), None).unwrap();
+        let BlockKind::Image { src, .. } = &doc.blocks[0].kind else { panic!("{:?}", doc.blocks[0].kind) };
+        assert_eq!(mtime(std::path::Path::new(src)), THEN);
         std::fs::remove_dir_all(tmp).unwrap();
     }
 }

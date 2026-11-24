@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 /// 导出 Markdown 设置.
 #[derive(Default)]
 pub struct Options<'a> {
-    pub library_root: Option<&'a std::path::Path>,
+    pub library_dir: Option<&'a std::path::Path>,
     /// Titles of the document's child pages (what 子页面列表 shows).
     pub sub_pages: &'a [String],
     /// 所有内容: images are kept, local ones copied into this folder next to
@@ -91,8 +91,8 @@ pub fn keepable(blocks: Vec<Block>) -> Vec<Block> {
 /// 复制为 Markdown (#60): `blocks` (and the title, for a whole document) as
 /// Markdown text. Equations stay LaTeX; local images and attachments are
 /// linked by their absolute paths, nothing is copied.
-pub fn clipboard(title: Option<&str>, blocks: &[Block], library_root: &Path) -> String {
-    let opts = Options { in_place: true, absolute: true, library_root: Some(library_root), ..Default::default() };
+pub fn clipboard(title: Option<&str>, blocks: &[Block], library_dir: &Path) -> String {
+    let opts = Options { in_place: true, absolute: true, library_dir: Some(library_dir), ..Default::default() };
     let mut w = Writer { opts: &opts, files: vec![], generated: vec![], missing: 0 };
     let mut out = title.map(str::trim).filter(|t| !t.is_empty()).map(|t| format!("# {}\n\n", escape(t))).unwrap_or_default();
     out.push_str(&w.blocks(blocks));
@@ -194,7 +194,7 @@ impl Writer<'_> {
                 Some(dir) => {
                     let n = self.generated.len() / 2 + 1;
                     let (svg, file) = (format!("{dir}/board-{n}.svg"), format!("{dir}/board-{n}.excalidraw"));
-                    let root = self.opts.library_root.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::root_dir);
+                    let root = self.opts.library_dir.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::active_dir);
                     self.generated.push((svg.clone(), bd.svg_in(&root)));
                     self.generated.push((file.clone(), bd.file_json()));
                     format!("[![]({})]({})", link_target(&svg), link_target(&file))
@@ -202,7 +202,7 @@ impl Writer<'_> {
                 None => bd.plain_text().lines().map(escape).collect::<Vec<_>>().join("<br>"),
             },
             // A 数据表: the shown view as a Markdown table.
-            BlockKind::DataTable(t) => crate::table::block_markdown(&self.opts.library_root.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::root_dir), t),
+            BlockKind::DataTable(t) => crate::table::block_markdown(&self.opts.library_dir.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::active_dir), t),
             BlockKind::File(f) => self.file_link(f).map(|url| format!("[{}]({url})", escape(&f.name))).unwrap_or_else(|| escape(&f.name)),
             BlockKind::SubPageList => {
                 self.opts.sub_pages.iter().map(|t| format!("- {}", escape(&crate::model::display_title(t)))).collect::<Vec<_>>().join("\n")
@@ -232,7 +232,7 @@ impl Writer<'_> {
         }
         if self.opts.base.is_none() && !self.opts.absolute { return src.to_string() }
         let raw = Path::new(src.strip_prefix("file://").unwrap_or(src));
-        let root = self.opts.library_root.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::root_dir);
+        let root = self.opts.library_dir.map(Path::to_path_buf).unwrap_or_else(crate::store::Store::active_dir);
         // Relative sources left after `parse_file` are the library's (`.assets/…`).
         let abs = if raw.fs_is_absolute() { raw.to_path_buf() } else { root.join(raw) };
         let Some(base) = self.opts.base else { return abs.to_string_lossy().into_owned() };
@@ -288,7 +288,7 @@ impl Writer<'_> {
         if src.starts_with("http://") || src.starts_with("https://") || src.starts_with("data:image/") {
             return src.to_string();
         }
-        let Some(path) = crate::store::export_path_in(self.opts.library_root.unwrap_or(&crate::store::Store::root_dir()), src) else { self.missing += 1; return String::new() };
+        let Some(path) = crate::store::export_path_in(self.opts.library_dir.unwrap_or(&crate::store::Store::active_dir()), src) else { self.missing += 1; return String::new() };
         if let Some((_, rel)) = self.files.iter().find(|(p, _)| *p == path) {
             return rel.clone();
         }
@@ -324,6 +324,28 @@ pub fn front_matter(text: &str) -> (&str, &str) {
         }
     }
     ("", text)
+}
+
+/// When front matter (`front_matter`'s first part) says its page was made
+/// and last changed, in unix seconds, for an import to keep. Keys are read
+/// in any case, with `-`, `_` and spaces ignored, the first that parses
+/// winning: made from `created`, `createdAt`, `date created`,
+/// `creation_date`, then `date` (Obsidian, Jekyll, Hugo); changed from
+/// `updated`, `modified`, `lastmod`, `updatedAt`, `last_modified`,
+/// `last_modified_at`, `date modified`, `date updated`.
+pub fn front_matter_times(front: &str) -> (Option<u64>, Option<u64>) {
+    const MADE: [&str; 5] = ["created", "createdat", "datecreated", "creationdate", "date"];
+    const CHANGED: [&str; 8] = ["updated", "modified", "lastmod", "updatedat", "lastmodified", "lastmodifiedat", "datemodified", "dateupdated"];
+    // Top-level `key: value` lines; a value in quotes may hold ` #`.
+    let fields: Vec<(String, &str)> = front.lines().skip(1).filter(|l| !l.starts_with([' ', '\t', '#', '-'])).filter_map(|l| {
+        let (k, v) = l.split_once(':')?;
+        let key: String = k.trim().trim_matches(['"', '\'']).chars().filter(|c| !matches!(c, '-' | '_' | ' ')).flat_map(char::to_lowercase).collect();
+        let v = v.trim();
+        let v = if v.starts_with(['"', '\'']) { v } else { v.split(" #").next().unwrap_or(v).trim() };
+        Some((key, v))
+    }).collect();
+    let first = |keys: &[&str]| keys.iter().find_map(|k| fields.iter().filter(|(f, _)| f == k).find_map(|(_, v)| crate::time::parse_date(v)));
+    (first(&MADE), first(&CHANGED))
 }
 
 /// `%20` and friends in a link.
@@ -582,7 +604,7 @@ pub fn write_file(doc: &Document, front: &str, base: Option<&Path>) -> String {
 /// `write_file` with the copies to make beside a 本机文件 (`Export::files`,
 /// relative to the file's folder).
 pub fn write_file_with(doc: &Document, front: &str, opts: &Options) -> Export {
-    let opts = Options { in_place: true, library_root: opts.library_root, base: opts.base, name: opts.name, copied: opts.copied, original: opts.original, ..Default::default() };
+    let opts = Options { in_place: true, library_dir: opts.library_dir, base: opts.base, name: opts.name, copied: opts.copied, original: opts.original, ..Default::default() };
     let mut w = Writer { opts: &opts, files: vec![], generated: vec![], missing: 0 };
     let pieces = w.pieces(&doc.blocks);
     let canonical = joined(&pieces);
@@ -902,6 +924,26 @@ fn inline(t: &RichText, files: &mut impl FnMut(&FileBlock) -> Option<String>) ->
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn front_matter_says_when_a_page_was_made_and_changed() {
+        use super::front_matter_times as times;
+        let t = |s| crate::time::parse_date(s);
+        // Obsidian and Hugo spellings, any case; the first that parses wins.
+        assert_eq!(times("---\ncreated: 2024-03-05\nupdated: 2024-03-06T10:00:00Z\n---\n"), (t("2024-03-05"), t("2024-03-06T10:00:00Z")));
+        assert_eq!(times("---\ntitle: x\ndate: 2024-03-05T14:30:00+08:00\nlastmod: 2024-04-01\n---\n"), (t("2024-03-05T14:30:00+08:00"), t("2024-04-01")));
+        assert_eq!(times("---\nCreatedAt: \"2024-03-05\"\nUpdated_At: '2024-03-07'\n---\n"), (t("2024-03-05"), t("2024-03-07")));
+        assert_eq!(times("---\ndate created: 2024-03-05\ndate modified: 2024-03-08 # by Linter\n---\n"), (t("2024-03-05"), t("2024-03-08")));
+        assert_eq!(times("---\nlast_modified_at: 2024-03-09\n---\n"), (None, t("2024-03-09")));
+        // `created` before `date`, whichever comes first in the file.
+        assert_eq!(times("---\ndate: 2020-01-01\ncreated: 2024-03-05\n---\n").0, t("2024-03-05"));
+        // One that does not parse gives way to the next, or to nothing.
+        assert_eq!(times("---\ncreated: last spring\ndate: 2024-03-05\n---\n").0, t("2024-03-05"));
+        assert_eq!(times("---\ncreated: last spring\nmodified: {{date}}\n---\n"), (None, None));
+        // Nested keys, list items and comments are not the page's.
+        assert_eq!(times("---\nmeta:\n  created: 2024-03-05\n# date: 2024-03-05\ntags:\n- date: 2024-03-05\n---\n"), (None, None));
+        assert_eq!(times(""), (None, None));
+    }
+
     use super::*;
 
     #[test]
@@ -916,11 +958,11 @@ mod tests {
         let mut table = Table { col_widths: vec![], header_rows: 0, header_col: false, rows: vec![vec![TableCell::empty()]] };
         table.rows[0][0].blocks = vec![Block::new(BlockKind::Text, text.clone())];
         let doc = Document { blocks: vec![Block::new(BlockKind::Text, text), Block::new(BlockKind::Table(table), RichText::default())], ..Default::default() };
-        let out = export(&doc, &Options { assets: Some("out.assets"), library_root: Some(&root), ..Default::default() });
+        let out = export(&doc, &Options { assets: Some("out.assets"), library_dir: Some(&root), ..Default::default() });
         assert_eq!(out.files.len(), 1);
         assert_eq!(out.missing, 0);
         assert_eq!(out.text.matches("[Report \\[1\\]](out.assets/report%20%281%29.pdf)").count(), 2);
-        let plain = export(&doc, &Options { library_root: Some(&root), ..Default::default() });
+        let plain = export(&doc, &Options { library_dir: Some(&root), ..Default::default() });
         assert!(plain.files.is_empty());
         assert!(!plain.text.contains("out.assets"));
         crate::vfs::remove_dir_all(root).unwrap();

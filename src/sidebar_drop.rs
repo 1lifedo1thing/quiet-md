@@ -77,7 +77,7 @@ impl Workspace {
     /// The place a drop goes, for the dialog and the toast.
     pub(crate) fn drop_place(&self, target: &SidebarDropAt) -> String {
         target.parent.as_ref().and_then(|t| self.entries.iter().find(|e| &e.id == t)).map(|e| crate::settings::display_title(&e.title))
-            .unwrap_or_else(|| self.top_name())
+            .unwrap_or_else(|| self.home_name())
     }
 
     /// 导入 confirmed: bring it in where it was dropped.
@@ -151,7 +151,6 @@ impl Workspace {
     /// The folder that took a drop opens and bounces.
     fn landed_in(&mut self, folder: Option<&str>) {
         if let Some(f) = folder { self.expanded.insert(f.to_string()); self.folder_drag.kick(f, 4.5); }
-        self.folded[1] = false;
     }
 
     /// Nothing is being dragged any more: forget the drop target.
