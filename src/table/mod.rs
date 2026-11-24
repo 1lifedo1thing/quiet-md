@@ -593,7 +593,14 @@ impl Render for TableView {
         // name; its tools only while the pointer is over the table), no frame
         // around the block, and as tall as its rows. Full pane: the whole chrome.
         let root = if self.full {
-            root.child(menus::bar(self, t, v, cx)).child(body)
+            // a sheet of its own under the page's header: squircle corners and a 0.5pt hairline
+            // (as Home's cards), set in from the pane's edges
+            const GAP: f32 = 8.;
+            const RADIUS: f32 = crate::design::R + 4.;
+            root.p(px(GAP)).child(div().relative().flex_1().min_h_0()
+                .child(crate::ui::squircle_surface(RADIUS, Theme::bg_body()).absolute().inset_0())
+                .child(div().absolute().inset_0().rounded(px(RADIUS)).overflow_hidden().flex().flex_col().child(menus::bar(self, t, v, cx)).child(body))
+                .child(crate::ui::squircle_outline(RADIUS, 0.5, crate::theme::Theme::line_sheet())))
         } else {
             let rows = self.tops.last().copied().unwrap_or(0.) + add_row_h();
             let h = INLINE_HEAD_H + header_h() + rows.min(INLINE_MAX_ROWS_H) + footer_h() + 2.;

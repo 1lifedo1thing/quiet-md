@@ -65,6 +65,11 @@ pub(crate) struct NotesUi {
     /// 记录详情's width once dragged, and the drag: where it was pressed, the width then.
     pub width: Option<f32>,
     pub grip: Option<(f32, f32)>,
+    /// With a note open: the fields' height once the line between them and the note was dragged,
+    /// the drag (where it was pressed, the height then), and the height last laid out.
+    pub split: Option<f32>,
+    pub split_drag: Option<(f32, f32)>,
+    pub fields_h: Rc<std::cell::Cell<f32>>,
 }
 
 impl NotesUi {
@@ -403,6 +408,38 @@ pub(crate) fn grip(v: &TableView, cx: &Context<TableView>) -> impl IntoElement {
         })
 }
 
+/// The fields' share of the panel over a note: what was dragged, else at most this much of it.
+pub(crate) const FIELDS_SHARE: f32 = 0.3;
+
+/// The line between the record's fields and its note: dragged up or down, the note is taller or
+/// shorter; a double click puts it back.
+fn split_grip(v: &TableView, cx: &Context<TableView>) -> impl IntoElement {
+    let dragging = v.notes.split_drag.is_some();
+    div().id("tb-note-split").relative().flex_none().h(px(1.)).bg(line())
+        .child(div().absolute().left_0().right_0().top(px(-3.)).h(px(7.)).cursor(CursorStyle::ResizeUpDown).group("tb-note-split")
+            .child(div().mt(px(2.)).h(px(2.)).w_full().when(dragging, |d| d.bg(Theme::primary())).when(!dragging, |d| d.group_hover("tb-note-split", |s| s.bg(Theme::primary()))))
+            .on_mouse_down(MouseButton::Left, cx.listener(|v, ev: &MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                if ev.click_count >= 2 { v.notes.split = None; } else { v.notes.split_drag = Some((f32::from(ev.position.y), v.notes.split.unwrap_or(v.notes.fields_h.get()))); }
+                cx.notify();
+            })))
+        .when(dragging, |d| {
+            let (a, b) = (cx.weak_entity(), cx.weak_entity());
+            d.child(canvas(|_, _, _| {}, move |_, _, window, _| {
+                window.on_mouse_event(move |ev: &MouseMoveEvent, phase, window, cx| if phase == DispatchPhase::Capture {
+                    let _ = a.update(cx, |v, cx| {
+                        let Some((y0, h0)) = v.notes.split_drag else { return };
+                        // the note keeps 200 for itself, the fields one row
+                        let max = (f32::from(window.viewport_size().height) - 320.).max(80.);
+                        v.notes.split = Some((h0 + f32::from(ev.position.y) - y0).clamp(48., max));
+                        cx.notify();
+                    });
+                });
+                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| if phase == DispatchPhase::Capture { let _ = b.update(cx, |v, cx| { v.notes.split_drag = None; cx.notify(); }); });
+            }).absolute().size_0())
+        })
+}
+
 /// A 笔记 field's value in 记录详情: its note's title (the one open in the panel marked), or what to do about there being none.
 pub(crate) fn row_value(v: &TableView, cell: CellId, val: &Value) -> AnyElement {
     match val {
@@ -431,7 +468,7 @@ pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option
         })))
         .child(tool("tb-note-full", "expand", "整页打开").on_click(cx.listener(move |v, _, _, cx| open_full(v, id.clone(), cx))));
     Some(div().flex_1().min_h(px(200.)).flex().flex_col()
-        .child(crate::design::Separator::new())
+        .child(split_grip(v, cx))
         .child(bar)
         .child(crate::design::Separator::new())
         .child(div().id("tb-note-editor").flex_1().min_h_0().overflow_hidden().child(o.editor.clone()))

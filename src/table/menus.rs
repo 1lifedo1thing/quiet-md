@@ -18,11 +18,17 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
         ("tb-t-group", "view-list", "分组", o.groups.len(), panels::Kind::Group), ("tb-t-sort", "sort-down", "排序", o.sorts.len(), panels::Kind::Sort)];
     tools.push(("tb-t-height", "list", "行高", 0, panels::Kind::RowHeight));
     tools.push(("tb-t-color", "palette", "填色", o.colors.len(), panels::Kind::Color));
+    // the pane's bar (`add`) has room to name its main tools; a page's one line keeps to icons
+    let named = |id: &str| add && matches!(id, "tb-t-fields" | "tb-t-filter" | "tb-t-group" | "tb-t-sort");
     let mut row = div().flex_none().flex().items_center().gap(px(4.))
-        .when(add, |d| d.child(icon_button("tb-add", "plus", false).tip_above(crate::settings::text("添加记录"), None).on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx)))));
+        .when(add, |d| d.child(crate::design::Button::ghost("tb-add").icon("plus").label(crate::settings::label("添加记录")).on_click(cx.listener(|v, _, window, cx| v.add_record(None, window, cx)))))
+        .when(add, |d| d.child(div().flex_none().w(px(1.)).h(px(16.)).mx(px(4.)).bg(line())));
     for (id, glyph, tip, n, kind) in tools {
-        row = row.child(tool_btn(id, glyph, n)
-            .tip_above(crate::settings::text(tip), None)
+        let b = if named(id) {
+            let name = crate::settings::label(tip);
+            crate::design::Button::ghost(id).icon(glyph).selected(n > 0).label(if n > 0 { format!("{name} {n}") } else { name.to_string() })
+        } else { tool_btn(id, glyph, n).tip_above(crate::settings::text(tip), None) };
+        row = row.child(b
             .on_click(cx.listener(move |v, ev: &ClickEvent, window, cx| { let p = ev.position(); panels::open(v, kind, point(p.x - px(200.), p.y + px(18.)), window, cx); })));
     }
     row

@@ -656,6 +656,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .child(body.when(empty, |d| d.child(div().absolute().left_0().right_0().top(px(48.)).flex().justify_center().text_color(Theme::text_placeholder()).child(crate::settings::label("没有符合筛选条件的记录")))))
             .children(cursor_ring(v, &cols, row_h))
             .children(col_edge(v, &cols))
+            .children(col_grips(v, &cols, &fields, cx))
             .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline)))
         .child(footer)
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
@@ -740,6 +741,30 @@ fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
         clip = clip.child(ring_at(left(hc), left(hc) + cols.w[hc], y(hr), y(hr) + row_h, 2.));
     }
     Some(clip.into_any_element())
+}
+
+/// Below the header, every column edge drags its width too, down to the last row: the line it
+/// lights (`col_edge`) is the whole edge, so the whole edge takes the drag.
+fn col_grips(v: &TableView, cols: &Cols, fields: &[&Field], cx: &Context<TableView>) -> Vec<AnyElement> {
+    let end = header_h() + v.tops.last().copied().unwrap_or(0.) - v.scroll.y;
+    if end <= header_h() { return vec![] }
+    let mut out = vec![];
+    for (ci, f) in fields.iter().enumerate() {
+        let scrolled = ci >= cols.frozen;
+        let edge = cols.x[ci] + cols.w[ci] - if scrolled { v.scroll.x } else { 0. };
+        if scrolled && edge < cols.frozen_w + 4. { continue }
+        let (fid, w) = (f.id, cols.w[ci]);
+        out.push(div().id(("tb-grip-body", fid)).absolute().top(px(header_h())).h(px(end - header_h())).left(px(edge - 4.)).w(px(8.)).cursor(CursorStyle::ResizeLeftRight)
+            .on_hover(cx.listener(move |v, on: &bool, _, cx| { let g = on.then_some(fid); if v.grip_hover != g && (*on || v.grip_hover == Some(fid)) { v.grip_hover = g; cx.notify(); } }))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                cx.stop_propagation();
+                v.commit_edit(true, window, cx);
+                v.drag = Some(Drag::ColWidth { field: fid, x0: f32::from(ev.position.x), w0: w, w });
+                cx.notify();
+            }))
+            .into_any_element());
+    }
+    out
 }
 
 /// The column edge being dragged (or under the pointer, ready to drag): lit from the header to the last row,

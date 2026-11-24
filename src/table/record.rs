@@ -258,10 +258,18 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, r: &Rec
     }
     // a note open in the panel takes the room under the fields, which keep to the top (and scroll there)
     let note = notes::pane(v, rid, cx);
+    let fields_h = v.notes.fields_h.clone();
+    let body = div().id("tb-rec-body").min_h_0().overflow_y_scroll().map(|d| match (note.is_some(), v.notes.split) {
+        (false, _) => d.flex_1(),
+        (true, Some(h)) => d.flex_none().h(px(h)),
+        (true, None) => d.flex_none().max_h(relative(notes::FIELDS_SHARE)),
+    }).child(list)
+        // its height as laid out, where a drag of the line under it starts from
+        .child(canvas(move |b, _, _| fields_h.set(f32::from(b.size.height)), |_, _, _, _| {}).absolute().inset_0());
     div().id("tb-record").relative().flex_none().w(px(notes::panel_w(v))).h_full().flex().flex_col().bg(Theme::bg_body()).border_l_1().border_color(line())
         .child(head)
         .child(crate::design::Separator::new())
-        .child(div().id("tb-rec-body").min_h_0().overflow_y_scroll().map(|d| if note.is_some() { d.flex_none().max_h(relative(0.4)) } else { d.flex_1() }).child(list))
+        .child(body)
         .children(note)
         .child(notes::grip(v, cx))
         .children(menu)
