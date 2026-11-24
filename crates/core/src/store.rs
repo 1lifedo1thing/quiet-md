@@ -579,6 +579,22 @@ struct Location { path: PathBuf }
 /// The library this run uses once first launch has picked it.
 static ROOT: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
 
+/// Rename `tmp` over `path`. On Windows a file another program has just
+/// opened (the virus scanner or the search indexer looking at what was
+/// written a moment ago) refuses to be replaced for a few milliseconds:
+/// `ERROR_ACCESS_DENIED` (5) or `ERROR_SHARING_VIOLATION` (32). Try again
+/// for up to about a second before giving up.
+fn replace(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    for wait in [5, 10, 20, 40, 80, 160, 320, 400] {
+        match crate::vfs::rename(tmp, path) {
+            Err(e) if matches!(e.raw_os_error(), Some(5 | 32)) => std::thread::sleep(std::time::Duration::from_millis(wait)),
+            r => return r,
+        }
+    }
+    crate::vfs::rename(tmp, path)
+}
+
 /// Write `bytes` to `path` through a temporary file, so a crash leaves
 /// either the old or the new contents.
 pub(crate) fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<()> { write_atomic_then(path, bytes, true) }
@@ -596,7 +612,8 @@ fn write_atomic_then(path: &std::path::Path, bytes: &[u8], sync_dir: bool) -> Re
         let mut file = crate::vfs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
-        crate::vfs::rename(&tmp, path)?;
+        drop(file);
+        replace(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
         #[cfg(unix)]
         if sync_dir && let Some(parent) = path.parent() { crate::vfs::File::open(parent)?.sync_all()?; }
         // Windows has no directory fsync; the rename is as far as it goes.
@@ -642,7 +659,7 @@ fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(format!(".{}.tmp", uuid::Uuid::new_v4()));
     let tmp = PathBuf::from(tmp);
-    let r = crate::vfs::write(&tmp, bytes).and_then(|_| crate::vfs::rename(&tmp, path));
+    let r = crate::vfs::write(&tmp, bytes).and_then(|_| replace(&tmp, path));
     if r.is_err() { let _ = crate::vfs::remove_file(&tmp); }
     Ok(r?)
 }
@@ -2131,9 +2148,11 @@ impl Store {
             if disk.contains_key(key) { continue; }
             let t = crate::vfs::metadata(self.abs(key.trim_end_matches('/'))).ok().and_then(|m| m.modified().ok())
                 .and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()).unwrap_or_else(now);
+            // A file: made when the system says it was (`vfs::file_times`), else at its last change.
+            let made = if key.ends_with('/') { t } else { crate::vfs::file_times(&self.abs(key)).map_or(t, |(made, _)| made) };
             // Found by every device alike: the same id on each (sync.md 3.3).
             let id = if self.v5 { meta::path_id(key) } else { String::new() };
-            disk.insert(key.clone(), Attached { id: id.clone(), created: t, modified: t, ..Attached::of(&id, &Meta::default()) });
+            disk.insert(key.clone(), Attached { id: id.clone(), created: made, modified: t, ..Attached::of(&id, &Meta::default()) });
             dirty = true;
         }
         if dirty {
@@ -2581,7 +2600,9 @@ impl Store {
         }
         if self.flat { self.require_markdown_format()?; }
         let id = uuid::Uuid::new_v4().to_string();
-        self.index.insert(id.clone(), Meta { created: t, modified: t, opened: t, markdown: true, path: Some(key), ..Default::default() });
+        // Made and changed as the file was, not when it was first opened here.
+        let (made, changed) = crate::vfs::file_times(&path).unwrap_or((t, t));
+        self.index.insert(id.clone(), Meta { created: made, modified: changed, opened: t, markdown: true, path: Some(key), ..Default::default() });
         if let Err(e) = self.save_index() { self.index.remove(&id); return Err(e); }
         Ok(id)
     }
@@ -3635,6 +3656,61 @@ mod tests {
         assert!(s.refresh_external(&id).unwrap().is_none());
         // Saving the taken-in version is not a conflict.
         s.save(&id, &fresh).unwrap();
+    }
+
+    /// The file's creation time where this system keeps one, in unix seconds.
+    fn made_of(p: &Path) -> Option<u64> { std::fs::metadata(p).ok()?.created().ok()?.duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs()) }
+
+    #[test]
+    fn files_found_in_place_keep_their_times() {
+        let lib = Lib::new("found-times");
+        let mut s = lib.open();
+        // Put in the folder by hand (the Finder, Obsidian): last changed long ago, or later than made.
+        let (then, later) = (1_600_000_000, now() + 86_400);
+        crate::vfs::create_dir_all(lib.0.join("notes")).unwrap();
+        for (rel, t) in [("old.md", then), ("notes/later.md", later)] {
+            crate::vfs::write(lib.0.join(rel), "body\n").unwrap();
+            crate::vfs::set_modified(&lib.0.join(rel), t).unwrap();
+        }
+        let list = s.list();
+        let meta = |title: &str| list.iter().find(|e| e.title == title).unwrap().meta.clone();
+        // Made after its last change (as a copy is): the change time is both.
+        assert_eq!((meta("old").created, meta("old").modified), (then, then));
+        // Made before: when it was made, where the system keeps that (Linux may not).
+        let made = made_of(&lib.0.join("notes/later.md"));
+        assert_eq!((meta("later").created, meta("later").modified), (made.unwrap_or(later), later));
+        if cfg!(any(target_os = "macos", windows)) { assert!(meta("later").created < later); }
+        // A folder keeps its change time, as before.
+        let folder = list.iter().find(|e| e.meta.folder.is_some()).unwrap();
+        assert_eq!(folder.meta.created, folder.meta.modified);
+        // Kept: the next look finds the same.
+        assert_eq!(lib.open().list().iter().find(|e| e.title == "old").unwrap().meta.created, then);
+    }
+
+    #[test]
+    fn a_local_file_opened_in_place_has_its_own_times() {
+        let lib = Lib::new("local-times");
+        let away = crate::vfs::temp_dir().join(format!("fdl-local-times-{}", uuid::Uuid::new_v4()));
+        crate::vfs::create_dir_all(&away).unwrap();
+        let (file, later) = (away.join("later.md"), now() + 86_400);
+        crate::vfs::write(&file, "body\n").unwrap();
+        crate::vfs::set_modified(&file, later).unwrap();
+        let old = away.join("old.md");
+        crate::vfs::write(&old, "body\n").unwrap();
+        crate::vfs::set_modified(&old, 1_600_000_000).unwrap();
+        let mut s = lib.open();
+        let before = now();
+        let id = s.open_local(&file).unwrap();
+        let m = s.list().into_iter().find(|e| e.id == id).unwrap().meta;
+        assert_eq!((m.created, m.modified), (made_of(&file).unwrap_or(later), later));
+        assert!(m.opened >= before, "opened is when it was opened");
+        let id = s.open_local(&old).unwrap();
+        let m = s.list().into_iter().find(|e| e.id == id).unwrap().meta;
+        assert_eq!((m.created, m.modified), (1_600_000_000, 1_600_000_000));
+        // Opened again: only `opened` moves.
+        s.open_local(&old).unwrap();
+        assert_eq!(s.list().into_iter().find(|e| e.id == id).unwrap().meta.created, 1_600_000_000);
+        crate::vfs::remove_dir_all(away).unwrap();
     }
 
     #[test]

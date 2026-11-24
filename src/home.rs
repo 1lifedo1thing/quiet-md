@@ -786,12 +786,12 @@ impl Workspace {
             .child(self.place_button("home-more", None, cx))
             .child(self.import_button("home-import", None, cx))
             .child(
-            crate::ui::header_icon("home-new", "plus")
-                .child(self.home.track("create-home"))
-                .selected(self.create_menu.as_ref().is_some_and(|(_, pos)| self.home.anchor("create-home").is_some_and(|b| point(b.left(), b.bottom() + px(4.)) == *pos)))
-                .tip(crate::settings::tr("新建", "New"), Some(crate::shortcuts::hint("workspace::NewDoc", "⌘ + N")))
+            // 主页 makes no documents (which root they would land in isn't shown here): its one
+            // creation control adds a folder beside the others, as 添加文件夹 under 主页 does.
+            crate::ui::header_icon("home-new", "folder-plus")
+                .tip(crate::settings::tr("添加文件夹", "Add a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(|w, ev: &ClickEvent, _, cx| { let pos = w.home.anchor("create-home").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })).into_any_element()
+                .on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))).into_any_element()
         );
         // Tabs as a segmented control.
         let tab = |id: &'static str, label: &'static str, t: HomeTab| {
