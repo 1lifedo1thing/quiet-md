@@ -579,6 +579,22 @@ struct Location { path: PathBuf }
 /// The library this run uses once first launch has picked it.
 static ROOT: std::sync::RwLock<Option<PathBuf>> = std::sync::RwLock::new(None);
 
+/// Rename `tmp` over `path`. On Windows a file another program has just
+/// opened (the virus scanner or the search indexer looking at what was
+/// written a moment ago) refuses to be replaced for a few milliseconds:
+/// `ERROR_ACCESS_DENIED` (5) or `ERROR_SHARING_VIOLATION` (32). Try again
+/// for up to about a second before giving up.
+fn replace(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    for wait in [5, 10, 20, 40, 80, 160, 320, 400] {
+        match crate::vfs::rename(tmp, path) {
+            Err(e) if matches!(e.raw_os_error(), Some(5 | 32)) => std::thread::sleep(std::time::Duration::from_millis(wait)),
+            r => return r,
+        }
+    }
+    crate::vfs::rename(tmp, path)
+}
+
 /// Write `bytes` to `path` through a temporary file, so a crash leaves
 /// either the old or the new contents.
 pub(crate) fn write_atomic(path: &std::path::Path, bytes: &[u8]) -> Result<()> { write_atomic_then(path, bytes, true) }
@@ -596,7 +612,8 @@ fn write_atomic_then(path: &std::path::Path, bytes: &[u8], sync_dir: bool) -> Re
         let mut file = crate::vfs::OpenOptions::new().write(true).create_new(true).open(&tmp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
-        crate::vfs::rename(&tmp, path)?;
+        drop(file);
+        replace(&tmp, path).with_context(|| format!("replacing {}", path.display()))?;
         #[cfg(unix)]
         if sync_dir && let Some(parent) = path.parent() { crate::vfs::File::open(parent)?.sync_all()?; }
         // Windows has no directory fsync; the rename is as far as it goes.
@@ -642,7 +659,7 @@ fn write_cache(path: &std::path::Path, bytes: &[u8]) -> Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(format!(".{}.tmp", uuid::Uuid::new_v4()));
     let tmp = PathBuf::from(tmp);
-    let r = crate::vfs::write(&tmp, bytes).and_then(|_| crate::vfs::rename(&tmp, path));
+    let r = crate::vfs::write(&tmp, bytes).and_then(|_| replace(&tmp, path));
     if r.is_err() { let _ = crate::vfs::remove_file(&tmp); }
     Ok(r?)
 }
