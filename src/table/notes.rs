@@ -28,7 +28,7 @@ pub(crate) struct NoteInfo {
 
 /// Where the table is: its library's key and folder, and its own path from there.
 #[derive(Clone)]
-struct Home { root: PathBuf, rel: String, parent: Option<String> }
+pub(crate) struct Home { root: PathBuf, rel: String, parent: Option<String> }
 
 /// The note open in 记录详情.
 pub(crate) struct OpenNote {
@@ -66,6 +66,11 @@ pub(crate) struct NotesUi {
     pub grip: Option<(f32, f32)>,
 }
 
+impl NotesUi {
+    /// The library hasn't been looked at yet.
+    pub fn unseen(&self) -> bool { self.home.is_none() && self.index.is_empty() }
+}
+
 fn store(cx: &App) -> Option<SharedStore> { cx.has_global::<SharedStore>().then(|| cx.global::<SharedStore>().clone()) }
 
 /// A path as the library writes them.
@@ -82,6 +87,31 @@ fn home(v: &TableView, cx: &App) -> Option<Home> {
     if rel.split('/').any(|p| p.starts_with('.')) { return None; }
     let parent = store.listed(|roots| roots.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == rel && e.meta.folder.is_none()).and_then(|e| e.meta.parent.clone()));
     Some(Home { root, rel, parent })
+}
+
+/// The table in a folder of its own name, where its notes are kept
+/// (`Store::table_folder`): moved there when it isn't yet, the folder taking
+/// its place in the library. Returns where the table is now.
+pub(crate) fn ensure_folder(v: &mut TableView, cx: &mut Context<TableView>) -> Option<Home> {
+    let h = home(v, cx)?;
+    let store = store(cx)?;
+    let id = store.listed(|roots| roots.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == h.rel && e.meta.folder.is_none()).map(|e| e.id.clone()))?;
+    if let Ok(Some(folder)) = store.with(Some(&id), |s| Ok(s.folder_of_note(&id))) { return Some(Home { parent: Some(folder), ..h }); }
+    // what the table holds goes to its file before the file moves
+    v.state.update(cx, |s, _| s.write());
+    let moved = store.with(Some(&id), |s| s.table_folder(&id)).and_then(|folder| Ok((folder, store.file_path(&id).ok_or_else(|| anyhow::anyhow!("no file"))?)));
+    let (folder, path) = match moved {
+        Ok(m) => m,
+        Err(e) => { log::error!("数据表没能搬进自己的文件夹: {e:#}"); return Some(h); }
+    };
+    // the paths in its 笔记 cells were rewritten for where it is now: read again from there
+    v.state.update(cx, |s, cx| { s.moved(&path, cx); s.refresh(cx); });
+    let rel = slashed(path.strip_prefix(&h.root).ok()?);
+    v.notes.ids.clear();
+    cx.emit(TableEvent::LibraryChanged);
+    let h = Home { root: h.root, rel, parent: Some(folder) };
+    v.notes.home = Some(h.clone());
+    Some(h)
 }
 
 /// 笔记 columns can be added here: a table that is a file of the library.
@@ -165,7 +195,8 @@ pub(crate) fn typing(v: &TableView, window: &Window, cx: &App) -> bool {
 /// its note shows in 记录详情, made first if the cell is empty.
 pub(crate) fn open_cell(v: &mut TableView, cell: CellId, at: Point<Pixels>, window: &mut Window, cx: &mut Context<TableView>) {
     refresh(v, cx);
-    let Some(h) = v.notes.home.clone() else { return };
+    // a table that got its 笔记 column before tables had folders moves into one now
+    let Some(h) = ensure_folder(v, cx) else { return };
     let got = v.state.read(cx).doc.base.table(v.table).and_then(|t| Some((t.record(cell.0)?.get(cell.1).clone(), t.title(t.record(cell.0)?))));
     let Some((val, title)) = got else { return };
     let id = match &val {

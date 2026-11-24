@@ -33,7 +33,7 @@ db.commit()
 db.close()
 
 # where things are in a 1300×850 window (light theme, Chinese)
-TABLE_ROW = "62 135"            # 书单 in the sidebar, before any note is listed above it (then it is at 62 166)
+TABLE_ROW = "62 135"            # 书单 in the sidebar: the first row, its notes under it once it has some
 ADD_FIELD = "820 111"
 TYPE_BOX = "830 257"
 TYPE_NOTE = "725 559"           # 笔记, the type list scrolled to its end
@@ -91,12 +91,13 @@ def run(name, commands, library):
 
 
 def cells(lib):
-    with sqlite3.connect(lib / "书单.sqlite") as c:
+    with sqlite3.connect(lib / "书单" / "书单.sqlite") as c:
         return c.execute('select "书名", "读书笔记" from "书单" order by _order').fetchall()
 
 
 def notes(lib):
-    return sorted(p.name for p in lib.glob("*.xml"))
+    """The documents of the library, by their paths from its top."""
+    return sorted(str(p.relative_to(lib)) for p in lib.rglob("*.xml") if ".quiet" not in p.parts)
 
 
 def trashed(lib):
@@ -104,18 +105,16 @@ def trashed(lib):
     return sorted(p.read_text().split("</title>")[0].removeprefix("<title>") for p in (lib / ".quiet" / "trash").rglob("*.xml"))
 
 
-# 1. a column, a note made for an empty cell, written in, saved
+# 1. a column (the table moves into a folder of its name), a note made there for an empty cell, written in, saved
 lib = run("write", OPEN + ADD_COLUMN + WRITE, source)
 assert cells(lib) == [("三体", "三体.xml"), ("球状闪电", None), (None, None)], cells(lib)
-assert notes(lib) == ["三体.xml", "已有的笔记.xml"], notes(lib)
-assert (lib / "三体.xml").read_text() == "<title>三体</title>\n<p>黑暗森林法则</p>\n<p>第二段 </p>\n", (lib / "三体.xml").read_text()
-with sqlite3.connect(lib / "书单.sqlite") as c:
+assert notes(lib) == ["书单/三体.xml", "已有的笔记.xml"], notes(lib)
+assert (lib / "书单" / "三体.xml").read_text() == "<title>三体</title>\n<p>黑暗森林法则</p>\n<p>第二段 </p>\n", (lib / "书单" / "三体.xml").read_text()
+with sqlite3.connect(lib / "书单" / "书单.sqlite") as c:
     assert c.execute("select type from _fields where name = '读书笔记'").fetchall() == [("note",)]
 
 # 2. reopened: the cell shows the note, the search finds its words
-again = run("reopen", """click 62 166
-wait 1200
-move 1200 800
+again = run("reopen", "click 62 135\nwait 300\nmove 1200 800\nshot reopened-at-once\n" + OPEN + """move 1200 800
 shot reopened
 click 1240 24
 wait 600
@@ -139,7 +138,7 @@ wait 900
 key cmd-shift-z
 wait 1000
 """, source)
-assert cells(redone)[0] == ("三体", "三体.xml") and notes(redone) == ["三体.xml", "已有的笔记.xml"] and trashed(redone) == [], (cells(redone), notes(redone), trashed(redone))
+assert cells(redone)[0] == ("三体", "三体.xml") and notes(redone) == ["书单/三体.xml", "已有的笔记.xml"] and trashed(redone) == [], (cells(redone), notes(redone), trashed(redone))
 
 # 4. deleting the record asks about its note; both go, and undo restores both
 DELETE = f"""click 400 500
@@ -159,7 +158,7 @@ assert notes(gone) == ["已有的笔记.xml"] and trashed(gone) == ["三体"], (
 back = run("undelete", OPEN + ADD_COLUMN + WRITE + DELETE + """key cmd-z
 wait 1200
 """, source)
-assert cells(back)[0] == ("三体", "三体.xml") and notes(back) == ["三体.xml", "已有的笔记.xml"] and trashed(back) == [], (cells(back), notes(back), trashed(back))
+assert cells(back)[0] == ("三体", "三体.xml") and notes(back) == ["书单/三体.xml", "已有的笔记.xml"] and trashed(back) == [], (cells(back), notes(back), trashed(back))
 
 # 5. a cell pointed at a note there already is; a new title renames the file and the cell follows; 整页打开
 more = run("point", OPEN + ADD_COLUMN + WRITE + f"""click {NOTE_2}
@@ -187,9 +186,9 @@ wait 1200
 move 1200 800
 shot full-page
 """, source)
-assert cells(more) == [("三体", "三体 II.xml"), ("球状闪电", "已有的笔记.xml"), (None, None)], cells(more)
-assert notes(more) == ["三体 II.xml", "已有的笔记.xml"], notes(more)
-assert (more / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
+assert cells(more) == [("三体", "三体 II.xml"), ("球状闪电", "../已有的笔记.xml"), (None, None)], cells(more)
+assert notes(more) == ["书单/三体 II.xml", "已有的笔记.xml"], notes(more)
+assert (more / "书单" / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
 assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</title>\n<p>一段正文</p>\n"
 
 shots = os.environ.get("TABLE_NOTE_SHOTS")

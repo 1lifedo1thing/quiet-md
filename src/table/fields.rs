@@ -178,6 +178,8 @@ fn confirm(v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>) 
     };
     // left blank, a new field is called by its type in the interface language
     let name = if name.trim().is_empty() && orig.is_none() { crate::settings::text(ty.label()).to_string() } else { name };
+    // a 笔记 column: the table lives in a folder of its own from here on, its notes beside it
+    if ty == FieldType::Note { notes::ensure_folder(v, cx); }
     match orig {
         Some(old) => {
             v.edit(cx, |d| {

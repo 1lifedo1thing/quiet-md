@@ -329,6 +329,8 @@ impl TableView {
         subs.push(cx.on_focus_out(&aux.focus_handle(cx), window, |v, _, _, cx| v.finish_rename(true, cx)));
         // another program may write the file: look again every couple of seconds while shown
         let refresh = cx.spawn(async move |this, cx| loop {
+            // (笔记 cells know their notes from the first frame on)
+            if this.update(cx, |v, cx| if v.notes.unseen() { notes::refresh(v, cx) }).is_err() { break; }
             cx.background_executor().timer(Duration::from_secs(2)).await;
             if this.update(cx, |v, cx| { v.state.update(cx, |s, cx| s.refresh(cx)); notes::refresh(v, cx); }).is_err() { break; }
         });

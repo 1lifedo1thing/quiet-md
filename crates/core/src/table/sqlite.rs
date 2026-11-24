@@ -359,6 +359,33 @@ pub fn all_text(path: &Path) -> Result<String> {
     Ok(out)
 }
 
+/// Give every 笔记 cell of the file the path `f` returns for it (None: as it
+/// is): a note or the table itself was renamed or moved (`Store::relocate`).
+/// Only the cells that change are written, the rows stamped as changed now;
+/// a file with no 笔记 column is not written at all. Returns the cells changed.
+pub fn rewrite_notes(path: &Path, f: impl Fn(&str) -> Option<String>) -> Result<usize> {
+    let mut conn = open(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+    let file = tables(&conn)?;
+    if !file.iter().any(|t| t == "_fields") { return Ok(0); }
+    let columns: Vec<(String, String)> = grid(&conn, "SELECT table_name, name FROM _fields WHERE type = 'note'").iter().map(|r| (text(&r[0]), text(&r[1]))).filter(|(t, _)| file.contains(t)).collect();
+    let mut changes = vec![];
+    for (t, c) in &columns {
+        let Ok(mut stmt) = conn.prepare(&format!("SELECT rowid, {c} FROM {t} WHERE {c} IS NOT NULL", t = q(t), c = q(c))) else { continue };
+        let cells: Vec<(i64, String)> = stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Sql>(1)?)))?.filter_map(|r| r.ok()).map(|(id, v)| (id, text(&v))).collect();
+        for (id, href) in cells { if let Some(new) = f(&href) { changes.push((t.clone(), c.clone(), id, new)); } }
+    }
+    if changes.is_empty() { return Ok(0); }
+    let now = field::iso_utc(crate::time::now_ms() as i64);
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    for (t, c, id, new) in &changes {
+        // `_updated_at` where the table has it (ours); a table another program made has only the cell
+        let stamped = tx.execute(&format!("UPDATE {} SET {} = ?, \"_updated_at\" = ? WHERE rowid = ?", q(t), q(c)), params![new, now, id]);
+        if stamped.is_err() { tx.execute(&format!("UPDATE {} SET {} = ? WHERE rowid = ?", q(t), q(c)), params![new, id])?; }
+    }
+    tx.commit()?;
+    Ok(changes.len())
+}
+
 /// Read the whole file. Lenient: the file may have been edited by another
 /// program, or never been ours — then every table that isn't SQLite's or
 /// `_`-prefixed is a data table, with field types guessed from its columns.
