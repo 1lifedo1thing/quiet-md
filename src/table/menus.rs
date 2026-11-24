@@ -207,7 +207,7 @@ fn field_menu(v: &TableView, t: &Table, view: &View, fid: FieldId, pos: Point<Pi
     let primary = at == 0;
     let title = t.fields.first().map(|f| f.id);
     let picked: Vec<FieldId> = if v.col_sel.len() > 1 && v.col_sel.contains(&fid) { v.col_sel.clone() } else { vec![fid] }.into_iter().filter(|f| Some(*f) != title).collect();
-    let frozen_here = cols.frozen == col + 1 && col > 0;
+    let frozen_here = cols.frozen == col + 1;
     let tid = t.id;
     let close = |v: &mut TableView, window: &mut Window, cx: &mut Context<TableView>| v.close_popup(window, cx);
     // a new field lands beside this one in the view, whatever the table's own order
@@ -224,7 +224,7 @@ fn field_menu(v: &TableView, t: &Table, view: &View, fid: FieldId, pos: Point<Pi
         .when(!primary, |d| d.child(menu_item("tb-fm-left", "indent-decrease", label("向左插入字段/列"), false).on_click(cx.listener(move |v, _, window, cx| insert(v, false, window, cx)))))
         .child(menu_item("tb-fm-right", "indent-increase", label("向右插入字段/列"), false).on_click(cx.listener(move |v, _, window, cx| insert(v, true, window, cx))))
         .child(menu_item("tb-fm-freeze", "pin", label(if frozen_here { "取消冻结" } else { "冻结至此字段/列" }), false).on_click(cx.listener(move |v, _, window, cx| {
-            v.edit_view(cx, |view| view.opts.frozen = if frozen_here { 1 } else { col + 1 });
+            v.edit_view(cx, |view| view.opts.frozen = if frozen_here { 0 } else { col + 1 });
             v.scroll.x = 0.;
             close(v, window, cx);
         })))

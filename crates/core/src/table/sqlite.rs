@@ -420,7 +420,7 @@ pub fn load_marked(path: &Path) -> Result<(Base, Dirty)> {
     for r in if described { grid(&conn, "SELECT table_id, id, name, type, config FROM _views ORDER BY position, id") } else { vec![] } {
         let Some((_, t)) = known.iter_mut().find(|(tid, _)| tid.is_some() && *tid == int(&r[0])) else { continue };
         let kind = serde_json::from_value(serde_json::Value::String(text(&r[3]))).unwrap_or_default();
-        let opts = serde_json::from_str(&text(&r[4])).unwrap_or(ViewOpts { frozen: 1, ..Default::default() });
+        let opts = serde_json::from_str(&text(&r[4])).unwrap_or_default();
         t.views.push(View { id: id(&r[1]), name: text(&r[2]), kind, opts });
     }
     let (mut kept, moved, replaced) = stable_ids(&mut known);
@@ -642,7 +642,7 @@ fn read_table(conn: &Connection, sql: &str, mut t: Table, described: bool, ids: 
     marked.extend(super::order::repair(&mut t.records));
     if described { for id in marked { dirty.row(t.id, id); } }
     if t.views.is_empty() {
-        t.views.push(View { id: ids.stable(IdKind::View, 0, t.id, 0), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
+        t.views.push(View { id: ids.stable(IdKind::View, 0, t.id, 0), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts::default() });
     }
     Some(t)
 }
@@ -1130,7 +1130,7 @@ mod tests {
         let t = &got.tables[2];
         assert_eq!(t.fields.iter().map(|f| (f.name.as_str(), f.ty)).collect::<Vec<_>>(), [("名称", FieldType::Text), ("价格", FieldType::Number), ("买了", FieldType::Checkbox), ("日期", FieldType::Date)]);
         assert_eq!(t.records.iter().map(|r| (t.title(r), r.get(t.fields[2].id).clone(), r.id)).collect::<Vec<_>>(), [("牛奶".to_string(), Value::Bool(true), 1), ("面包".to_string(), Value::Empty, 2)]);
-        assert_eq!((t.views.len(), t.views[0].kind, t.views[0].opts.frozen, got.tables[1].views.len()), (1, ViewKind::Grid, 1, 1));
+        assert_eq!((t.views.len(), t.views[0].kind, t.views[0].opts.frozen, got.tables[1].views.len()), (1, ViewKind::Grid, 0, 1));
         // every id is its own
         let mut ids: Vec<u64> = got.all_ids().collect();
         assert!(ids.iter().all(|i| (1..ID_LIMIT).contains(i)));

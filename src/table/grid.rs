@@ -32,7 +32,7 @@ impl TableView {
         let mut x = Vec::with_capacity(w.len());
         let mut at = GUTTER_W;
         for cw in &w { x.push(at); at += cw; }
-        let frozen = v.opts.frozen.clamp(1, ids.len().max(1)).min(ids.len());
+        let frozen = v.opts.frozen.min(ids.len());
         let frozen_w = GUTTER_W + w[..frozen].iter().sum::<f32>();
         Cols { ids, w, x, frozen, frozen_w, total: at }
     }
@@ -359,7 +359,7 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
                 let shown: Vec<FieldId> = t.visible_fields(view).iter().map(|f| f.id).collect();
                 // from where it was let go to its place (a left in the list's own coordinates)
                 let at = shown.iter().position(|f| *f == field).map(|d| if to > d { to - 1 } else { to }).unwrap_or(0);
-                let ghost = x - f32::from(v.body.get().origin.x) - off + if at >= view.opts.frozen.max(1) { v.scroll.x } else { 0. };
+                let ghost = x - f32::from(v.body.get().origin.x) - off + if at >= view.opts.frozen { v.scroll.x } else { 0. };
                 v.slide.borrow_mut().cols.insert(field, crate::sidebar_drag::Spring::new([ghost]));
                 let all: Vec<FieldId> = t.ordered_fields(view).iter().map(|f| f.id).collect();
                 // before which field (of all, hidden ones too) the dragged one lands
@@ -787,6 +787,10 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             // the frame only while the grid has the keys (or a cell, menu or list of its own is open):
             // with the record panel, a note or another pane in front, no cell is about to take them
             .children(cursor_ring(v, &cols, row_h).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
+            // scrolled sideways: the frozen columns cast a shadow over the ones passing under them
+            .when(sx > 0.5, |d| d.child(div().absolute().top_0().bottom_0().left(px(cols.frozen_w)).right_0().overflow_hidden()
+                // cast by a block just inside the edge, only what falls past it shown
+                .child(div().absolute().top_0().bottom_0().left(px(-24.)).w(px(24.)).bg(Theme::bg_body()).shadow(crate::design::shadow::sticky()))))
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
             .children(edit_overlay(v, &cols, &fields, row_h))

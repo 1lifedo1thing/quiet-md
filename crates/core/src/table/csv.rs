@@ -133,7 +133,7 @@ pub fn import(base: &mut Base, name: &str, text: &str) -> Table {
         t.next_auto += 1;
     }
     base.ids = ids;
-    t.views.push(View { id: base.new_id(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
+    t.views.push(View { id: base.new_id(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts::default() });
     t
 }
 
@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(r.get(done.id), &Value::Bool(true));
         assert_eq!(t.records[1].get(done.id), &Value::Empty);
         assert_eq!((share.opts.style, r.get(share.id)), (NumberStyle::Percent, &Value::Number(0.2)));
-        assert_eq!((t.views.len(), t.views[0].kind, t.views[0].opts.frozen), (1, ViewKind::Grid, 1));
+        assert_eq!((t.views.len(), t.views[0].kind, t.views[0].opts.frozen), (1, ViewKind::Grid, 0));
 
         // TSV and `;` are told apart by the first line; nothing at all is still a table
         let t = import(&mut base, "_x", "a\tb\nx,y\t2\n");

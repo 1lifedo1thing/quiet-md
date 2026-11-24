@@ -269,7 +269,7 @@ impl Doc {
         let t = self.base.table(tid)?;
         let name = t.free_view_name(if name.is_empty() { kind.label() } else { name });
         let at = t.views.len();
-        let mut opts = ViewOpts { frozen: 1, ..Default::default() };
+        let mut opts = ViewOpts::default();
         match kind {
             ViewKind::Kanban => opts.stack = t.fields.iter().find(|f| f.ty == FieldType::SingleSelect).map(|f| f.id),
             ViewKind::Calendar | ViewKind::Gantt => {

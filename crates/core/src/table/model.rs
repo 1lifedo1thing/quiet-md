@@ -441,7 +441,7 @@ pub struct ViewOpts {
     pub order: Vec<FieldId>,
     pub hidden: HashSet<FieldId>,
     pub widths: BTreeMap<FieldId, f32>,
-    /// Leading columns that stay put when scrolling sideways (at least the first).
+    /// Leading columns that stay put when scrolling sideways (none unless asked for).
     pub frozen: usize,
     pub row_height: RowHeight,
     pub filter: Filter,
@@ -714,7 +714,7 @@ impl Base {
             t.records.push(Record { id: self.ids.fresh(), created: now, modified: now, created_by: Some(self.writer.0.clone()), updated_by: Some(self.writer.0.clone()), auto: t.next_auto, ord, ..Default::default() });
             t.next_auto += 1;
         }
-        t.views.push(View { id: self.new_id(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts { frozen: 1, ..Default::default() } });
+        t.views.push(View { id: self.new_id(), name: "表格视图".into(), kind: ViewKind::Grid, opts: ViewOpts::default() });
         t
     }
 
