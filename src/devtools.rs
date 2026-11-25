@@ -433,6 +433,17 @@ pub fn start(window: &mut Window, cx: &mut App) {
             // Let the frame settle before the next step.
             cx.background_executor().timer(Duration::from_millis(120)).await;
         }
+        // A script that ends without `quit` quits anyway, so no scripted
+        // window is left behind; `FDL_KEEP_OPEN` keeps it to look at.
+        if std::env::var_os("FDL_KEEP_OPEN").is_none() {
+            if let Some(stop) = recording.take() {
+                stop.set(true);
+                RECORDING.with(|r| *r.borrow_mut() = None);
+                *CURSOR_LOG.lock().unwrap() = None;
+                cx.background_executor().timer(Duration::from_millis(300)).await;
+            }
+            cx.update(|cx| cx.quit());
+        }
     })
     .detach();
 }

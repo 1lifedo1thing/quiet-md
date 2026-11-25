@@ -77,7 +77,8 @@ Write one command per line. Lines beginning with `#` are comments. See the top o
 
 - `FDL_SHOTS` sets the screenshot directory (set by `run.py`).
 - `FDL_TRACE` enables event tracing.
-- `FDL_NOPARK` keeps the window on screen.
+- `FDL_NOPARK` keeps the window on screen. Without it the window is parked past the outer edge of the rightmost display, one sliver showing, so it neither covers the user's windows nor stops rendering.
+- `FDL_KEEP_OPEN` keeps the app running when the script ends. Without it a script that ends without `quit` quits anyway.
 - `FDL_WINDOW_CAPTURE` uses the window server to capture system-drawn window controls.
 - `FDL_NOBLINK` disables caret blinking (set by `compare.py`).
 - `FDL_RECORD_FPS` sets the recording frame rate (default 30).
@@ -94,6 +95,7 @@ The harness runs on a computer someone may be using.
 
 - Leave the real ⌘C/⌘V clipboard alone. Use `key cmd-v` only after `clip`.
 - Avoid stealing focus. Never use `activate`. By default the harness moves the window offscreen to render it.
+- Leave nothing running. A script quits the app when it ends (unless `FDL_KEEP_OPEN`); a launcher that kills a hung app or starts several must check afterwards that none of its own `quiet_md` processes are left.
 - Do not click Show in Finder in Settings › Library, or Open in Finder in the home or folder More menu.
 - Do not click links, Web Search or link-opening buttons that launch a browser. Avoid Print (system print panel), Quick Look and `qlmanage -p`.
 - Do not use the `open` command. Use `pick a|b` when a script needs to select files.
