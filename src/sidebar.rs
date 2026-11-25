@@ -149,6 +149,9 @@ impl Workspace {
         let nav = div().flex_none().pt(px(4.)).pb(px(4.)).px(px(SB_X)).flex().flex_col().gap(px(ROW_GAP))
             .child(item("nav-home", "home", crate::settings::tr("主页", "Home"), home_on).on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))));
 
+        // 置顶 and 我的文档's heading stand still above the list, as 我的文档's own header (the
+        // maintainer, 2026-11-25): the rows scroll under it, and so does the scrollbar's track.
+        let mut fixed = div().flex_none().flex().flex_col().px(px(SB_X));
         let mut list = div().flex().flex_col().px(px(SB_X)).pb(px(8.));
         // Pinned docs are shortcuts: they stay in 我的文档 too.
         // 置顶 follows the same order as the lists below it. Only the pinned are
@@ -157,13 +160,13 @@ impl Workspace {
         let mut pinned: Vec<&Entry> = self.entries.iter().filter(|e| e.meta.pinned).collect();
         pinned.sort_by(|a, b| order.cmp(a, b));
         if !pinned.is_empty() {
-            list = list.child(self.section(0, crate::settings::text("置顶"), cx));
+            fixed = fixed.child(self.section(0, crate::settings::text("置顶"), cx));
             if !self.folded[0] {
                 for e in pinned {
-                    list = list.child(self.doc_row(e, "pinned", 0, false, cx));
+                    fixed = fixed.child(self.doc_row(e, "pinned", 0, false, cx));
                 }
             }
-            list = list.child(div().h(px(GROUP_GAP - SECTION_TOP)));
+            fixed = fixed.child(div().h(px(GROUP_GAP - SECTION_TOP)));
         }
         // 主页: one top-level folder shows its contents under 我的文档; several show as rows
         // of the tree there; none, a way to open one.
@@ -172,7 +175,7 @@ impl Workspace {
             list = list.child(self.empty_home(cx));
         } else {
             // One top-level folder or several, the heading is 我的文档 (#421); it never folds.
-            list = list.child(self.section(1, crate::settings::text("我的文档"), cx));
+            fixed = fixed.child(self.section(1, crate::settings::text("我的文档"), cx));
             list = list.child(self.render_folder_rows(window, cx));
         }
         // The first listing still running: grey rows in place of the tree, fading out over it once it is here.
@@ -235,6 +238,7 @@ impl Workspace {
             .flex_col()
             .child(header)
             .child(nav)
+            .child(fixed)
             .child(self.sidebar_drop_zone(div().id("doc-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.list_scroll).child(list).child(crate::design::scroll::bar("doc-list", &self.list_scroll, 0.)), cx))
             .children(crate::changelog::card(cx.listener(|_, _, _, cx| cx.notify())))
             .child(footer)

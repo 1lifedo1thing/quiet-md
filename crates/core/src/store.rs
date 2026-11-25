@@ -2464,6 +2464,32 @@ impl Store {
     /// picked up; entries whose files are gone are dropped.
     pub fn list(&mut self) -> Vec<Entry> { self.list_with(None, true) }
 
+    /// The library's folders and files as `list` reads them.
+    fn walk(&mut self) -> layout::Scan {
+        // What `list` read before is ours (the cache keeps nothing else); the rest is looked at once.
+        let (index, parsed, checked) = (&self.index, &self.parsed, &mut self.checked);
+        let mut read: Option<HashSet<&str>> = None;
+        layout::scan(&self.top_dir, &mut |rel, path, kind, md| {
+            let stamp = || crate::vfs::metadata(path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
+            match checked.get(rel) { Some(None) => return true, Some(Some(was)) if Some(*was) == stamp() => return false, _ => {} }
+            let read = read.get_or_insert_with(|| parsed.keys().filter_map(|id| index.get(id)).map(|m| m.rel.as_str()).collect());
+            let ok = read.contains(rel) || crate::shown::ours(path, kind, md);
+            checked.insert(rel.to_string(), if ok { None } else { stamp() });
+            ok
+        })
+    }
+
+    /// Where the index has every page and folder, as one number: `list` sees from it whether
+    /// a write moved anything while it walked the folders.
+    fn paths_stamp(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut rels: Vec<(&str, &str)> = self.index.iter().map(|(k, m)| (k.as_str(), m.rel.as_str())).collect();
+        rels.sort_unstable();
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        rels.hash(&mut h);
+        h.finish()
+    }
+
     /// `list`, counting into `progress` as it goes. With `parse` off a
     /// document `list` has not read yet is listed by its file's name, the way
     /// one still in iCloud is, and read on a later `list` (本机文件 are read
@@ -2473,21 +2499,19 @@ impl Store {
             let lock = self.lock_for_list();
             return self.list_flat(lock.is_some());
         }
-        let found = {
-            // What `list` read before is ours (the cache keeps nothing else); the rest is looked at once.
-            let (index, parsed, checked) = (&self.index, &self.parsed, &mut self.checked);
-            let mut read: Option<HashSet<&str>> = None;
-            layout::scan(&self.top_dir, &mut |rel, path, kind, md| {
-                let stamp = || crate::vfs::metadata(path).ok().and_then(|m| Some((m.modified().ok()?, m.len())));
-                match checked.get(rel) { Some(None) => return true, Some(Some(was)) if Some(*was) == stamp() => return false, _ => {} }
-                let read = read.get_or_insert_with(|| parsed.keys().filter_map(|id| index.get(id)).map(|m| m.rel.as_str()).collect());
-                let ok = read.contains(rel) || crate::shown::ours(path, kind, md);
-                checked.insert(rel.to_string(), if ok { None } else { stamp() });
-                ok
-            })
-        };
         // Walked before the lock is taken: a big folder's walk holds up no one's save.
+        let paths = self.paths_stamp();
+        let mut found = self.walk();
+        #[cfg(test)]
+        if let Some(meanwhile) = AFTER_WALK.with(|h| h.borrow_mut().take()) { meanwhile(); }
         let _lock = self.lock_for_list();
+        // A write made meanwhile (a `tree_writer` renaming or moving a page, another window,
+        // another device's sync) can have moved files while the walk went on: the index it
+        // saved, read under the lock, then names pages at paths the walk did not see, or the
+        // walk saw a file where the index does not have it yet. Read as is, a moved page would
+        // be dropped and listed again under the id its new path gives. Walked again under the
+        // lock, the disk and the index agree.
+        if self.paths_stamp() != paths { found = self.walk(); }
         let mut disk = self.to_disk();
         let mut keys: HashSet<String> = found.dirs.iter().map(|d| format!("{d}/")).collect();
         keys.extend(found.docs.iter().cloned());
@@ -3747,6 +3771,9 @@ thread_local! {
     pub(crate) static SYNCED_WRITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Documents `list` read and parsed (not taken from its cache).
     pub(crate) static DOC_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Run by the next `list` between walking the folders and taking the lock: a write made
+    /// meanwhile, however fast or slow the machine is.
+    pub(crate) static AFTER_WALK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
     /// Times `load_meta` took the device files in again.
     pub(crate) static META_LOADS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -5286,6 +5313,8 @@ mod tests {
         let x = a.create_from(&doc("甲")).unwrap();
         let f = a.create_folder("夹", None).unwrap();
         let y = a.create_from_in(&doc("乙"), Some(&f)).unwrap();
+        #[cfg(not(unix))]
+        let _ = &y;
         a.list();
         a.list();
         // Only in iCloud now: a placeholder in its place.
@@ -6273,6 +6302,33 @@ mod tests {
     }
 
     /// The window's save writes a new title but leaves the file's name (and the links to it)
+    /// A page renamed by a `tree_writer` while the window's library walks its folders for
+    /// `list` (as on a slow machine: the walk sees the old file, the index under the lock the
+    /// new one) keeps its id: `list` walks again rather than drop the page and list its new
+    /// file as a page it has never seen.
+    #[test]
+    fn a_rename_made_while_listing_keeps_the_page() {
+        let lib = Lib::new("rename-while-listing");
+        let mut s = lib.open();
+        let a = s.create_from(&doc("未命名")).unwrap();
+        let b = s.create_from(&doc("别的")).unwrap();
+        s.list();
+        let mut d = s.load_for_edit(&a, false).unwrap();
+        d.title = crate::model::RichText::plain("自检");
+        assert!(s.save_editor_naming_later(&a, &d).unwrap().1);
+        let mut w = s.tree_writer();
+        let renamed = a.clone();
+        AFTER_WALK.with(|h| *h.borrow_mut() = Some(Box::new(move || w.follow_name(&renamed, "自检").unwrap())));
+        let listed = s.list();
+        assert!(AFTER_WALK.with(|h| h.borrow().is_none()), "the write did not run inside list");
+        assert!(lib.0.join("自检.xml").is_file() && !lib.0.join("未命名.xml").exists());
+        let ids: Vec<&str> = listed.iter().filter(|e| e.meta.folder.is_none()).map(|e| e.id.as_str()).collect();
+        assert_eq!(ids.len(), 2, "a page was dropped or listed twice: {ids:?}");
+        assert!(ids.contains(&a.as_str()) && ids.contains(&b.as_str()), "the renamed page lost its id: {ids:?}");
+        assert_eq!(s.index[&a].rel, "自检.xml");
+        assert!(s.file_path(&a).is_some_and(|p| p.is_file()));
+    }
+
     /// to `follow_name`, which reads the title from the file: a later save is never undone.
     #[test]
     fn the_editors_save_names_the_file_later() {

@@ -30,7 +30,8 @@ work = Path(os.environ.get("BOARD_TEXT_OUT") or tempfile.mkdtemp(prefix="quiet-b
 work.mkdir(parents=True, exist_ok=True)
 
 # Board coordinates (`origin board`): the properties panel's Nunito and sharp
-# Edges buttons for a selected rectangle with a text, and zoom in.
+# Edges buttons for a selected rectangle with a text, and zoom in. The window is
+# made 860 tall first so the panel shows its Font family row without scrolling.
 NUNITO, SHARP, ZOOM_IN = "84 509", "43 442", "130 718"
 # (name, steps that make the text, where to double-click it)
 CASES = [
@@ -47,11 +48,12 @@ CASES = [
 
 
 def script(tag):
-    s = "move 700 700\nwait 1500\nrow lib\nwait 800\nanchor create-folder\nwait 300\nrow Board\nwait 1200\norigin board\n"
+    s = "resize 1040 860\nwait 500\nmove 700 700\nwait 1500\nrow lib\nwait 800\nanchor create-folder\nwait 300\nrow Board\nwait 1200\nkey cmd-]\nwait 600\norigin board\n"
     for case, make, at in CASES:
-        steps = make.split("\n") + ["key escape", "click 950 650", "move 950 650", "wait 250", f"shot {tag}-{case}-a"]
-        steps += [f"dclick {at}", "key cmd-left", "move 950 650", "wait 250", f"shot {tag}-{case}-b", "key escape", "key cmd-a", "key backspace"]
-        # a step at a time: run back to back, a step can land before the last is done with
+        steps = make.split("\n") + ["key escape", "click 700 480", "move 700 480", "wait 250", f"shot {tag}-{case}-a"]
+        steps += [f"dclick {at}", "key cmd-left", "move 700 480", "wait 250", f"shot {tag}-{case}-b", "key escape", "key cmd-a", "key backspace", "wait 400"]
+        # a step at a time: run back to back, a step can land before the last is done with;
+        # the clearing gets longer (a case left behind threw every later one off)
         s += "".join(f"{l}\nwait 150\n" for l in steps)
     return s
 
@@ -71,13 +73,14 @@ def run(tag, appearance, cache):
 
 
 def moved(a, b):
-    """The difference beyond the caret (a column at most 3px wide), as a box."""
+    """The difference beyond the caret (a column at most 4px wide: a 2pt caret at 2x), as a box."""
     # the canvas right of the properties panel and its shadow (the panel
-    # shows while editing), below the hint, above the zoom bar
-    box = (520, 140, a.width, a.height - 60)
+    # shows while editing), below the hint, above the zoom bar; the sidebar is
+    # closed first (`key cmd-]`), so the board starts at the window's left
+    box = (520, 280, a.width, a.height - 60)
     d = ImageChops.difference(a.convert("RGB").crop(box), b.convert("RGB").crop(box)).convert("L").point(lambda v: 255 if v else 0)
     bb = d.getbbox()
-    if bb is None or bb[2] - bb[0] <= 3:
+    if bb is None or bb[2] - bb[0] <= 4:
         return None
     return (bb[0] + box[0], bb[1] + box[1], bb[2] + box[0], bb[3] + box[1])
 
