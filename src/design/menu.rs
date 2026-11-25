@@ -31,14 +31,39 @@ pub enum Align { Start, End }
 /// Where the menu of the button measured at `b` goes, as GPUI Kit's `Popup` and shadcn's DropdownMenu
 /// place it: `SIDE_OFFSET` under the button, lined up by `align`; the point, and the corner of the menu
 /// `anchored` puts on it. Only the button's bounds count, never the pointer, so a click anywhere on the
-/// button opens the menu in one place and the menu never covers it. With `flip` (the menu's height and
-/// the window's), a menu that would pass the bottom margin sits as far above the button instead.
-pub fn hang(b: Bounds<Pixels>, align: Align, flip: Option<(f32, Pixels)>) -> (Point<Pixels>, Anchor) {
+/// button opens the menu in one place and the menu never covers it. Below unless it doesn't fit there:
+/// a menu `menu_h` tall goes above when it fits there, else to the side with more room; without its
+/// height, above only when below is short (under 160) and above is longer. Whichever side, `room` caps
+/// the menu to what is there and `Popover::fit` scrolls the rest.
+pub fn hang(b: Bounds<Pixels>, align: Align, menu_h: Option<f32>) -> (Point<Pixels>, Anchor) {
+    let vh = viewport();
     let x = if align == Align::Start { b.left() } else { b.right() };
-    let up = flip.is_some_and(|(h, vh)| f32::from(b.bottom()) + SIDE_OFFSET + h > f32::from(vh) - EDGE && f32::from(b.top()) - SIDE_OFFSET - h >= EDGE);
+    let below = f32::from(vh - b.bottom()) - SIDE_OFFSET - EDGE;
+    let above = f32::from(b.top()) - SIDE_OFFSET - EDGE;
+    let up = match menu_h { Some(h) => h > below && (h <= above || above > below), None => below < 160. && above > below };
     let corner = match (up, align) { (false, Align::Start) => Anchor::TopLeft, (false, Align::End) => Anchor::TopRight, (true, Align::Start) => Anchor::BottomLeft, (true, Align::End) => Anchor::BottomRight };
     (point(x, if up { b.top() - px(SIDE_OFFSET) } else { b.bottom() + px(SIDE_OFFSET) }), corner)
 }
+
+/// The most a menu `anchored` at `pos` by `corner` may be tall in the window, `EDGE` short of
+/// the window's edge (for `Popover::fit`).
+pub fn room(pos: Point<Pixels>, corner: Anchor) -> f32 {
+    let vh = viewport();
+    match corner {
+        Anchor::BottomLeft | Anchor::BottomRight | Anchor::BottomCenter => f32::from(pos.y) - EDGE,
+        _ => f32::from(vh - pos.y) - EDGE,
+    }.max(ROW_H_MIN)
+}
+thread_local! {
+    /// The window's height, as last laid out (`set_viewport`): `hang` and `room` are asked where no
+    /// window is at hand (a click handler, a state change).
+    static VIEWPORT: Cell<f32> = const { Cell::new(f32::MAX) };
+}
+/// Notes the window's height for `hang` and `room`: the window's root calls it as it renders.
+pub fn set_viewport(window: &Window) { VIEWPORT.with(|v| v.set(f32::from(window.viewport_size().height))); }
+fn viewport() -> Pixels { px(VIEWPORT.with(|v| v.get())) }
+/// A capped menu still shows a row or two.
+const ROW_H_MIN: f32 = 64.;
 
 pub const PAD: f32 = G.menu_pad;
 /// A row's height.
@@ -57,25 +82,33 @@ pub const MIN_W: f32 = 128.;
 /// It has an opaque ground, which the shadow-drawn edge needs. `menu()` makes it a column of rows
 /// (`DropdownMenuContent`: p-1, at least 128 wide).
 #[derive(IntoElement)]
-pub struct Popover { id: ElementId, base: Stateful<Div>, menu: bool, padded: bool }
+pub struct Popover { id: ElementId, base: Stateful<Div>, menu: bool, padded: bool, fit: Option<f32> }
 element!(Popover, parent);
 
 impl Popover {
-    pub fn new(id: impl Into<ElementId>) -> Self { let id = id.into(); Popover { base: div().id(id.clone()), id, menu: false, padded: false } }
+    pub fn new(id: impl Into<ElementId>) -> Self { let id = id.into(); Popover { base: div().id(id.clone()), id, menu: false, padded: false, fit: None } }
     /// A column of menu rows, `PAD` above and below them (rows keep `PAD` from the sides), `min-w-32`.
     pub fn menu(mut self) -> Self { self.menu = true; self }
     /// A popover holding a form: padded 16 (p-4), a column with 16 between its fields (gap-4).
     pub fn padded(mut self) -> Self { self.padded = true; self }
+    /// At most `max_h` tall (`room`), the rest scrolling under the shared scrollbar (`scroll::ScrollBar`).
+    pub fn fit(mut self, max_h: f32) -> Self { self.fit = Some(max_h); self }
 }
 
 impl RenderOnce for Popover {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (g, menu, padded) = (geo(), self.menu, self.padded);
+        set_viewport(window);
+        let fit = self.fit.map(|h| {
+            let st = window.use_keyed_state((self.id.clone(), "fit"), cx, |_, _| (ScrollHandle::new(), Rc::new(super::scroll::ScrollBar::rounded(g.menu_r))));
+            (h, st.read(cx).clone())
+        });
         let d = under(self.base, |d| {
             d.occlude().bg(color::popover()).rounded(px(g.menu_r)).shadow(shadow::popover()).font_family(crate::theme::ui_family())
                 .text_size(px(g.text)).line_height(px(super::text::SM_LINE)).text_color(color::foreground())
                 .when(menu, |d| d.min_w(px(MIN_W)).py(px(PAD)).flex().flex_col())
                 .when(padded, |d| d.p(px(g.popover_pad)).flex().flex_col().gap(px(g.popover_gap)))
+                .when_some(fit, |d, (h, (handle, bar))| d.max_h(px(h)).overflow_y_scroll().track_scroll(&handle).child(bar.render(&handle)))
         });
         MenuScope { id: self.id, child: d.into_any_element() }
     }

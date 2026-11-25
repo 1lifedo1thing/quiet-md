@@ -158,7 +158,7 @@ impl Workspace {
             .child(item("mode-edit", "pen-line", crate::settings::text("编辑"), crate::settings::text("可编辑文档"), !reading, false))
             .child(item("mode-read", "eye-open", crate::settings::text("阅读"), crate::settings::text("仅查看或评论文档"), reading, true));
         let (pos, corner) = crate::design::hang(at, crate::design::Align::Start, None);
-        Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(crate::design::menu::EDGE)).child(menu)).with_priority(2).into_any_element())
+        Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(crate::design::menu::EDGE)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element())
     }
 
     /// The 快捷键 drawer to the right of the page, below the top bar: shadcn's `Sheet` (side

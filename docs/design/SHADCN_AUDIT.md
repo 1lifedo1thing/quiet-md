@@ -225,11 +225,15 @@
 | 块手柄悬停 | 每个按钮各自悬停 | 两半一起亮 | 我们的：整块是一个控件（按下就是拖动或开菜单），不分左右 |
 | 字数小块 | 无 | outline xs 按钮的外观（1px `border`、shadow-xs、8、text-xs muted、`background` 底） | 我们的；改（原来 `button_border`、`shadow_button`） |
 
-## 滚动条（斜杠菜单，`src/editor/overlays.rs`）
+## 滚动条（`src/design/scroll.rs`：菜单、面板、弹出层，页面和宽表格同一个样子）
 
 | 属性 | shadcn | 我们 | 处理 |
 |---|---|---|---|
-| 占位 | ScrollArea 的滚动条浮在内容上，不占宽度；Command 列表铺满 | 列表宽 = 菜单宽 247 | 改（原来给滚动条常驻留 15） |
-| 出现 | 内容超高才有 | 同 | 一致 |
-| 样式 | scrollbar w-2.5 p-px，thumb bg-border rounded-full | 宽 8，距右、上、下 1，`border`，胶囊 | 改（原来距右 3、上下 2，`scrollbar_thumb`） |
+| 占位 | ScrollArea 的滚动条浮在内容上，不占宽度 | 同：画在框上，不占位 | 一致 |
+| 出现 | 内容超高才有；`type="hover"`：指针在框上、滚动中显示，离开 600ms（`scrollHideDelay`）后藏 | 同，拖动中也显示 | 一致 |
+| 显隐 | 直接切换 | 150ms 淡入淡出 | 有意不同（总控 2026-11-25 要的淡入淡出） |
+| 宽度 | 条 w-2.5（10），p-px，透明 border-l：滑块 7 | 滑块 7，条 10 接指针 | 一致；shadcn 没有悬停加粗，也不加 |
+| 留白 | p-px：四周 1 | 方框四周 1；圆角面板里四周一样多，刚好让开圆角（`inset_for`，圆角 12 时 2.5） | 有意不同：GPUI 不按圆角裁子元素，四周 1 的滑块会戳出圆角 |
+| 颜色 | thumb `bg-border`，rounded-full | 同（`thumb_color`） | 一致；页面、宽表格原来的 22% 黑和悬停加深去掉 |
+| 限高 | — | 按钮菜单上下都放不下时 `room` 限高、`Popover::fit` 滚动 | 新增 |
 | 子面板 | — | 贴菜单右边（`pos.x + SLASH_W`） | 改 |

@@ -8,8 +8,6 @@ use crate::app::{RowMenu, Workspace};
 mod bs;
 #[path = "home_text.rs"]
 mod text_preview;
-#[path = "home_scrollbar.rs"]
-pub(crate) mod scrollbar;
 use crate::settings::display_title;
 use crate::model::BlockKind;
 use crate::search::doc_icon;
@@ -382,10 +380,10 @@ pub struct Home {
     /// A folder's page has its own scroll positions, so 主页 keeps its place.
     folder_grid_scroll: UniformListScrollHandle,
     folder_list_scroll: ScrollHandle,
-    grid_scrollbar: Rc<scrollbar::Scrollbar>,
-    list_scrollbar: Rc<scrollbar::Scrollbar>,
+    grid_scrollbar: Rc<crate::design::ScrollBar>,
+    list_scrollbar: Rc<crate::design::ScrollBar>,
     /// The 搜索 dialog's results (`search.rs`).
-    pub(crate) search_scrollbar: Rc<scrollbar::Scrollbar>,
+    pub(crate) search_scrollbar: Rc<crate::design::ScrollBar>,
     sort: HomeSort,
     sort_dir: SortDir,
     folders_first: bool,
@@ -1119,7 +1117,7 @@ impl Workspace {
             return out;
         }
         let place = |pos: Point<Pixels>, corner: Anchor, menu: Popover| {
-            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element()
+            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element()
         };
         if self.home.sort_menu
             && let Some(b) = self.home.anchor("home-sort") {

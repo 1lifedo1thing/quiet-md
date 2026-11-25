@@ -178,7 +178,7 @@ impl Workspace {
         // rows each time it opens, whichever "+" opened it.
         let import = self.import_items(parent.clone(), cx);
         Some(deferred(anchored().anchor(Anchor::TopLeft).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("create-items").menu().min_w(px(180.))
+            crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, Anchor::TopLeft)).min_w(px(180.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.create_menu = None; cx.notify(); }))
                 .child(row("create-document", "doc", tr("文档", "Document")).on_click(cx.listener(move |w, _, window, cx| w.create_doc(false, doc_parent.clone(), window, cx))))
                 .child(row("create-markdown", "markdown", "Markdown").on_click(cx.listener(move |w, _, window, cx| w.create_doc(true, md_parent.clone(), window, cx))))
@@ -252,7 +252,7 @@ impl Workspace {
         // The row's "…" only manages the folder (新建 is the "+" beside it); a
         // right-click still creates straight from the menu.
         let create = m.from.is_none();
-        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().min_w(px(190.))
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().fit(crate::design::room(pos, m.corner)).min_w(px(190.))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
             .when(create, |d| d
                 .child(row("fr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_child(&doc, window, cx); })))

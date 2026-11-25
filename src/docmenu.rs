@@ -295,7 +295,7 @@ impl Workspace {
         let (at, _) = crate::design::hang(b, crate::design::Align::End, None);
         let (right, menu_top) = (at.x, at.y);
         let mut out = vec![
-            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu))
+            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight))))
                 .with_priority(2)
                 .into_any_element(),
         ];

@@ -613,7 +613,7 @@ impl Workspace {
     pub(crate) fn render_import_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (parent, pos) = self.import_menu.clone()?;
         Some(deferred(anchored().anchor(Anchor::TopRight).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("import-items").menu().min_w(px(210.))
+            crate::design::Popover::new("import-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).min_w(px(210.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.import_menu = None; cx.notify(); }))
                 .children(self.import_items(parent, cx)),
         )).with_priority(3).into_any_element())
@@ -645,7 +645,7 @@ impl Workspace {
             else if cfg!(target_os = "windows") { crate::settings::tr("在文件资源管理器中打开", "Open in File Explorer") }
             else { crate::settings::tr("在文件管理器中打开", "Open in File Manager") };
         Some(deferred(anchored().anchor(Anchor::TopRight).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("place-items").menu().w(px(210.))
+            crate::design::Popover::new("place-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).w(px(210.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.place_menu = None; cx.notify(); }))
                 .child(crate::design::MenuItem::new("place-open").icon("folder").label(label)
                     .on_click(cx.listener(move |w, _, _, cx| {

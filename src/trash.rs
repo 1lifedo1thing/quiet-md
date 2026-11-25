@@ -214,7 +214,7 @@ impl Workspace {
                 cx.notify();
             })));
         Some(
-            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu))
+            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner))))
                 .with_priority(2)
                 .into_any_element(),
         )

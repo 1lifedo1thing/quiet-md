@@ -235,7 +235,7 @@ impl Workspace {
             .flex_col()
             .child(header)
             .child(nav)
-            .child(self.sidebar_drop_zone(div().id("doc-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.list_scroll).child(list), cx))
+            .child(self.sidebar_drop_zone(div().id("doc-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.list_scroll).child(list).child(crate::design::scroll::bar("doc-list", &self.list_scroll, 0.)), cx))
             .children(crate::changelog::card(cx.listener(|_, _, _, cx| cx.notify())))
             .child(footer)
             .into_any_element()
@@ -537,7 +537,7 @@ impl Workspace {
             .child(canvas(move |b, _, _| record.borrow_mut().insert(slot.clone(), b), |_, _, _, _| {}).absolute().inset_0())
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |w, _: &MouseDownEvent, window, cx| {
+                cx.listener(move |w, _: &MouseDownEvent, _, cx| {
                     cx.stop_propagation();
                     // The row menu's outside-click handler has already closed it on this press, so
                     // a press on its own button closes it rather than reopening it (see `open`).
@@ -545,7 +545,7 @@ impl Workspace {
                     // Hung from the measured button, never the pointer; above it when there's no room below.
                     let Some(b) = lookup.borrow().get(&slot2).copied() else { return };
                     let menu_h = row_menu_height(ROW_ITEMS + usize::from(w.takes_children(&id)), ROW_DIVIDERS);
-                    let (pos, corner) = crate::design::hang(b, crate::design::Align::Start, Some((menu_h, window.viewport_size().height)));
+                    let (pos, corner) = crate::design::hang(b, crate::design::Align::Start, Some(menu_h));
                     w.row_menu = Some(RowMenu { id: id.clone(), pos, corner, sub: false, batch: false, from: Some(from.clone()) });
                     cx.notify();
                 }),
@@ -749,7 +749,7 @@ impl Workspace {
                 .child(item("bm-move", "folder-input", crate::settings::text("移动到")).on_click(cx.listener(|w, _, window, cx| w.batch_move(window, cx))))
                 .child(item("bm-delete", "bin", crate::settings::text("删除")).on_click(cx.listener(|w, _, _, cx| w.ask_batch_delete(cx))));
             return vec![
-                deferred(anchored().anchor(m.corner).position(m.pos).snap_to_window_with_margin(px(8.)).child(menu))
+                deferred(anchored().anchor(m.corner).position(m.pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(m.pos, m.corner))))
                     .with_priority(2)
                     .into_any_element(),
             ];
@@ -859,7 +859,7 @@ impl Workspace {
             _ => f32::from(origin.y),
         };
         let mut out = vec![
-            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu))
+            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(origin, corner))))
                 .with_priority(2)
                 .into_any_element(),
         ];

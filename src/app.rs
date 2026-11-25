@@ -2006,6 +2006,7 @@ pub(crate) const HEADER_ACTIONS_H: f32 = 32.;
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::design::menu::set_viewport(window);
         self.sync_note_rows();
         // The menu bar is the front window's: a Markdown file's 插入 / 格式 leave out what it can't hold.
         if window.is_window_active() {

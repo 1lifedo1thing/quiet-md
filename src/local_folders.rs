@@ -229,7 +229,7 @@ impl Workspace {
             w.confirm = Some(crate::app::Confirm::RemoveFolder(k2.clone(), name.clone()));
             cx.notify();
         })));
-        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element()]
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, m.corner)))).with_priority(2).into_any_element()]
     }
 
     /// The sidebar with no top-level folder open: a way to open or make one.
