@@ -37,6 +37,7 @@ const _: () = assert!(row_sub_top(0.) == 168.5);
 /// (6 above its 28pt label).
 pub(crate) const SB_X: f32 = 14.;
 pub(crate) const ROW_H: f32 = 30.;
+
 const DOC_ROW_H: f32 = ROW_H;
 pub(crate) const ROW_R: f32 = 9.;
 pub(crate) const ROW_GAP: f32 = crate::design::G.sidebar_gap;
@@ -146,10 +147,7 @@ impl Workspace {
             .child(label)
             .relative().children(crate::devtools::row_probe(label));
         let nav = div().flex_none().pt(px(4.)).pb(px(4.)).px(px(SB_X)).flex().flex_col().gap(px(ROW_GAP))
-            .child(item("nav-home", "home", crate::settings::tr("主页", "Home"), home_on).on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))))
-            .child(item("nav-add-folder", "folder-plus", crate::settings::tr("打开文件夹", "Open a folder"), false)
-                .tip(crate::settings::tr("打开文件夹", "Open a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
-                .on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))));
+            .child(item("nav-home", "home", crate::settings::tr("主页", "Home"), home_on).on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))));
 
         let mut list = div().flex().flex_col().px(px(SB_X)).pb(px(8.));
         // Pinned docs are shortcuts: they stay in 我的文档 too.
@@ -387,7 +385,7 @@ impl Workspace {
                     .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                         .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { cx.stop_propagation(); let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
-                    .on_click(cx.listener(|w, _, _, cx| { w.home.tab = crate::home::HomeTab::Recent; w.home.sort_menu = false; w.show_view(View::Home, cx); })),
+                    .on_click(cx.listener(|w, _, _, cx| { w.home.tab = crate::home::HomeTab::Recent; w.show_view(View::Home, cx); })),
             );
         }
         row.child(
@@ -690,7 +688,7 @@ impl Workspace {
                     _ if folder => {
                         let s = if key == "doc" { self.folder_drag.pop(&e.id) } else { 1. };
                         d.child(div().absolute().inset_0().flex().items_center().justify_center().opacity(1. - chevron)
-                            .child(icon(if drop_target { "folder-input" } else if open { "folder-open" } else { "folder" }, ROW_ICON, Theme::icon())
+                            .child(icon(if drop_target { "folder-input" } else { "folder" }, ROW_ICON, Theme::icon())
                                 .with_transformation(Transformation::scale(size(s, s)))))
                         .when(chevron > 0.005, |d| d.child(div().absolute().inset_0().flex().items_center().justify_center().opacity(chevron)
                             .child(icon("disclosure", ROW_ICON, Theme::icon())

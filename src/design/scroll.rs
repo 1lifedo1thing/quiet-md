@@ -72,7 +72,51 @@ pub fn paint_thumb(window: &mut Window, thumb: Bounds<Pixels>, clip: Bounds<Pixe
 }
 
 /// The thumb's colour at `alpha` (shadcn `bg-border`).
-pub fn thumb_color(alpha: f32) -> Hsla { super::alpha(color::border(), alpha) }
+pub fn thumb_color(alpha: f32) -> Hsla { thumb_tone(0., alpha) }
+
+/// The thumb under the pointer: half way from `border` to `ring`.
+pub const HOVER: f32 = 0.5;
+/// The thumb held for a drag: `ring`, kept until the button goes up wherever the pointer is.
+pub const HELD: f32 = 1.;
+
+/// The thumb's colour at `tone` (0 rest, `HOVER`, `HELD`) and `alpha`: hover and a drag darken it, as a
+/// browser's thumb does (the user's call; shadcn's stays `bg-border`): `border` at rest toward `ring`
+/// in the light, the foreground from 10% to 35% in the dark.
+pub fn thumb_tone(tone: f32, alpha: f32) -> Hsla {
+    // dark: `border` is white at 10%, and mixing toward an opaque `ring` reaches it half way once laid on
+    // the surface, so the steps are the foreground at 10% (border), 22% and 35% instead
+    if super::dark() { return super::alpha(color::foreground(), (0.10 + 0.25 * tone.clamp(0., 1.)) * alpha); }
+    let (a, b): (Rgba, Rgba) = (color::border().into(), color::ring().into());
+    let t = tone.clamp(0., 1.);
+    let c: Hsla = Rgba { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t, a: a.a + (b.a - a.a) * t }.into();
+    super::alpha(c, alpha)
+}
+
+/// Draws the window again after `wait` (a paint can't ask for the next one: `refresh` is ignored
+/// while drawing).
+fn wake(window: &mut Window, cx: &mut App, wait: Duration) {
+    let handle = window.window_handle();
+    cx.spawn(async move |cx| {
+        cx.background_executor().timer(wait).await;
+        let _ = handle.update(cx, |_, window, _| window.refresh());
+    }).detach();
+}
+
+/// The thumb's tone easing to its target over `FADE` (`step` each paint).
+#[derive(Default)]
+pub struct Tone { at: Cell<Option<(f32, Instant)>> }
+
+impl Tone {
+    pub fn step(&self, target: f32, window: &mut Window, cx: &mut App) -> f32 {
+        let now = Instant::now();
+        let (v, t) = self.at.get().unwrap_or((target, now));
+        let d = now.duration_since(t).as_secs_f32() / FADE.as_secs_f32();
+        let v = if target > v { (v + d).min(target) } else if target < v { (v - d).max(target) } else { v };
+        self.at.set(Some((v, now)));
+        if v != target { wake(window, cx, Duration::from_millis(16)); }
+        v
+    }
+}
 
 /// Shown or hidden, eased over `FADE`: call `step` each paint with whether it should show; it
 /// returns the opacity and has the window drawn again while it moves or when `HIDE` runs out.
@@ -111,13 +155,7 @@ impl Fade {
         let wait = if a != target { Some(Duration::from_millis(16)) }
             else if lingering && !active { self.seen.get().map(|t| HIDE.saturating_sub(now.duration_since(t)) + Duration::from_millis(1)) }
             else { None };
-        if let Some(wait) = wait {
-            let handle = window.window_handle();
-            cx.spawn(async move |cx| {
-                cx.background_executor().timer(wait).await;
-                let _ = handle.update(cx, |_, window, _| window.refresh());
-            }).detach();
-        }
+        if let Some(wait) = wait { wake(window, cx, wait); }
         a
     }
 }
@@ -134,6 +172,9 @@ pub struct ScrollBar {
     radius: Cell<f32>,
     /// The pointer was over the box last paint.
     over: Cell<bool>,
+    /// The pointer was on the thumb last paint.
+    on_thumb: Cell<bool>,
+    tone: Tone,
 }
 
 impl ScrollBar {
@@ -166,12 +207,16 @@ impl ScrollBar {
                 let Some((area, top, h, track, inset, content, offset, hitbox)) = state else { sb.grab.set(None); return };
                 window.set_cursor_style(CursorStyle::Arrow, &hitbox);
                 let held = sb.grab.get().is_some();
-                let over = area.contains(&window.mouse_position());
+                let mouse = window.mouse_position();
+                let over = area.contains(&mouse);
                 sb.over.set(over);
+                let on_thumb = hitbox.is_hovered(window) && mouse.y >= top && mouse.y <= top + h;
+                sb.on_thumb.set(on_thumb);
                 let a = sb.fade.step(over || held, f32::from(offset), window, cx);
+                let tone = sb.tone.step(if held { HELD } else if on_thumb { HOVER } else { 0. }, window, cx);
                 if a > 0. {
                     let thumb = Bounds::new(point(area.right() - inset - px(THUMB), top), size(px(THUMB), h));
-                    paint_thumb(window, thumb, area, sb.radius.get(), thumb_color(a));
+                    paint_thumb(window, thumb, area, sb.radius.get(), thumb_tone(tone, a));
                 }
                 window.on_mouse_event({
                     let (sb, hitbox) = (sb.clone(), hitbox.clone());
@@ -200,6 +245,8 @@ impl ScrollBar {
                             Some(_) => { sb.grab.set(None); window.refresh(); }
                             // Entering or leaving the box shows or hides the thumb.
                             None if area.contains(&ev.position) != sb.over.get() => window.refresh(),
+                            // onto or off the thumb: its tone moves
+                            None if (ev.position.x >= area.right() - px(BAR) && ev.position.x <= area.right() && ev.position.y >= top && ev.position.y <= top + h) != sb.on_thumb.get() => window.refresh(),
                             None => {}
                         }
                     }

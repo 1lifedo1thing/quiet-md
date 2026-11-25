@@ -1,11 +1,11 @@
-//! The header "…" menu: page width, find & replace, move, pin, star,
-//! 新建子文档, duplicate, 下载为 PDF / Markdown, 复制为 Markdown, 打印, document info,
-//! 阅读模式, 显示引用列表 and 窗口保持在最前 switches, delete.
+//! The header "…" menu: how the document is seen (page width, then the 阅读模式, 显示引用列表
+//! and 窗口保持在最前 switches), find & replace, move, pin, star, 新建子文档, duplicate,
+//! 下载为 PDF / Markdown, 复制为 Markdown, 打印, document info, 版本历史, delete, 快捷键.
 
 use crate::app::Workspace;
 use crate::settings::display_title;
 use crate::store::PageWidth;
-use crate::design::{MenuItem, MenuSeparator, Popover, Switch, menu};
+use crate::design::{MenuItem, MenuSeparator, Popover, menu};
 use crate::ui::TipExt;
 use gpui::{prelude::FluentBuilder, *};
 
@@ -16,20 +16,20 @@ pub enum DocSub {
 }
 
 const MENU_W: f32 = 200.;
-/// The menu's padding; a row's and a separator's heights (`design::menu`).
-const ROW_H: f32 = menu::ROW_H;
-const DIV_H: f32 = menu::SEP_H;
+/// The menu's padding (`design::menu`): a submenu's first item sits this far below its top.
 const PAD: f32 = menu::PAD;
 
-/// Offset of item `k`'s row from the menu's top with `dividers` divider rows above it.
-fn item_top(k: usize, dividers: usize) -> f32 {
-    PAD + ROW_H * k as f32 + DIV_H * dividers as f32
+thread_local! {
+    /// Where the rows with a submenu were last painted, so the submenu levels with its row wherever
+    /// the row is: no counting rows and dividers above it, and right after the menu scrolls.
+    static ROWS: std::cell::RefCell<std::collections::HashMap<&'static str, Bounds<Pixels>>> = Default::default();
 }
 
 /// What a page's 「…」 holds, by what the page is: each kind its own list, nothing in it that the
-/// page can't do.
+/// page can't do. How the page is seen comes first (页宽, then the 阅读模式, 显示引用列表 and
+/// 窗口保持在最前 switches: the user's order, 2026-11-25), then what is done to it.
 #[derive(Clone, Copy, PartialEq)]
-enum Item { Width, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Read, Refs, OnTop, Delete, Shortcuts, Rule }
+enum Item { Width, Read, Refs, OnTop, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Delete, Shortcuts, Rule }
 
 /// The page open: a document, one with a 画板 opened in its place, a 画板 file, a 数据表 file.
 #[derive(Clone, Copy, PartialEq)]
@@ -39,20 +39,27 @@ fn items(page: Page, child: bool) -> Vec<Item> {
     use Item::*;
     let print: &[Item] = if crate::printing::SUPPORTED { &[Print, Rule] } else { &[] };
     let child: &[Item] = if child { &[Child] } else { &[] };
-    // 窗口保持在最前, where the window can keep on top
     let top: &[Item] = if crate::on_top::SUPPORTED { &[OnTop] } else { &[] };
     let top_rule: &[Item] = if crate::on_top::SUPPORTED { &[OnTop, Rule] } else { &[] };
     let list: Vec<&[Item]> = match page {
-        Page::Doc => vec![&[Width, Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs], top, &[Rule, Delete, Rule, Shortcuts]],
+        Page::Doc => vec![&[Width, Read, Refs], top, &[Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete, Rule, Shortcuts]],
         // a board isn't the page: no page width, no find in its text, its own shortcut help (`?`)
-        Page::Board => vec![&[Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs], top, &[Rule, Delete]],
+        Page::Board => vec![&[Read, Refs], top, &[Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete]],
         // a board file: no Markdown, no reading mode or references either
-        Page::BoardFile => vec![&[Move, Pin, Star, Rule, Copy, Download, Rule], print, &[Info, History, Rule], top_rule, &[Delete]],
+        Page::BoardFile => vec![top_rule, &[Move, Pin, Star, Rule, Copy, Download, Rule], print, &[Info, History, Rule, Delete]],
         // a 数据表 file: the file's own things; finding, exporting and copying are the table's (its bar)
-        Page::Table => vec![&[Move, Pin, Star, Rule, Copy, Rule, History, Rule], top_rule, &[Delete]],
+        Page::Table => vec![top_rule, &[Move, Pin, Star, Rule, Copy, Rule, History, Rule, Delete]],
     };
     list.concat()
 }
+
+/// Records where the row `key` is painted (a submenu's row).
+fn record_row(key: &'static str) -> impl IntoElement {
+    canvas(move |b, _, _| ROWS.with(|m| { m.borrow_mut().insert(key, b); }), |_, _, _, _| {}).absolute().inset_0()
+}
+
+/// The top of the row `key` as last painted.
+fn row_top(key: &'static str) -> Option<f32> { ROWS.with(|m| m.borrow().get(key).map(|b| f32::from(b.top()))) }
 
 /// A row; one whose submenu is open stays lit (`open`).
 fn menu_item(id: &'static str, ic: &'static str, label: impl Into<SharedString>, sub: bool, open: bool) -> MenuItem {
@@ -153,7 +160,7 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn render_doc_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_doc_menu(&self, _window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         if !self.doc_menu {
             return vec![];
         }
@@ -204,7 +211,22 @@ impl Workspace {
             menu = menu.child(match item {
                 Item::Rule => divider().into_any_element(),
                 Item::Width => menu_item("dm-width", "page-width", crate::settings::text("页宽设置"), true, sub == Some(DocSub::Width))
+                    .child(record_row("dm-width"))
                     .on_hover(hover_sub(Some(DocSub::Width))).into_any_element(),
+                // switch rows keep the menu open (`MenuItem::switch`): the click flips, nothing else
+                Item::Read => menu_item("dm-read", "eye-open", crate::settings::text("阅读模式"), false, false)
+                    .switch(reading)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, window, cx| w.set_mode(!reading, window, cx))).into_any_element(),
+                Item::Refs => menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
+                    .switch(refs_shown)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, _, cx| w.ask_refs(!refs_shown, cx))).into_any_element(),
+                Item::OnTop => menu_item("dm-on-top", crate::on_top::ICON, crate::settings::tr("窗口保持在最前", "Keep Window on Top"), false, false)
+                    .switch(on_top)
+                    .tip_right(crate::settings::tr("窗口会一直显示在其他应用的窗口之上", "Stays above other apps' windows"), None)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, window, cx| w.set_on_top(!on_top, window, cx))).into_any_element(),
                 Item::Find => menu_item("dm-find", "text-search", crate::settings::text("查找和替换"), false, false)
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(|w, _, window, cx| w.find_in_doc(false, window, cx))).into_any_element(),
@@ -230,6 +252,7 @@ impl Workspace {
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(move |w, _, window, cx| w.duplicate_doc(&dup_id, window, cx))).into_any_element(),
                 Item::Download => menu_item("dm-download", "export", crate::settings::text("下载为"), true, sub == Some(DocSub::Download))
+                    .child(record_row("dm-download"))
                     .on_hover(hover_sub(Some(DocSub::Download))).into_any_element(),
                 Item::CopyMd => menu_item("dm-copy-md", "doc-md", crate::settings::text("复制为 Markdown"), false, false)
                     .on_hover(hover_sub(None))
@@ -252,28 +275,6 @@ impl Workspace {
                         w.close_doc_menu(cx);
                         if let Some(id) = w.current.clone() { w.open_history(&id, window, cx) }
                     })).into_any_element(),
-                Item::Read => menu_item("dm-read", "eye-open", crate::settings::text("阅读模式"), false, false)
-                    .child(Switch::new(reading))
-                    .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, window, cx| {
-                        w.close_doc_menu(cx);
-                        w.set_mode(!reading, window, cx);
-                    })).into_any_element(),
-                Item::Refs => menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
-                    .child(Switch::new(refs_shown))
-                    .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, _, cx| {
-                        w.close_doc_menu(cx);
-                        w.ask_refs(!refs_shown, cx);
-                    })).into_any_element(),
-                Item::OnTop => menu_item("dm-on-top", crate::on_top::ICON, crate::settings::tr("窗口保持在最前", "Keep Window on Top"), false, false)
-                    .child(Switch::new(on_top))
-                    .tip_right(crate::settings::tr("窗口会一直显示在其他应用的窗口之上", "Stays above other apps' windows"), None)
-                    .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, window, cx| {
-                        w.close_doc_menu(cx);
-                        w.set_on_top(!on_top, window, cx);
-                    })).into_any_element(),
                 Item::Delete => menu_item("dm-delete", "bin", crate::settings::text("删除"), false, false)
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(move |w, _, _, cx| w.ask_delete(&del_id, cx))).into_any_element(),
@@ -290,29 +291,25 @@ impl Workspace {
         let Some(b) = self.more_btn_bounds.get() else { return vec![] };
         let (at, _) = crate::design::hang(b, crate::design::Align::End, None);
         let (right, menu_top) = (at.x, at.y);
-        // the menu scrolls when the window is short: submenus level with their rows where they are now
-        let scrolled = window.use_keyed_state("doc-menu-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let mut out = vec![
-            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight)).scroll(&scrolled)))
+            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight))))
                 .with_priority(2)
                 .into_any_element(),
         ];
         // Submenus open to the left, 4px from the menu, level with their item.
         let sub_at = point(right - px(self.doc_menu_w.get().unwrap_or(MENU_W) + 4.), px(0.));
-        let item_top = |k: usize, d: usize| f32::from(menu_top) + f32::from(scrolled.offset().y) + item_top(k, d);
         let record = self.doc_sub_bounds.clone();
         record.set(None);
         let recorder = move || {
             let record = record.clone();
             canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().inset_0()
         };
-        // a submenu levels its first item with its own: the rows and rules above that in the list
-        let above = |it: Item| { let before = &list[..list.iter().position(|x| *x == it).unwrap_or(0)]; (before.iter().filter(|x| **x != Item::Rule).count(), before.iter().filter(|x| **x == Item::Rule).count()) };
         let sub_el = match sub {
-            Some(DocSub::Width) => Some((item_top(above(Item::Width).0, above(Item::Width).1) - PAD, self.width_panel(width, cx).child(recorder()).into_any_element())),
+            // each levels its first item with its row, where the row was last painted
+            Some(DocSub::Width) => row_top("dm-width").map(|top| (top - PAD, self.width_panel(width, cx).child(recorder()).into_any_element())),
             // Level the submenu's first item with 下载为.
-            Some(DocSub::Download) => Some((
-                item_top(above(Item::Download).0, above(Item::Download).1) - PAD,
+            Some(DocSub::Download) => row_top("dm-download").map(|top| (
+                top - PAD,
                 {
                     let pdf = id.clone();
                     Popover::new("dm-download-menu")
@@ -341,7 +338,7 @@ impl Workspace {
     /// language wraps; the cards share it equally.
     fn width_panel(&self, current: PageWidth, cx: &mut Context<Self>) -> Popover {
         use crate::design::{color, geo};
-        // A choice card: `primary` edge round the picked one, `accent` under the pointer.
+        // A choice card: the focus ring round the picked one, `accent` under the pointer.
         let card = |id: &'static str, label: &'static str, w: PageWidth, line: f32| {
             let on = w == current;
             let line_color = if on { color::foreground() } else { color::muted_foreground() };
@@ -357,7 +354,10 @@ impl Workspace {
                 .items_center()
                 .rounded(px(geo().button_r))
                 .border_1()
-                .border_color(if on { color::primary() } else { color::border() })
+                // the picked card wears the focus ring (shadcn: a `ring` edge and a 3pt `ring/50`
+                // halo), as a field with the keyboard in it does; not a thin near-black line
+                .border_color(if on { color::ring() } else { color::border() })
+                .when(on, |d| d.shadow(vec![crate::design::shadow::ring(color::focus_ring(), 3.)]))
                 .bg(color::popover())
                 .cursor_pointer()
                 .when(!on, |d| d.hover(|s| s.bg(color::accent())))

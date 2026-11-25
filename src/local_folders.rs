@@ -70,12 +70,12 @@ impl Workspace {
 
     fn add_folders_now(&mut self, dirs: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
         for d in dirs {
-            let fresh = !d.join(crate::store::INTERNAL).exists();
             match self.store.add_folder(d) {
                 Ok(key) => {
                     self.folder_added(&key, window, cx);
-                    // A folder of the user's own gets a hidden .quiet: say so once (W2).
-                    if fresh { self.show_toast(tr("已在这个文件夹里建了隐藏的 .quiet 文件夹，存放置顶、排序、历史版本和回收站", "Quiet.md keeps pins, order, history and the Trash for this folder in a hidden .quiet folder inside it"), cx); }
+                    // 打开 is not 导入: say that nothing was copied.
+                    let msg = crate::localized_format!("已打开「{}」：在原位置使用，没有复制", "Opened “{}”: used where it is, not copied", self.folder_name(&key));
+                    self.show_toast(&msg, cx);
                 }
                 Err(e) => self.add_failed(d, e, window, cx),
             }

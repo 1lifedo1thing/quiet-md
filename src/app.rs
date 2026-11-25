@@ -71,6 +71,8 @@ fn menu_bar(markdown: bool) -> Vec<Menu> {
                 MenuItem::action(tr("新建笔记窗口", "New Note Window"), crate::quick_note::QuickNew),
                 MenuItem::action(tr("打开 Markdown 文件…", "Open Markdown File…"), OpenFile),
                 MenuItem::action(tr("打开文件夹…", "Open Folder…"), OpenFolder),
+                // 打开 uses things where they are; 导入 copies them in: two groups.
+                MenuItem::separator(),
                 MenuItem::action(tr("导入为文档…", "Import as Document…"), ImportDoc),
                 MenuItem::action(tr("导入文件夹…", "Import Folder…"), ImportFolder),
                 MenuItem::action(tr("从其他应用导入…", "Import from Another App…"), ImportFromApps),
@@ -402,10 +404,8 @@ pub struct Workspace {
     sidebar_auto_hidden: bool,
     pub folder_current: Option<String>,
     pub create_menu: Option<(Option<String>, Point<Pixels>)>,
-    /// The header's 导入 menu: the folder it imports into, and where it hangs.
-    pub import_menu: Option<(Option<String>, Point<Pixels>)>,
-    /// The header's … menu on Home (None) or a folder page: where it hangs.
-    pub place_menu: Option<(Option<String>, Point<Pixels>)>,
+    /// 主页's header "…" menu, where it hangs.
+    pub place_menu: Option<Point<Pixels>>,
     /// A breadcrumb's "…" open: the crumbs it folds, where its menu hangs.
     pub crumb_menu: Option<(Vec<crate::folders::Crumb>, Point<Pixels>, Anchor)>,
     pub folder_drag: crate::sidebar_drag::SidebarDrag,
@@ -713,7 +713,6 @@ impl Workspace {
             sidebar_drag: false,
             folder_current: None,
             create_menu: None,
-            import_menu: None,
             place_menu: None,
             crumb_menu: None,
             folder_drag: Default::default(),
@@ -1282,7 +1281,6 @@ impl Workspace {
         self.lang_menu = None;
         self.pref_menu = None;
         self.close_font_menu(cx);
-        self.home.sort_menu = false;
         cx.notify();
     }
 
@@ -1769,32 +1767,6 @@ impl Workspace {
         cx.notify();
     }
 
-    /// 主页's search box, centred on the pane but never over what sits on
-    /// either side of it: the title (and, with the sidebar hidden, the
-    /// traffic lights and 展开侧栏) on the left, … 导入 + on the right. Below a
-    /// usable width it is None and the caller shows a search icon instead.
-    pub(crate) fn header_search(&self, window: &Window, cx: &mut Context<Self>) -> Option<crate::design::Field> {
-        let main = f32::from(window.viewport_size().width) - if self.sidebar_open { self.sidebar_w(window) } else { 0. };
-        let title = crate::settings::label(crate::settings::text("主页"));
-        let title_w = f32::from(window.text_system().shape_line(title.clone().into(), px(17.), &[window.text_style().highlight(HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() }).to_run(title.len())], None).width);
-        // page_header's left inset (26 with the sidebar, else the traffic
-        // lights plus the 4 + 28 + 12 of 展开侧栏), then 16 clear of the title.
-        let left = if self.sidebar_open { 26. } else { theme::TRAFFIC_LIGHTS_W + 44. + if cfg!(target_os = "windows") { 32. } else { 0. } } + title_w + 16.;
-        // … 导入 + are 32 wide each, then the right inset; 16 clear of them.
-        let right = 3. * HEADER_ACTIONS_H + crate::ui::header_right_inset() + 16.;
-        let half = (main / 2. - left).min(main / 2. - right);
-        let width = (main - 320.).min(2. * half).min(360.);
-        if width < 120. { return None }
-        // A field that opens the search panel rather than taking text itself.
-        Some(crate::design::Field::new("header-search").sized(crate::design::FieldSize::Sm).absolute().left(px((main - width) / 2.)).top(px(8.))
-            .w(px(width)).no_drag().gap(px(8.)).cursor_pointer()
-            .child(crate::design::icon("search", 16., crate::design::color::muted_foreground()))
-            .child(div().flex_1().min_w_0().truncate().text_color(crate::design::color::placeholder()).child(crate::settings::tr("搜索文档…", "Search documents…")))
-            .when(width >= 200., |d| d.child(crate::design::Kbd::new(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J").replace(" + ", " "))))
-            .tip(crate::settings::tr("搜索文档", "Search documents"), Some(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J")))
-            .on_click(cx.listener(|w, _, window, cx| w.open_search(window, cx))))
-    }
-
     /// `pane_w`: the width the header spans, to fold the breadcrumbs when narrow.
     fn top_bar(&self, pane_w: f32, cx: &mut Context<Self>) -> impl IntoElement {
         let mut title = self
@@ -2088,7 +2060,6 @@ impl Render for Workspace {
         let home_drag_overlay = self.render_home_drag_overlay(window, cx);
         let file_drop = self.render_file_drop(window, cx);
         let create_menu = self.render_create_menu(cx);
-        let import_menu = self.render_import_menu(cx);
         let place_menu = self.render_place_menu(cx);
         let crumb_menu = self.render_crumb_menu(cx);
         let search = self.render_search(window, cx);
@@ -2247,6 +2218,19 @@ impl Render for Workspace {
                 }
             }))
             // Esc leaves 批量操作 (closing its menu or confirmation first), even from the editor.
+            // Esc closes the document's menus first (Radix's DropdownMenu). The editor binds Esc to its
+            // own action, which runs before any key listener, and spends it selecting the block: take
+            // the action on its way down while a menu is open (a switch row keeps the menu open, so
+            // Esc is how it goes).
+            .capture_action(cx.listener(|w, _: &crate::editor::keymap::Escape, _, cx| {
+                if w.doc_menu || w.mode_menu {
+                    w.mode_menu = false;
+                    w.doc_menu = false;
+                    w.doc_sub = None;
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
             .capture_key_down(cx.listener(|w, ev: &KeyDownEvent, _, cx| {
                 // A required update waits for 立即重启更新 (↩): no key reaches the window beneath.
                 if crate::update::blocking(cx) {
@@ -2322,7 +2306,6 @@ impl Render for Workspace {
                 .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())).with_priority(20)))
             .children(home_drag_overlay)
             .children(create_menu)
-            .children(import_menu)
             .children(place_menu)
             .children(crumb_menu)
             .children(forced_update)
