@@ -207,10 +207,10 @@ impl SharedStore {
         if let Some(s) = self.0.borrow_mut().ws.store(key) { s.adopt(writer); }
         self.merge_entries(key, entries)
     }
-    /// Whether top-level folders show as rows of the tree (two or more of them).
-    pub fn top_rows(&self) -> bool { self.0.borrow().ws.folders.len() > 1 }
-    /// `entries` as the window shows them: with two or more top-level folders, a row
-    /// for each, holding what is at its top level.
+    /// Whether top-level folders show as rows of the tree: always, one or many (主页 is the one root,
+    /// every top-level folder a folder under it, with a page and a "+" of its own; 2026-11-25).
+    pub fn top_rows(&self) -> bool { !self.0.borrow().ws.folders.is_empty() }
+    /// `entries` as the window shows them: a row for each top-level folder, holding what is at its top level.
     fn with_top_rows(&self, mut entries: Vec<Entry>) -> Vec<Entry> {
         if !self.top_rows() { return entries; }
         for e in entries.iter_mut().filter(|e| e.meta.parent.is_none() && !e.meta.local() && !e.top.is_empty()) {

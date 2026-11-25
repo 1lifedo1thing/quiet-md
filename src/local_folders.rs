@@ -71,7 +71,12 @@ impl Workspace {
     fn add_folders_now(&mut self, dirs: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
         for d in dirs {
             match self.store.add_folder(d) {
-                Ok(key) => self.folder_added(&key, window, cx),
+                Ok(key) => {
+                    self.folder_added(&key, window, cx);
+                    // 打开 is not 导入: say that nothing was copied.
+                    let msg = crate::localized_format!("已打开「{}」：在原位置使用，没有复制", "Opened “{}”: used where it is, not copied", self.folder_name(&key));
+                    self.show_toast(&msg, cx);
+                }
                 Err(e) => self.add_failed(d, e, window, cx),
             }
         }

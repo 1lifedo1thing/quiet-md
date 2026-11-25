@@ -47,7 +47,7 @@ CASES = [
 
 
 def script(tag):
-    s = "move 700 700\nwait 1500\nanchor create-sidebar\nwait 300\nrow Board\nwait 1200\norigin board\n"
+    s = "move 700 700\nwait 1500\nrow lib\nwait 800\nanchor create-folder\nwait 300\nrow Board\nwait 1200\norigin board\n"
     for case, make, at in CASES:
         steps = make.split("\n") + ["key escape", "click 950 650", "move 950 650", "wait 250", f"shot {tag}-{case}-a"]
         steps += [f"dclick {at}", "key cmd-left", "move 950 650", "wait 250", f"shot {tag}-{case}-b", "key escape", "key cmd-a", "key backspace"]

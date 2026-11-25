@@ -202,11 +202,11 @@ impl SidebarDrag {
     pub(crate) fn kick(&mut self, id: &str, v: f32) { if let Some(f) = self.fx.get_mut(id) { f.pop.v += v; } }
 }
 
-/// A row's face without its controls: the drag ghost and rows on their way out.
-fn row_face(e: &Entry, open: bool) -> Div {
+/// A row's face without its controls: the drag ghost and rows on their way out. Folders keep one glyph, open or not.
+fn row_face(e: &Entry) -> Div {
     div().h(px(crate::sidebar::ROW_H)).w_full().pl(px(6.)).flex().items_center()
         .child(div().size(px(20.)).flex_none().flex().items_center().justify_center().map(|d| match &e.icon {
-            _ if e.meta.folder.is_some() && e.note.is_none() => d.child(icon(if open { "folder-open" } else { "folder" }, crate::sidebar::ROW_ICON, Theme::icon())),
+            _ if e.meta.folder.is_some() && e.note.is_none() => d.child(icon("folder", crate::sidebar::ROW_ICON, Theme::icon())),
             _ if e.meta.named_by_file() => d.child(icon(crate::search::file_glyph(&e.meta), crate::sidebar::ROW_ICON, Theme::icon())),
             Some(em) => d.text_size(px(13.)).line_height(px(20.)).child(em.clone()),
             None => d.child(icon("doc", crate::sidebar::ROW_ICON, Theme::icon())),
@@ -694,13 +694,13 @@ impl Workspace {
         for l in fd.leaving.values() {
             let [x, y, w] = l.pos.p;
             container = container.child(div().absolute().left(px(x)).top(px(y)).w(px(w)).opacity(l.alpha.unit())
-                .text_color(Theme::sidebar_text()).child(row_face(&l.row.entry, false)));
+                .text_color(Theme::sidebar_text()).child(row_face(&l.row.entry)));
         }
         for (r, [x, y, w], band, a) in &closing {
             if band.1 - band.0 < 0.5 { continue; }
             if !on_screen(*y) { continue; }
             let el = div().id(SharedString::from(format!("fclose-{}", r.entry.id))).h(row_h).opacity(*a).text_color(Theme::sidebar_text())
-                .child(row_face(&r.entry, self.expanded.contains(&r.entry.id)));
+                .child(row_face(&r.entry));
             container = container.child(clipped(el, *x, *y - 4. * (1. - a), *w, Some(*band)));
         }
         if let Some((s, a)) = &fd.zone {
@@ -831,7 +831,7 @@ impl Workspace {
             let inside = d.excluded.len().saturating_sub(1);
             layer = layer.child(div().absolute().left(px(x - 3. * l)).top(px(y - l)).w(px(width + 6. * l)).h(px(crate::sidebar::ROW_H)).pr(px(6.)).rounded(px(crate::sidebar::ROW_R))
                 .bg(theme::raised(Theme::bg_body())).shadow(faded(theme::shadow_panel(), l.min(1.))).flex().items_center().text_color(Theme::text())
-                .child(row_face(e, self.expanded.contains(&e.id)).flex_1().min_w_0().pl(px(6. + 3. * l)))
+                .child(row_face(e).flex_1().min_w_0().pl(px(6. + 3. * l)))
                 .when(inside > 0, |g| g.child(div().flex_none().h(px(18.)).min_w(px(18.)).px(px(5.)).rounded(px(9.)).flex().items_center().justify_center()
                     .bg(Theme::sidebar_drop_slot()).text_size(px(11.)).text_color(Theme::sidebar_text()).font_weight(FontWeight::MEDIUM)
                     .opacity(d.lift.unit()).child(inside.to_string()))));

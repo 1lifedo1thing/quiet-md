@@ -515,6 +515,8 @@ impl Onboarding {
         self._ticker = Task::ready(());
         if let Some((_, t)) = self.film_tex.take() { let _ = window.drop_image(t); }
         let ws = crate::start(existed, self.scripted, Some(window), self.incoming.take().unwrap_or_default(), cx);
+        // The first look is the folder the notes are in, not 主页: its page, with its "+" to make the first one.
+        if let Some(ws) = &ws { ws.update(cx, |w, cx| w.show_first_folder(cx)); }
         let hotkey_error = (cfg!(target_os = "macos") && self.hotkey != crate::shortcuts::global_key())
             .then(|| crate::shortcuts::set_global(&self.hotkey, cx).err()).flatten().map(|e| e.to_string());
         if let Some(e) = hotkey_error.or(import_error) && let Some(ws) = ws {
