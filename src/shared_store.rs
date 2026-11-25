@@ -19,6 +19,13 @@ struct Shared {
     trash: Vec<(String, Vec<TrashEntry>)>,
     /// `Store::set_place_by_hand` for every top-level folder, also those opened later.
     place_by_hand: bool,
+    /// The first listing is still running off the main thread (`loading`):
+    /// listing here reads no document, and whether anything was listed
+    /// (after a write) meanwhile.
+    loading: bool,
+    listed_meanwhile: bool,
+    /// `begin_relist` until `end_relist`.
+    relisting: bool,
 }
 
 #[derive(Clone)]
@@ -44,7 +51,7 @@ impl gpui::Global for SharedStore {}
 impl SharedStore {
     pub fn open() -> Self { Self::with_workspace(Home::load()) }
     pub fn with_workspace(ws: Home) -> Self {
-        let s = Self(Rc::new(RefCell::new(Shared { ws, active: None, entries: vec![], trash: vec![], place_by_hand: true })), Arc::new(AtomicBool::new(false)));
+        let s = Self(Rc::new(RefCell::new(Shared { ws, active: None, entries: vec![], trash: vec![], place_by_hand: true, loading: false, listed_meanwhile: false, relisting: false })), Arc::new(AtomicBool::new(false)));
         if let Some(r) = s.0.borrow().ws.first() { Store::set_active_dir(&r.path); }
         s.folders_changed();
         s
@@ -152,7 +159,9 @@ impl SharedStore {
     pub fn list(&mut self) -> Vec<Entry> {
         let all = {
             let mut sh = self.0.borrow_mut();
-            let all = sh.ws.list();
+            let parse = !sh.loading;
+            sh.listed_meanwhile |= !parse;
+            let all = sh.ws.list_with(parse);
             let keys: Vec<String> = sh.ws.folders.iter().map(|r| r.key.clone()).collect();
             sh.entries = keys.into_iter().map(|k| { let v: Vec<Entry> = all.iter().filter(|e| e.top == k).cloned().collect(); (k, v) }).collect();
             all
@@ -165,6 +174,46 @@ impl SharedStore {
     /// Bring a listed row up to date after a save made outside a window's own list, for `listed`'s readers.
     pub fn update_listed(&self, id: &str, f: impl FnOnce(&mut Entry)) {
         if let Some(e) = self.0.borrow_mut().entries.iter_mut().flat_map(|r| r.1.iter_mut()).find(|e| e.id == id) { f(e); }
+    }
+    /// The first listing goes off the main thread: until `end_loading`,
+    /// `list` reads no document (one opened from the Finder still works).
+    pub fn begin_loading(&self) { let mut sh = self.0.borrow_mut(); sh.loading = true; sh.listed_meanwhile = false; }
+    /// Takes over each top-level folder's `tree_writer` that listed it; true
+    /// when something was written (and listed) meanwhile, so a `list` is due.
+    pub fn end_loading(&self, done: Vec<(String, Store)>) -> bool {
+        let mut sh = self.0.borrow_mut();
+        for (key, w) in done { if let Some(s) = sh.ws.store(&key) { s.adopt(w); } }
+        sh.loading = false;
+        std::mem::take(&mut sh.listed_meanwhile)
+    }
+    pub fn loading(&self) -> bool { self.0.borrow().loading }
+    /// Writers to list top-level folders `keys` again off the main thread, each with
+    /// its library's `Store::writes` now; `None` while another listing runs.
+    pub fn begin_relist(&self, keys: &[String]) -> Option<Vec<(String, u64, Store)>> {
+        let mut sh = self.0.borrow_mut();
+        if sh.relisting || sh.loading { return None }
+        sh.relisting = true;
+        Some(keys.iter().filter_map(|k| { let s = sh.ws.store(k)?; Some((k.clone(), s.writes(), s.tree_writer())) }).collect())
+    }
+    /// What the writers listed: taken over where nothing was written meanwhile, else
+    /// that top-level folder is listed here. The window's rows.
+    pub fn end_relist(&self, done: Vec<(String, u64, Store, Vec<Entry>)>) -> Vec<Entry> {
+        self.0.borrow_mut().relisting = false;
+        let mut out = None;
+        for (key, n, w, entries) in done {
+            let fresh = {
+                let mut sh = self.0.borrow_mut();
+                match sh.ws.store(&key) { Some(s) if s.writes() == n => { s.adopt(w); Some(entries) } Some(s) => Some(s.list()), None => None }
+            };
+            if let Some(e) = fresh { out = Some(self.merge_entries(&key, e)); }
+        }
+        out.unwrap_or_else(|| { let all: Vec<Entry> = self.0.borrow().entries.iter().flat_map(|(_, v)| v.iter().cloned()).collect(); self.with_top_rows(all) })
+    }
+    /// A writer of top-level folder `key` done writing and listing (an import): its library
+    /// takes over what it read and wrote, and every top-level folder's entries with `entries` for `key`.
+    pub fn adopt_listed(&self, key: &str, writer: Store, entries: Vec<Entry>) -> Vec<Entry> {
+        if let Some(s) = self.0.borrow_mut().ws.store(key) { s.adopt(writer); }
+        self.merge_entries(key, entries)
     }
     /// Whether top-level folders show as rows of the tree (two or more of them).
     pub fn top_rows(&self) -> bool { self.0.borrow().ws.folders.len() > 1 }
@@ -269,9 +318,10 @@ impl SharedStore {
     pub fn touch(&mut self, id: &str) -> Option<Meta> { self.on(id, |s| s.touch(id)).flatten().map(|m| self.as_row(id, m)) }
     pub fn create_folder(&mut self, title: &str, parent: Option<&str>) -> Result<String> { self.put(parent, |s, parent| s.create_folder(title, parent)) }
     pub fn accept_file_title(&self, id: &str, title: &str) -> Result<()> { self.on_res(id, |s| s.accept_file_title(id, title)) }
-    pub fn initialize_manual_order(&mut self) -> Result<()> {
-        let mut r = Ok(());
-        self.each(|s| if let Err(e) = s.initialize_manual_order() { r = Err(e) });
+    /// True when some top-level folder numbered something.
+    pub fn initialize_manual_order(&mut self) -> Result<bool> {
+        let mut r = Ok(false);
+        self.each(|s| match s.initialize_manual_order() { Err(e) => r = Err(e), Ok(true) => if let Ok(c) = &mut r { *c = true }, Ok(false) => {} });
         r
     }
     /// One journal of file changes across every top-level folder.
@@ -354,6 +404,8 @@ impl SharedStore {
         match id { Some(id) => self.on(id, |s| s.folder_dir(Some(id))).flatten(), None => self.active_top().and_then(|k| self.top_path(&k)) }
     }
     pub fn file_path(&self, id: &str) -> Option<PathBuf> { self.on(id, |s| s.file_path(id)).flatten() }
+    /// Every open top-level folder by key, for the 2 s look.
+    pub fn top_keys_dirs(&self) -> Vec<(String, PathBuf)> { self.0.borrow().ws.folders.iter().filter(|r| r.store.is_some()).map(|r| (r.key.clone(), r.path.clone())).collect() }
     /// Every open top-level folder, for what scans them all (unused images, wiki links).
     pub fn top_dirs(&self) -> Vec<PathBuf> { self.0.borrow().ws.folders.iter().filter(|r| r.store.is_some()).map(|r| r.path.clone()).collect() }
 }

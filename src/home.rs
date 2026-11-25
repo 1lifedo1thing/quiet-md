@@ -8,8 +8,6 @@ use crate::app::{RowMenu, Workspace};
 mod bs;
 #[path = "home_text.rs"]
 mod text_preview;
-#[path = "home_scrollbar.rs"]
-pub(crate) mod scrollbar;
 use crate::settings::display_title;
 use crate::model::BlockKind;
 use crate::search::doc_icon;
@@ -382,10 +380,10 @@ pub struct Home {
     /// A folder's page has its own scroll positions, so 主页 keeps its place.
     folder_grid_scroll: UniformListScrollHandle,
     folder_list_scroll: ScrollHandle,
-    grid_scrollbar: Rc<scrollbar::Scrollbar>,
-    list_scrollbar: Rc<scrollbar::Scrollbar>,
+    grid_scrollbar: Rc<crate::design::ScrollBar>,
+    list_scrollbar: Rc<crate::design::ScrollBar>,
     /// The 搜索 dialog's results (`search.rs`).
-    pub(crate) search_scrollbar: Rc<scrollbar::Scrollbar>,
+    pub(crate) search_scrollbar: Rc<crate::design::ScrollBar>,
     sort: HomeSort,
     sort_dir: SortDir,
     folders_first: bool,
@@ -581,8 +579,12 @@ impl Workspace {
     pub(crate) fn prepare_manual_order(&mut self, cx: &mut Context<Self>) -> bool {
         if self.tree_writes_pending() { return false; }
         let previous = self.store.track_file_changes();
-        if let Err(e) = self.store.initialize_manual_order() { self.show_toast_kind(crate::ui::ToastKind::Error, &e.to_string(), cx); return false; }
-        self.entries = self.store.list();
+        match self.store.initialize_manual_order() {
+            Err(e) => { self.show_toast_kind(crate::ui::ToastKind::Error, &e.to_string(), cx); return false; }
+            // Already in order: nothing written, the rows stand.
+            Ok(false) => return true,
+            Ok(true) => self.entries = self.store.list(),
+        }
         self.remember_files(previous, crate::settings::tr("初始化手动排序", "Initialize manual order"));
         true
     }
@@ -721,14 +723,15 @@ impl Workspace {
     fn open_row_menu(&mut self, id: &str, key: &str, cx: &mut Context<Self>) {
         let b = self.more_bounds.borrow().get(key).copied();
         let Some(b) = b else { return };
-        self.row_menu = Some(RowMenu { id: id.to_string(), pos: point(b.right(), b.bottom() + px(2.)), corner: Anchor::TopRight, sub: false, batch: false });
+        let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+        self.row_menu = Some(RowMenu { id: id.to_string(), pos, corner, sub: false, batch: false, from: Some(key.to_string()) });
         cx.notify();
     }
 
     pub(crate) fn home_more(&self, e: &Entry, key: String, cx: &mut Context<Self>) -> crate::design::Button {
         let id = e.id.clone();
         let (rec, k2) = (self.more_bounds.clone(), key.clone());
-        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.pos.x > px(0.) && m.corner == Anchor::TopRight);
+        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.from.as_deref() == Some(key.as_str()));
         crate::design::Button::ghost(SharedString::from(key.clone()))
             .sized(crate::design::ButtonSize::Xs)
             .relative()
@@ -768,6 +771,9 @@ impl Workspace {
     }
 
     /// 主页's view and sort order are remembered (`settings.json`).
+    /// Whether 主页 lists by hand (手动排序) under these settings, as `load_home` reads them.
+    pub(crate) fn sorts_by_hand(s: &crate::store::Settings) -> bool { s.home_sort.as_deref().map(HomeSort::of).unwrap_or(HomeSort::Manual) == HomeSort::Manual }
+
     pub(crate) fn load_home(&mut self) {
         let s = self.store.settings();
         self.home.grid = !s.home_list;
@@ -942,7 +948,7 @@ impl Workspace {
                 .when(check.is_none(), |d| d.on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
-                        w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false });
+                        w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false, from: None });
                         cx.notify();
                     }),
                 ))
@@ -1084,7 +1090,7 @@ impl Workspace {
                     .when(check.is_none(), |d| d.on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
-                            w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false });
+                            w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false, from: None });
                             cx.notify();
                         }),
                     ))
@@ -1111,7 +1117,7 @@ impl Workspace {
             return out;
         }
         let place = |pos: Point<Pixels>, corner: Anchor, menu: Popover| {
-            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element()
+            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element()
         };
         if self.home.sort_menu
             && let Some(b) = self.home.anchor("home-sort") {
@@ -1142,7 +1148,8 @@ impl Workspace {
                 menu = menu.child(MenuSeparator::new()).child(MenuItem::new("home-folders-first").label(crate::settings::tr("文件夹优先", "Folders first")).checked(self.home.folders_first && self.home.sort != HomeSort::Manual)
                     .when(self.home.sort == HomeSort::Manual, |d| d.opacity(0.4))
                     .on_click(cx.listener(|w, _, _, cx| { if w.home.sort == HomeSort::Manual { return; } w.home.folders_first = !w.home.folders_first; w.save_home(); w.home.sort_menu = false; cx.notify(); })));
-                out.push(place(point(b.right(), b.bottom() + px(4.)), Anchor::TopRight, menu));
+                let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+                out.push(place(pos, corner, menu));
             }
         out
     }

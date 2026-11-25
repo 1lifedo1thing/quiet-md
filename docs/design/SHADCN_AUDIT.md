@@ -32,6 +32,7 @@
 | ghost 悬停 | `hover:bg-muted`，深色 `hover:bg-muted/50` | 同 | 改（原来是 `accent_hover`） |
 | ghost 在用 | `aria-expanded:bg-muted`；按下的 Toggle `aria-pressed:bg-muted` | `selected` → `muted` | 改（原来是 `accent`） |
 | ghost 在深色弹层上 | muted / muted/50（弹层 #171717 上看得见） | 悬停 白 6%（`accent_hover`），在用 `accent` #404040 | 保留 C：我们的深色弹层 #262626 就是 `muted`，muted 画上去看不见；在弹层、对话框、卡片里（`base::raised()`）提一档 |
+| ghost 在侧栏行上 | SidebarMenuAction、SidebarGroupAction `hover:bg-sidebar-accent`，和行的悬停（SidebarMenuButton `hover:bg-sidebar-accent`）同色 | 侧栏行里的「…」「+」、我的文档标题的批量和「+」：悬停和在用都是 `background`（`Button::on_wash`） | 保留 C（2026-11-25）：毛玻璃侧栏上行的悬停是黑 4.5%（浅色约 234），`muted`（245）或 accent 叠上去比行亮一点、又比周围的侧栏底（约 247）暗，看不出层次、显得发灰；`background`（浅色纯白）在行上和侧栏底上都分得开 |
 | destructive | bg destructive/10，悬停 /20；深色 /20、/30；字 destructive | 同 | 一致 |
 | link | `text-primary underline-offset-4 hover:underline` | `ButtonVariant::Link` | 新增 |
 | 尺寸 default | `.cn-button-size-default` h-9 gap-1.5 px-2.5，带图标那侧 pl-2 / pr-2 | 36、6、10，图标侧 8 | 改（图标侧原来也是 10） |
@@ -224,11 +225,15 @@
 | 块手柄悬停 | 每个按钮各自悬停 | 两半一起亮 | 我们的：整块是一个控件（按下就是拖动或开菜单），不分左右 |
 | 字数小块 | 无 | outline xs 按钮的外观（1px `border`、shadow-xs、8、text-xs muted、`background` 底） | 我们的；改（原来 `button_border`、`shadow_button`） |
 
-## 滚动条（斜杠菜单，`src/editor/overlays.rs`）
+## 滚动条（`src/design/scroll.rs`：菜单、面板、弹出层，页面和宽表格同一个样子）
 
 | 属性 | shadcn | 我们 | 处理 |
 |---|---|---|---|
-| 占位 | ScrollArea 的滚动条浮在内容上，不占宽度；Command 列表铺满 | 列表宽 = 菜单宽 247 | 改（原来给滚动条常驻留 15） |
-| 出现 | 内容超高才有 | 同 | 一致 |
-| 样式 | scrollbar w-2.5 p-px，thumb bg-border rounded-full | 宽 8，距右、上、下 1，`border`，胶囊 | 改（原来距右 3、上下 2，`scrollbar_thumb`） |
+| 占位 | ScrollArea 的滚动条浮在内容上，不占宽度 | 同：画在框上，不占位 | 一致 |
+| 出现 | 内容超高才有；`type="hover"`：指针在框上、滚动中显示，离开 600ms（`scrollHideDelay`）后藏 | 同，拖动中也显示 | 一致 |
+| 显隐 | 直接切换 | 150ms 淡入淡出 | 有意不同（总控 2026-11-25 要的淡入淡出） |
+| 宽度 | 条 w-2.5（10），p-px，透明 border-l：滑块 7 | 滑块 7，条 10 接指针 | 一致；shadcn 没有悬停加粗，也不加 |
+| 留白 | p-px：四周 1 | 方框四周 1；圆角面板里四周一样多，刚好让开圆角（`inset_for`，圆角 12 时 2.5） | 有意不同：GPUI 不按圆角裁子元素，四周 1 的滑块会戳出圆角 |
+| 颜色 | thumb `bg-border`，rounded-full | 同（`thumb_color`） | 一致；页面、宽表格原来的 22% 黑和悬停加深去掉 |
+| 限高 | — | 按钮菜单上下都放不下时 `room` 限高、`Popover::fit` 滚动 | 新增 |
 | 子面板 | — | 贴菜单右边（`pos.x + SLASH_W`） | 改 |

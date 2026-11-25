@@ -235,6 +235,10 @@ pub fn load() {
         p.doc_family = look.doc_family.unwrap_or(d.doc_family);
         p.doc_size = look.doc_size.unwrap_or(d.doc_size);
     }
+    // Tests read the interface in English, whatever the machine's language or
+    // the preferences a `QUIET_MD_HOME` holds; one that needs another language says so.
+    #[cfg(test)]
+    p.set_lang(Lang::En);
     apply(p);
 }
 
@@ -742,15 +746,16 @@ fn font_row(family: &str, dl: Option<&'static str>, flat: bool, g: SharedString,
         else { div().text_color(crate::design::color::disabled()).child(tr("下载后可预览", "Preview after download")) };
     let (del, star) = (dl.map(str::to_string), family.to_string());
     let hover_key = key.clone();
-    div().w_full().flex().flex_col().child(MenuItem::new(g.clone()).selected(focused)
+    div().w_full().flex().flex_col().relative().children(crate::devtools::row_probe(label.clone())).child(MenuItem::new(g.clone()).selected(focused)
         .on_hover(cx.listener(move |w, hovered: &bool, _, cx| if *hovered { w.preview_font(hover_key.clone(), row, cx) }))
         .on_click(cx.listener(move |w, _, window, cx| w.pick_font(key.clone(), target, window, cx)))
         .child(div().flex_none().w(px(150.)).overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui::ui_text(label)))
         .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_size(px(theme::ui_font())).child(sample))
         .children(tags.into_iter().map(tag))
         .child(status)
-        .when(e.is_some_and(|e| fd::on_disk(&e.id) && !fd::pending(&e.id)), |d| d.child(Button::ghost(SharedString::from(format!("font-del-{}", del.clone().unwrap_or_default()))).sized(ButtonSize::Xs).icon("bin")
-            .on_click(cx.listener(move |w, _, _, cx| { cx.stop_propagation(); if let Some(id) = &del { w.delete_download(id, cx) } }))))
+        .when(e.is_some_and(|e| fd::on_disk(&e.id) && !fd::pending(&e.id)), |d| d.child(div().relative().children(crate::devtools::anchor_probe(format!("font-del-{}", del.clone().unwrap_or_default())))
+            .child(Button::ghost(SharedString::from(format!("font-del-{}", del.clone().unwrap_or_default()))).sized(ButtonSize::Xs).icon("bin")
+            .on_click(cx.listener(move |w, _, _, cx| { cx.stop_propagation(); if let Some(id) = &del { w.delete_download(id, cx) } })))))
         .child(Button::ghost(SharedString::from(format!("{g}-star"))).sized(ButtonSize::Xs)
             .child(crate::design::icon("star", 14., if fav { crate::design::color::primary() } else { crate::design::color::disabled() }))
             .on_click(cx.listener(move |w, _, _, cx| { cx.stop_propagation(); w.toggle_favorite(&star, cx) }))))
@@ -965,8 +970,8 @@ impl Workspace {
                 w.theme_menu = None;
                 cx.notify();
             }))
-            .child(div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().py(px(menu::PAD)).flex().flex_col().children(rows));
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+            .child({ let h = crate::design::scroll::handle("theme-menu-list"); div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().track_scroll(&h).py(px(menu::PAD)).flex().flex_col().children(rows).child(crate::design::scroll::bar("theme-menu-list", &h, crate::design::geo().menu_r)) });
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 
     /// A choice as a dropdown button, like 界面语言's: the picked label, a menu of the rest.
@@ -1004,7 +1009,7 @@ impl Workspace {
                 cx.notify();
             }))
             .children(rows);
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+        { let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element()) }
     }
 
     fn pick_pref(&mut self, i: usize, cx: &mut Context<Self>) {
@@ -1151,7 +1156,7 @@ impl Workspace {
                         .child(crate::design::icon("search", 14., crate::design::color::muted_foreground()))
                         .child(div().flex_1().min_w_0().child(menu.field.clone()))))
                 .child(div().pb(px(menu::PAD)).child(list)));
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(popup)).with_priority(2).into_any_element())
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(popup)).with_priority(2).into_any_element())
     }
 
     /// A row picked (its key): saved, and kept in 最近使用.
@@ -1284,7 +1289,7 @@ impl Workspace {
                 cx.notify();
             }))
             .children(rows);
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+        { let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element()) }
     }
 
     /// Keys while the language dropdown is open; true when used.
@@ -1460,7 +1465,7 @@ impl Workspace {
             // The bar only drags the window; the page title heads the centred column.
             .child(div().h(px(crate::app::HEADER_H)).flex_none().flex().items_center().title_bar()
                 .when(!self.sidebar_open, |d| d.pl(px(theme::TRAFFIC_LIGHTS_W)).child(self.header_navigation(cx))))
-            .child(div().id("settings-content").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.settings_scroll)
+            .child(div().id("settings-content").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.settings_scroll).child(crate::design::scroll::bar("settings-content", &self.settings_scroll, 0.))
                 .child(div().w_full().flex().flex_col().items_center().px(px(32.)).pb(px(64.))
                     .child(div().w_full().max_w(px(if page == Page::Shortcuts { 760. } else { COLUMN_W })).flex().flex_col().gap(px(28.))
                         .child(div().flex().items_center().gap(px(16.))
@@ -1548,6 +1553,7 @@ impl Workspace {
             let open = self.font_menu.as_ref().is_some_and(|m| m.target == target);
             popup_button(format!("{}-font-picker", target.key()), label, open)
                 .child(canvas(move |b, _, _| { anchors.borrow_mut().insert(key, b); }, |_, _, _, _| {}).absolute().inset_0())
+                .children(crate::devtools::anchor_probe(format!("{}-font-picker", target.key())))
                 .relative()
                 .on_click(cx.listener(move |w, _, window, cx| w.toggle_font_menu(target, window, cx)))
         })
@@ -2736,7 +2742,7 @@ mod tests {
         let dl: Vec<_> = ["lxgw-wenkai", "zhuque-fangsong"].iter().filter_map(|id| crate::font_downloads::entry(id)).collect();
         let zh = arrange("", false, &all, &dl, &[], &[], Lang::Zh);
         assert_eq!(zh[0], Choice::Reset);
-        // English labels under test (the language store isn't set)
+        // English labels: tests read the interface in English (`load`)
         assert_eq!(headers(&zh), ["Chinese sans", "Chinese serif", "Kai & handwriting", "Monospace", "Sans serif", "Serif"]);
         assert_eq!(fonts(&zh), ["PingFang SC", "Songti SC", "\u{1}zhuque-fangsong", "Kaiti SC", "\u{1}lxgw-wenkai", "Menlo", "Helvetica", "Georgia"]);
         assert!(matches!(zh.last(), Some(Choice::Others(1, false))), "Webdings folded");

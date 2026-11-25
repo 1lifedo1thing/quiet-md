@@ -15,8 +15,6 @@ pub enum DocSub {
 }
 
 const MENU_W: f32 = 200.;
-/// Gap between the "…" button and the menu.
-const MENU_GAP: f32 = 6.;
 /// The menu's padding; a row's and a separator's heights (`design::menu`).
 const ROW_H: f32 = menu::ROW_H;
 const DIV_H: f32 = menu::SEP_H;
@@ -151,7 +149,7 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn render_doc_menu(&self, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_doc_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         if !self.doc_menu {
             return vec![];
         }
@@ -275,18 +273,20 @@ impl Workspace {
                     })).into_any_element(),
             });
         }
-        let vw = window.viewport_size().width;
-        let btn = self.more_btn_bounds.get();
-        let right = btn.map_or(vw - px(120.), |b| b.right());
-        let menu_top = btn.map_or(px(60.), |b| b.bottom() + px(MENU_GAP));
+        // hung from the measured button; not yet measured: not drawn yet
+        let Some(b) = self.more_btn_bounds.get() else { return vec![] };
+        let (at, _) = crate::design::hang(b, crate::design::Align::End, None);
+        let (right, menu_top) = (at.x, at.y);
+        // the menu scrolls when the window is short: submenus level with their rows where they are now
+        let scrolled = window.use_keyed_state("doc-menu-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let mut out = vec![
-            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu))
+            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight)).scroll(&scrolled)))
                 .with_priority(2)
                 .into_any_element(),
         ];
         // Submenus open to the left, 4px from the menu, level with their item.
         let sub_at = point(right - px(self.doc_menu_w.get().unwrap_or(MENU_W) + 4.), px(0.));
-        let item_top = |k: usize, d: usize| f32::from(menu_top) + item_top(k, d);
+        let item_top = |k: usize, d: usize| f32::from(menu_top) + f32::from(scrolled.offset().y) + item_top(k, d);
         let record = self.doc_sub_bounds.clone();
         record.set(None);
         let recorder = move || {

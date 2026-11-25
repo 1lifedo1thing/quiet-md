@@ -553,6 +553,7 @@ impl Editor {
                 .overflow_y_scroll()
                 .track_scroll(&self.cover_ui.gallery_scroll)
                 .child(list)
+                .child(crate::design::scroll::bar("cover-gallery", &self.cover_ui.gallery_scroll, 0.))
                 .into_any_element()
         };
         // The second-level panel.

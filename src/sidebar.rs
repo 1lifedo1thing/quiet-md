@@ -175,6 +175,11 @@ impl Workspace {
             list = list.child(self.section(1, crate::settings::text("我的文档"), cx));
             list = list.child(self.render_folder_rows(window, cx));
         }
+        // The first listing still running: grey rows in place of the tree, fading out over it once it is here.
+        let load = if crate::loading::adding(cx) { crate::loading::Phase::Gone } else { crate::loading::phase(cx) };
+        if load.loading() { list = div().flex().flex_col().px(px(SB_X)).pb(px(8.)).child(crate::loading::sidebar_rows(load, crate::loading::t(cx))); }
+        // The sidebar sits on the window's glass: nothing can cover the rows, so they fade in as the grey ones fade out.
+        else if load.moving() { list = div().relative().child(list.opacity(1. - load.cover())).child(crate::loading::sidebar_rows(load, crate::loading::t(cx)).absolute().top_0().left(px(SB_X)).right(px(SB_X))); }
         // 本机文件: Markdown files and folders edited where they are, outside the
         // library. Files or folders from the Finder let go here open the same way.
         let local = self.local_rows();
@@ -230,7 +235,7 @@ impl Workspace {
             .flex_col()
             .child(header)
             .child(nav)
-            .child(self.sidebar_drop_zone(div().id("doc-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.list_scroll).child(list), cx))
+            .child(self.sidebar_drop_zone(div().id("doc-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.list_scroll).child(list).child(crate::design::scroll::bar("doc-list", &self.list_scroll, 0.)), cx))
             .children(crate::changelog::card(cx.listener(|_, _, _, cx| cx.notify())))
             .child(footer)
             .into_any_element()
@@ -319,7 +324,7 @@ impl Workspace {
         let title = crate::settings::label(title);
         let group = SharedString::from(format!("section-{idx}"));
         let folded = self.folded[idx];
-        let trigger = |id: &'static str, name: &'static str| Button::ghost(id).sized(ButtonSize::Xs).icon(name);
+        let trigger = |id: &'static str, name: &'static str| Button::ghost(id).sized(ButtonSize::Xs).on_wash().icon(name);
         let create_open = matches!(self.create_menu, Some((None, _)));
         let row = div().h(px(SECTION_H)).pl(px(4.)).pt(px(SECTION_TOP)).flex().items_center().group(group.clone());
         if let (1, Some(sel)) = (idx, self.batch.as_ref()) {
@@ -355,7 +360,7 @@ impl Workspace {
                 )
                 .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(cx.listener(|w, ev: &ClickEvent, _, cx| { let pos = w.home.anchor("create-sidebar").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })));
+                    .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })));
         }
         // 我的文档 (#421) does not fold: the heading is a row of its own, like a folder's, that
         // opens 主页 on its 我的文档 tab, which lists every top-level folder (主页 is 我的文档).
@@ -379,7 +384,7 @@ impl Workspace {
                         })))
                     .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .on_click(cx.listener(|w, ev: &ClickEvent, _, cx| { cx.stop_propagation(); let pos = w.home.anchor("create-sidebar").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
+                        .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { cx.stop_propagation(); let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
                     .on_click(cx.listener(|w, _, _, cx| { w.home.tab = crate::home::HomeTab::Recent; w.home.sort_menu = false; w.show_view(View::Home, cx); })),
             );
         }
@@ -505,7 +510,7 @@ impl Workspace {
                     if batch && !w.batch.as_ref().is_some_and(|b| b.contains(&id2)) && !w.toggle_check(&id2) {
                         return;
                     }
-                    w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch });
+                    w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch, from: None });
                     cx.notify();
                 }),
             )
@@ -517,11 +522,13 @@ impl Workspace {
         let slot2 = slot.clone();
         let record = self.more_bounds.clone();
         let lookup = self.more_bounds.clone();
-        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.pos.x < px(0.));
+        let from = format!("sidebar:{slot}");
+        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.from.as_ref() == Some(&from));
         // 我的文档 rows fade their buttons in with the hover wash.
         let reveal = (key == "doc").then(|| self.folder_drag.reveal(&e.id));
         Button::ghost(SharedString::from(format!("more-{slot}")))
             .sized(ButtonSize::Xs)
+            .on_wash()
             .relative()
             .mr(px(4.))
             .icon("ellipsis")
@@ -530,15 +537,16 @@ impl Workspace {
             .child(canvas(move |b, _, _| record.borrow_mut().insert(slot.clone(), b), |_, _, _, _| {}).absolute().inset_0())
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
+                cx.listener(move |w, _: &MouseDownEvent, _, cx| {
                     cx.stop_propagation();
                     // The row menu's outside-click handler has already closed it on this press, so
                     // a press on its own button closes it rather than reopening it (see `open`).
                     if open { w.row_menu = None; cx.notify(); return; }
-                    // Hang the menu from the button; a negative x marks "from the button".
-                    let b = lookup.borrow().get(&slot2).copied();
-                    let pos = b.map_or(ev.position, |b| point(-b.left() - px(1.), b.top()));
-                    w.row_menu = Some(RowMenu { id: id.clone(), pos, corner: Anchor::TopLeft, sub: false, batch: false });
+                    // Hung from the measured button, never the pointer; above it when there's no room below.
+                    let Some(b) = lookup.borrow().get(&slot2).copied() else { return };
+                    let menu_h = row_menu_height(ROW_ITEMS + usize::from(w.takes_children(&id)), ROW_DIVIDERS);
+                    let (pos, corner) = crate::design::hang(b, crate::design::Align::Start, Some(menu_h));
+                    w.row_menu = Some(RowMenu { id: id.clone(), pos, corner, sub: false, batch: false, from: Some(from.clone()) });
                     cx.notify();
                 }),
             )
@@ -550,10 +558,11 @@ impl Workspace {
         let id = e.id.clone();
         let slot = format!("add-{key}-{}", e.id);
         let (record, lookup) = (self.more_bounds.clone(), self.more_bounds.clone());
-        let anchor = |b: Bounds<Pixels>| point(b.left(), b.bottom() + px(4.));
+        let anchor = |b: Bounds<Pixels>| crate::design::hang(b, crate::design::Align::Start, None).0;
         let open = self.create_menu.as_ref().is_some_and(|(p, pos)| p.as_deref() == Some(e.id.as_str()) && self.more_bounds.borrow().get(&slot).is_some_and(|b| anchor(*b) == *pos));
         Button::ghost(SharedString::from(format!("add-{key}-{}", e.id)))
             .sized(ButtonSize::Xs)
+            .on_wash()
             .relative()
             .opacity(if open { 1. } else { self.folder_drag.reveal(&e.id) })
             .selected(open)
@@ -561,10 +570,10 @@ impl Workspace {
             .child({ let slot = slot.clone(); canvas(move |b, _, _| { record.borrow_mut().insert(slot.clone(), b); }, |_, _, _, _| {}).absolute().inset_0() })
             .tip(crate::settings::tr("新建", "New"), None)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
                 cx.stop_propagation();
                 w.row_menu = None;
-                let pos = lookup.borrow().get(&slot).copied().map_or(ev.position(), anchor);
+                let Some(pos) = lookup.borrow().get(&slot).copied().map(anchor) else { return };
                 w.create_menu = if open { None } else { Some((Some(id.clone()), pos)) };
                 cx.notify();
             }))
@@ -581,7 +590,7 @@ impl Workspace {
         let folder = e.meta.folder.is_some() && note.is_none();
         let lib_batch = self.batch.is_some() && key == "doc";
         let float = key == "doc" && !lib_batch && self.rename.as_ref().is_none_or(|r| r.id != e.id);
-        let menu_open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && !m.batch && m.pos.x < px(0.)) || (folder && self.create_menu.as_ref().is_some_and(|(p, _)| p.as_deref() == Some(e.id.as_str())));
+        let menu_open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && !m.batch && m.from.as_deref().is_some_and(|f| f.starts_with("sidebar:"))) || (folder && self.create_menu.as_ref().is_some_and(|(p, _)| p.as_deref() == Some(e.id.as_str())));
         let give = if float { (if folder { 52. } else { 28. }) * if menu_open { 1. } else { self.folder_drag.reveal(&e.id) } } else { 0. };
         let selected = (self.view == View::Doc && (self.current.as_deref() == Some(e.id.as_str()) || (note.is_some() && self.current.as_deref() == note))) || (self.view == View::Folder && self.folder_current.as_deref() == Some(e.id.as_str()));
         let renaming = self.rename.as_ref().filter(|r| r.id == e.id).map(|r| r.field.clone());
@@ -713,7 +722,7 @@ impl Workspace {
             .when(!renaming && key != "doc" && batch.is_none(), |d| d.child(self.more_button(e, key, cx)))
     }
 
-    pub(crate) fn render_row_menu(&self, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_row_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let Some(m) = self.row_menu.clone() else { return vec![] };
         if let Some(key) = crate::shared_store::top_of_row(&m.id).map(str::to_string) { return self.top_row_menu(&key, m, cx); }
         if !m.batch && self.entries.iter().any(|e| e.id == m.id && e.meta.folder.is_some() && e.note.is_none()) { return self.folder_row_menu(m, cx); }
@@ -740,7 +749,7 @@ impl Workspace {
                 .child(item("bm-move", "folder-input", crate::settings::text("移动到")).on_click(cx.listener(|w, _, window, cx| w.batch_move(window, cx))))
                 .child(item("bm-delete", "bin", crate::settings::text("删除")).on_click(cx.listener(|w, _, _, cx| w.ask_batch_delete(cx))));
             return vec![
-                deferred(anchored().anchor(m.corner).position(m.pos).snap_to_window_with_margin(px(8.)).child(menu))
+                deferred(anchored().anchor(m.corner).position(m.pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(m.pos, m.corner))))
                     .with_priority(2)
                     .into_any_element(),
             ];
@@ -801,14 +810,13 @@ impl Workspace {
                     .on_click(cx.listener(move |w, _, window, cx| w.open_move(vec![mv.clone()], window, cx))),
             )
             .child(
-                item("rm-path", "copy", crate::settings::text("复制文件地址"))
+                // the file (or folder) picked out in Finder, as a 本机文件夹's row offers
+                item("rm-reveal", "folder", crate::local_folders::show_in_files())
                     .on_hover(set_sub(false))
                     .on_click(cx.listener(move |w, _, _, cx| {
                         w.row_menu = None;
-                        if let Some(path) = w.store.file_path(&path) {
-                            cx.write_to_clipboard(ClipboardItem::new_string(path.display().to_string()));
-                            w.show_toast(crate::settings::text("已复制文件地址"), cx);
-                        }
+                        if let Some(path) = w.store.file_path(&path) { cx.reveal_path(&path); }
+                        cx.notify();
                     })),
             )
             .child(
@@ -839,27 +847,21 @@ impl Workspace {
                     .on_hover(set_sub(false))
                     .on_click(cx.listener(move |w, _, _, cx| w.ask_delete(&del, cx))),
             );
-        let vh = f32::from(window.viewport_size().height);
         let extra = usize::from(child);
         let menu_h = row_menu_height(ROW_ITEMS + extra, ROW_DIVIDERS);
-        // From the "…" button: hang 2px below it, or sit 2px above it when
-        // there's no room below. From a right-click: at the pointer.
-        let (origin, corner) = if m.pos.x < px(0.) {
-            let (left, top) = (-m.pos.x, f32::from(m.pos.y));
-            if top + 20. + 2. + menu_h > vh - 8. {
-                (point(left, px(top - 2.)), Anchor::BottomLeft)
-            } else {
-                (point(left, px(top + 22.)), Anchor::TopLeft)
-            }
-        } else {
-            (m.pos, m.corner)
-        };
+        // From the "…" button: where `design::hang` put it (under the button, or above when there's no
+        // room below). From a right-click: at the pointer.
+        let (origin, corner) = (m.pos, m.corner);
+        // capped to the room there (`room`), scrolled under the shared scrollbar: the submenu levels
+        // with 下载 where it is now
+        let room = crate::design::room(origin, corner);
+        let scrolled = window.use_keyed_state("row-menu-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let menu_top = match corner {
-            Anchor::BottomLeft | Anchor::BottomRight => f32::from(origin.y) - menu_h,
+            Anchor::BottomLeft | Anchor::BottomRight => f32::from(origin.y) - menu_h.min(room),
             _ => f32::from(origin.y),
-        };
+        } + f32::from(scrolled.offset().y);
         let mut out = vec![
-            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu))
+            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu.fit(room).scroll(&scrolled)))
                 .with_priority(2)
                 .into_any_element(),
         ];

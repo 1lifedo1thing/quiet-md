@@ -283,8 +283,9 @@ impl Home {
     /// run's one top-level folder (`QUIET_MD_HOME`), and not a folder the system names
     /// (home, Desktop, Documents, Downloads …).
     pub fn can_rename(&self, key: &str) -> bool {
-        // A test run's one top-level folder stays where the run put it.
-        let pinned = cfg!(target_family = "wasm") || (std::env::var_os("QUIET_MD_HOME").is_some() && std::env::var_os("QUIET_MD_FOLDERS").is_none());
+        // A test run's one top-level folder stays where the run put it (a scripted
+        // launch's environment: unit tests are not that run, whatever their shell sets).
+        let pinned = cfg!(target_family = "wasm") || (!cfg!(test) && std::env::var_os("QUIET_MD_HOME").is_some() && std::env::var_os("QUIET_MD_FOLDERS").is_none());
         let Some(r) = self.folder(key).filter(|r| r.store.is_some() && !pinned) else { return false };
         let system = [dirs::home_dir(), dirs::desktop_dir(), dirs::document_dir(), dirs::download_dir(), dirs::picture_dir(), dirs::audio_dir(), dirs::video_dir(), dirs::public_dir()];
         r.path.parent().is_some() && !system.into_iter().flatten().any(|d| canonical(&d) == canonical(&r.path))
@@ -324,12 +325,15 @@ impl Home {
     }
 
     /// Every top-level folder's entries, each marked with its top-level folder.
-    pub fn list(&mut self) -> Vec<Entry> {
+    pub fn list(&mut self) -> Vec<Entry> { self.list_with(true) }
+
+    /// `list`; with `parse` off, documents not read yet go by their file's name (`Store::list_with`).
+    pub fn list_with(&mut self, parse: bool) -> Vec<Entry> {
         let mut out = vec![];
         self.owner.clear();
         for r in &mut self.folders {
             let Some(s) = r.store.as_mut() else { continue };
-            for mut e in s.list() {
+            for mut e in s.list_with(None, parse) {
                 self.owner.insert(e.id.clone(), r.key.clone());
                 e.top = r.key.clone();
                 out.push(e);

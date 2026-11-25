@@ -126,14 +126,20 @@ impl Workspace {
             let (id, id2) = (t.id.clone(), t.id.clone());
             let menu_open = self.trash_menu.as_ref().is_some_and(|(m, _, _)| *m == t.id);
             let title = display_title(&t.title);
-            let more = Button::ghost(SharedString::from(format!("trash-more-{}", t.id)))
+            let slot = format!("trash-more-{}", t.id);
+            let (record, lookup, slot2) = (self.more_bounds.clone(), self.more_bounds.clone(), slot.clone());
+            let more = Button::ghost(SharedString::from(slot.clone()))
                 .sized(ButtonSize::Xs)
                 .icon("ellipsis")
                 .selected(menu_open)
-                .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
+                .relative()
+                .child(canvas(move |b, _, _| { record.borrow_mut().insert(slot.clone(), b); }, |_, _, _, _| {}).absolute().inset_0())
+                .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
                     cx.stop_propagation();
-                    let p = ev.position();
-                    w.trash_menu = Some((id.clone(), point(p.x + px(12.), p.y + px(14.)), Anchor::TopRight));
+                    // hung from the measured button, never the pointer
+                    let Some(b) = lookup.borrow().get(&slot2).copied() else { return };
+                    let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+                    w.trash_menu = Some((id.clone(), pos, corner));
                     cx.notify();
                 }));
             list = list.child(
@@ -208,7 +214,7 @@ impl Workspace {
                 cx.notify();
             })));
         Some(
-            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu))
+            deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner))))
                 .with_priority(2)
                 .into_any_element(),
         )
@@ -373,6 +379,7 @@ impl Workspace {
             Confirm::Migrate(_) => self.migrate_library(window, cx),
             Confirm::RemoveFolder(key, _) => self.remove_folder(&key, window, cx),
             Confirm::Import { what, target } => self.import_dropped(what, target, window, cx),
+            Confirm::AddFolder(ask) => self.add_asked_folder(ask, window, cx),
         }
         cx.notify();
     }
@@ -487,6 +494,20 @@ impl Workspace {
                     crate::localized_format!("是否将{}导入到「{}」？", "Import {} into “{}”?", what_s, place),
                     crate::settings::tr("会复制一份到文档库里，原文件不会改动。", "A copy goes into the library; the original file is left as it is.").to_string(),
                     crate::settings::tr("导入", "Import"),
+                    false,
+                )
+            }
+            Confirm::AddFolder(ask) => {
+                let name = ask[0].0.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                let why = match ask[0].1 {
+                    fdl_core::shown::Survey::Big => crate::localized_format!("这个文件夹里有 {} 多个文件。", "This folder holds more than {} files. ", crate::loading::grouped(fdl_core::shown::SURVEY_LIMIT)),
+                    _ => crate::settings::tr("这个文件夹看起来是代码项目。", "This folder looks like a code project. ").to_string(),
+                };
+                (
+                    crate::localized_format!("添加「{}」？", "Add “{}”?", name),
+                    why + crate::settings::tr("Quiet.md 只显示其中的 Markdown 文件和 Quiet.md 文档，不进入依赖、构建产物和 .gitignore 忽略的文件夹；添加后，文件夹里会多一个隐藏的 .quiet 文件夹。",
+                        "Quiet.md shows only its Markdown files and Quiet.md documents, and skips dependencies, build output and what .gitignore leaves out. Adding it puts a hidden .quiet folder inside."),
+                    crate::settings::tr("添加", "Add"),
                     false,
                 )
             }

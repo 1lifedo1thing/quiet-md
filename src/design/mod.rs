@@ -21,6 +21,7 @@ pub mod control;
 pub mod dialog;
 pub mod field;
 pub mod menu;
+pub mod scroll;
 pub mod toolbar;
 
 // The library's surface, whether or not every piece has a caller yet.
@@ -39,7 +40,8 @@ pub use dialog::{Dialog, DialogFocus, scrim};
 #[allow(unused_imports)]
 pub use field::{Field, FieldSize, Label, Textarea};
 #[allow(unused_imports)]
-pub use menu::{MenuItem, MenuLabel, MenuSeparator, Popover};
+pub use scroll::ScrollBar;
+pub use menu::{Align, MenuItem, MenuLabel, MenuSeparator, Popover, hang, room};
 pub use toolbar::{ButtonGroup, ButtonGroupSeparator, Toggle, ToggleSize, Toolbar};
 
 use crate::theme::{dark, rgbaf};

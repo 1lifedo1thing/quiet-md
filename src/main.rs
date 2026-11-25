@@ -32,6 +32,7 @@ mod devtools {
     pub fn file_drag() -> bool { false }
     pub fn rows_begin(_: &gpui::Window) {}
     pub fn row_probe(_: impl Into<gpui::SharedString>) -> Option<gpui::AnyElement> { None }
+    pub fn anchor_probe(_: impl Into<gpui::SharedString>) -> Option<gpui::AnyElement> { None }
 }
 mod design;
 mod docinfo;
@@ -53,6 +54,7 @@ mod native_header;
 mod mermaid;
 mod printing;
 mod search;
+mod siyuan;
 #[cfg(not(target_family = "wasm"))]
 mod selftest;
 #[cfg(target_family = "wasm")]
@@ -62,6 +64,7 @@ mod selftest {
 }
 mod sidebar;
 mod local_files;
+mod loading;
 mod local_folders;
 mod sidebar_drag;
 mod sidebar_drop;

@@ -168,7 +168,7 @@ pub struct Editor {
     /// Slash / "+" menu list (keyboard selection is kept in view).
     pub slash_scroll: ScrollHandle,
     /// The slash menu's scrollbar: when the list last scrolled (or opened) and the offset then.
-    pub slash_bar: Cell<Option<(std::time::Instant, f32)>>,
+    pub slash_bar: std::rc::Rc<crate::design::ScrollBar>,
     /// Sideways scroll of each unwrapped code block, and its scrollbar.
     pub code_hscroll: RefCell<HashMap<BlockId, (ScrollHandle, Rc<super::scrollbar::Scrollbar>)>>,
     pub mention_scroll: ScrollHandle,
@@ -226,6 +226,7 @@ pub struct Editor {
     pub lang_field: Entity<TextField>,
     pub emoji_field: Entity<TextField>,
     pub emoji_scroll: ScrollHandle,
+    pub emoji_bar: std::rc::Rc<crate::design::ScrollBar>,
     /// The emoji search box was clicked or typed into (draws its focus ring).
     pub emoji_search_active: bool,
     pub(super) cover_ui: super::cover::CoverUi,
@@ -259,6 +260,12 @@ pub struct Editor {
     pub(super) col_drag: Option<super::grid::ColDrag>,
     /// Blocks moved by their handle.
     pub(super) block_drag: Option<super::drag::BlockDrag>,
+    /// Blocks sliding aside for dragged blocks and gliding in once dropped.
+    pub(super) drag_fx: RefCell<super::drag::DragFx>,
+    /// The first and last top-level blocks the page drew rows of this frame.
+    pub(super) rendered_top: Cell<Option<(usize, usize)>>,
+    /// The selected blocks' word count, for the document version and selection.
+    pub(super) sel_words: Cell<Option<((u64, super::core::BlockSel), usize)>>,
     /// Blocks just dropped, flashing since.
     pub(super) drop_flash: Option<(Vec<BlockId>, web_time::Instant)>,
     /// The fold arrow turning after a click: block → start.
@@ -438,7 +445,7 @@ impl Editor {
             frame: Default::default(),
             code_rows: HashMap::new(),
             slash_scroll: ScrollHandle::new(),
-            slash_bar: Cell::new(None),
+            slash_bar: std::rc::Rc::new(crate::design::ScrollBar::rounded(crate::design::geo().menu_r)),
             code_hscroll: Default::default(),
             mention_scroll: ScrollHandle::new(),
             links: Default::default(),
@@ -477,6 +484,7 @@ impl Editor {
             lang_field,
             emoji_field,
             emoji_scroll: ScrollHandle::new(),
+            emoji_bar: std::rc::Rc::new(crate::design::ScrollBar::rounded(0.)),
             emoji_search_active: false,
             cover_ui: super::cover::CoverUi::new(),
             find: None,
@@ -500,6 +508,9 @@ impl Editor {
             gap_hover: None,
             col_drag: None,
             block_drag: None,
+            drag_fx: Default::default(),
+            rendered_top: Cell::new(None),
+            sel_words: Cell::new(None),
             drop_flash: None,
             fold_anim: None,
             col_anim: HashMap::default(),
@@ -3119,7 +3130,7 @@ fn new_table_file() -> Option<String> {
     let name = format!("{}.sqlite", uuid::Uuid::new_v4());
     let path = crate::store::Store::assets_dir().join(&name);
     crate::table::sqlite::create(&path, &crate::table::blank_base()).ok()?;
-    path.strip_prefix(crate::store::Store::active_dir()).ok().map(|r| r.to_string_lossy().replace('\\', "/"))
+    fdl_core::paths::portable_in(&path, &crate::store::Store::active_dir())
 }
 #[cfg(target_family = "wasm")]
 fn new_table_file() -> Option<String> { None }

@@ -413,7 +413,7 @@ impl Editor {
                 let p = point(r.left() + px(MENU_W), r.bottom() + px(4. + self.block_menu_add_y(*block)));
                 (p, p, *selected, Some(p))
             }
-            _ => { self.slash_bar.set(None); return None }
+            _ => return None,
         };
         let results = self.slash_results();
         let grid_basic = self.slash_grid();
@@ -540,42 +540,15 @@ impl Editor {
             // The menu hangs right off the line box, no gap.
             (anchor_bottom, Anchor::TopLeft)
         };
-        // An overlay scrollbar, as macOS draws one (and the page's): a 4pt thumb with no
-        // track, 3pt in from the edge and clear of the rounded corners, over the rows
-        // rather than in a gutter. It shows when the menu opens and while the list
-        // scrolls (pointer or keyboard), and goes a second after the last move: one
-        // timer redraws then, rather than animating a fade frame by frame.
-        const SHOWN: std::time::Duration = std::time::Duration::from_millis(1000);
-        let off = -f32::from(self.slash_scroll.offset().y);
-        let now = std::time::Instant::now();
-        let shown = match self.slash_bar.get() {
-            Some((t, o)) if (o - off).abs() < 0.5 => now.duration_since(t) < SHOWN,
-            _ => {
-                self.slash_bar.set(Some((now, off)));
-                if content_h > content_h.min(SLASH_MAX_H) {
-                    cx.spawn(async move |e, cx| {
-                        cx.background_executor().timer(SHOWN).await;
-                        let _ = e.update(cx, |_, cx| cx.notify());
-                    }).detach();
-                }
-                true
-            }
-        };
-        let fade = if shown { 1. } else { 0. };
-        let thumb = (content_h > view_h && fade > 0.).then(|| {
-            let inset = crate::design::geo().menu_r;
-            let track = view_h - 2. * inset;
-            let h = (track * view_h / content_h).max(24.);
-            let top = inset + (track - h) * (off / (content_h - view_h)).clamp(0., 1.);
-            div().absolute().right(px(3.)).top(px(top)).w(px(4.)).h(px(h)).rounded_full().bg(crate::design::alpha(color::foreground(), 0.22 * fade))
-        });
+        // The shared scrollbar (shadcn's ScrollArea): shows while the pointer is over the menu or it scrolls.
+        let thumb = self.slash_bar.render(&self.slash_scroll);
         let el = Popover::new("slash-menu")
             .relative()
             .w(px(SLASH_W))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_scroll(cx.listener(|_, _, _, cx| cx.notify()))
             .child(list)
-            .children(thumb);
+            .child(thumb);
         out.push(at(self.rel(pos), corner, el));
         let (kind, row_top) = picker_at?;
         // The picker hangs 4pt off the menu's right edge (as submenus do), centred on its row and
@@ -1101,7 +1074,8 @@ impl Editor {
         };
         let q = self.lang_field.read(cx).text.clone();
         let langs = menus::filter_languages(&q);
-        let mut list = div().id("lang-list").max_h(px(288.)).overflow_y_scroll().flex().flex_col();
+        let lang_scroll = crate::design::scroll::handle("lang-list");
+        let mut list = div().id("lang-list").max_h(px(288.)).overflow_y_scroll().track_scroll(&lang_scroll).flex().flex_col();
         for (i, l) in langs.iter().enumerate() {
             let l: &'static str = l;
             let is_cur = current.eq_ignore_ascii_case(l);
@@ -1134,7 +1108,7 @@ impl Editor {
                     .child(icon("search", 14., color::muted_foreground()))
                     .child(self.lang_field.clone()),
             )
-            .child(list);
+            .child(list.child(crate::design::scroll::bar("lang-list", &lang_scroll, crate::design::geo().menu_r)));
         // Under the language button, which sits ~267px left of the block's right
         // edge; above it when the list wouldn't fit below.
         let h = px(2. * PAD + 38. + (langs.len().max(1) as f32 * ROW_H).min(288.));
@@ -1301,7 +1275,7 @@ impl Editor {
 
         let drop_el: Option<AnyElement> = match dropdown {
             Some(Menu::TurnInto) => {
-                let mut list = Popover::new("tb-turn-menu").menu().min_w(px(200.)).max_h(turn_height).overflow_y_scroll().on_scroll(|_, _, cx| cx.stop_propagation());
+                let mut list = Popover::new("tb-turn-menu").menu().min_w(px(200.)).fit(f32::from(turn_height)).on_scroll(|_, _, cx| cx.stop_propagation());
                 for (i, it) in TURN_ITEMS.iter().enumerate() {
                     let k = (it.kind)();
                     if self.markdown && matches!(k, BlockKind::Callout { .. }) {
@@ -1609,7 +1583,7 @@ impl Editor {
         let x_color = if md { 0. } else { f32::min(at_x[13], w - CALLOUT_PANEL_W).max(0.) };
         let drop_el: Option<AnyElement> = match dropdown {
             Some(Menu::TurnInto) => {
-                let mut list = Popover::new("ttb-turn-menu").menu().min_w(px(200.)).max_h(turn_height).overflow_y_scroll().on_scroll(|_, _, cx| cx.stop_propagation());
+                let mut list = Popover::new("ttb-turn-menu").menu().min_w(px(200.)).fit(f32::from(turn_height)).on_scroll(|_, _, cx| cx.stop_propagation());
                 for (i, it) in TURN_ITEMS.iter().enumerate() {
                     let k = (it.kind)();
                     if matches!(k, BlockKind::Callout { .. }) {

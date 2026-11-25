@@ -23,7 +23,7 @@ const MARKDOWN_EXTS: [&str; 4] = ["md", "markdown", "mark", "txt"];
 
 /// What the header's 导入 menu picks.
 #[derive(Clone, Copy)]
-pub(crate) enum ImportKind { Markdown, Folder, DocxXml, Csv }
+pub(crate) enum ImportKind { Markdown, Folder, SiYuan, DocxXml, Csv }
 
 /// 导入文件夹 refuses folders with more documents than this.
 pub(crate) const IMPORT_FOLDER_LIMIT: usize = 2000;
@@ -35,7 +35,13 @@ pub(crate) type AfterImport = Box<dyn FnOnce(&mut Workspace, &str)>;
 
 /// What a background 导入文件夹 did.
 /// `cloud`: what was skipped as only in iCloud (`Scanned::cloud`).
-enum Imported { Empty { cloud: usize }, TooMany(usize), Done { top: Option<String>, failed: usize, cloud: usize, saved: anyhow::Result<()>, changes: Vec<crate::store::FileDelta> } }
+enum Imported { Empty { cloud: usize }, TooMany(usize), Done { top: Option<String>, failed: usize, cloud: usize, saved: anyhow::Result<()>, changes: Vec<crate::store::FileDelta>, listed: Listed } }
+
+/// An import's writer once it is done, with its library listed there too (`Workspace::take_import`).
+pub(crate) struct Listed { key: String, writer: crate::store::Store, entries: Vec<crate::store::Entry> }
+impl Listed {
+    fn of(key: String, mut writer: crate::store::Store) -> Self { let entries = writer.list(); Listed { key, writer, entries } }
+}
 struct ImportedFiles { last: Option<String>, failed: bool, changes: Vec<crate::store::FileDelta> }
 
 /// A folder to import: its documents and the sub-folders that hold some;
@@ -134,12 +140,33 @@ fn read_markdown(path: &Path, root: Option<&Path>, assets: &Path) -> anyhow::Res
     let bytes = crate::store::read_bounded(path, IMPORT_FILE_LIMIT)?;
     let text = String::from_utf8_lossy(&bytes);
     let text = text.trim_start_matches('\u{feff}');
+    // Markdown 思源 exported: its attribute lists, references, tags and embeds become plain Markdown.
+    let siyuan = fdl_core::siyuan::markdown_text(text);
+    let text = siyuan.as_deref().unwrap_or(text);
     let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().trim().to_string();
     let mut doc = crate::markdown::parse_file(text, &stem, path.parent());
-    if let Some(dir) = path.parent() { crate::markdown::wiki_images(&mut doc.blocks, dir, root); }
+    if let Some(dir) = path.parent() { crate::markdown::wiki_images(&mut doc.blocks, dir, root); assets_above(&mut doc.blocks, dir, root); }
     crate::editor::image::localize_images_in(assets, &mut doc.blocks);
     if doc.blocks.is_empty() { doc.blocks.push(Block::text("")); }
     Ok((doc, crate::markdown::front_matter(text).0.to_string()))
+}
+
+/// Pictures at `assets/…` that are not beside the file: 思源 exports a
+/// notebook's pages in folders and its pictures once, in `assets/` at the
+/// top. Looked up in the folders above, up to `root` (the folder being
+/// imported; one level for a lone file).
+fn assets_above(blocks: &mut [Block], dir: &Path, root: Option<&Path>) {
+    for b in blocks.iter_mut() {
+        assets_above(&mut b.children, dir, root);
+        if let BlockKind::Table(t) = &mut b.kind { for c in t.rows.iter_mut().flatten() { assets_above(&mut c.blocks, dir, root); } }
+        let BlockKind::Image { src, .. } = &mut b.kind else { continue };
+        let Some(rest) = Path::new(src.as_str()).strip_prefix(dir.join("assets")).ok().map(Path::to_path_buf) else { continue };
+        if Path::new(src.as_str()).fs_exists() { continue }
+        let top = root.unwrap_or_else(|| dir.parent().unwrap_or(dir));
+        if let Some(found) = dir.ancestors().skip(1).take_while(|d| d.starts_with(top)).map(|d| d.join("assets").join(&rest)).find(|p| p.fs_is_file()) {
+            *src = found.to_string_lossy().to_string();
+        }
+    }
 }
 
 /// One scanned folder as a library folder under `parent`; its id. Needs no
@@ -189,6 +216,11 @@ pub(crate) fn import_file(store: &mut crate::store::Store, p: &Path, parent: Opt
 /// neither it keeps the import's time.
 pub(crate) fn keep_times(store: &mut crate::store::Store, id: &str, src: &Path) {
     let front = if store.is_markdown(id) { crate::markdown::front_matter_times(&store.front_matter_of(id)) } else { (None, None) };
+    // A page 思源 exported keeps its times in its own attribute list, which the import took out.
+    let front = match front {
+        (None, None) if crate::local_files::is_markdown_path(src) => crate::store::read_bounded(src, IMPORT_FILE_LIMIT).map(|b| fdl_core::siyuan::markdown_times(&String::from_utf8_lossy(&b))).unwrap_or_default(),
+        f => f,
+    };
     let Some((made, changed)) = times(fdl_core::vfs::file_times(src), front) else { return };
     if let Some(p) = store.file_path(id) { let _ = fdl_core::vfs::set_modified(&p, changed); }
     let _ = store.update_meta(id, |m| { m.created = made; m.modified = changed; });
@@ -494,6 +526,7 @@ impl Workspace {
     /// document; the last one opens.
     pub fn open_import(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.close_menus();
+        if self.still_loading(cx) { return }
         cx.notify();
         let paths = open_paths(cx);
         cx.spawn_in(window, async move |this, cx| {
@@ -524,18 +557,14 @@ impl Workspace {
                 match import_file(&mut writer, p, parent.as_deref()) { Ok(id) => last = Some(id), Err(_) => failed = true }
             }
             if batch && writer.end_batch().is_err() { failed = true; }
-            let entries = writer.list();
-            (ImportedFiles { last, failed, changes: journal.take() }, entries)
+            (ImportedFiles { last, failed, changes: journal.take() }, Listed::of(key, writer))
         });
         self.show_toast_kind(ToastKind::Info, crate::settings::tr("正在导入…", "Importing…"), cx);
         cx.spawn_in(window, async move |this, cx| {
-            let _task_guard = task_guard;
-            let (imported, entries) = task.await;
+            let (imported, listed) = task.await;
+            drop(task_guard);
             let _ = this.update_in(cx, |w, window, cx| {
-                let entries = w.store.merge_entries(&key, entries);
-                w.sync_peers(cx, &entries, None);
-                w.entries = entries;
-                w.sort();
+                w.take_import(listed, cx);
                 w.remember_file_changes(imported.changes, crate::settings::tr("导入", "Import"));
                 if let Some(id) = imported.last.filter(|_| open) { w.open(&id, window, cx); }
                 if imported.failed { w.show_toast_kind(ToastKind::Error, crate::settings::text("导入失败，请检查文件格式"), cx); }
@@ -555,12 +584,14 @@ impl Workspace {
         let (folders, extensions): (bool, &[&str]) = match kind {
             ImportKind::Markdown => (false, &["md", "markdown", "mdown"]),
             ImportKind::Folder => (true, &[]),
+            // A workspace or notebook folder, or a `.sy.zip`.
+            ImportKind::SiYuan => (true, &["zip"]),
             ImportKind::DocxXml => (false, &["xml"]),
             ImportKind::Csv => (false, &["csv", "tsv"]),
         };
         let options = PathPromptOptions {
-            files: !folders, directories: folders, multiple: !folders, prompt: Some(crate::settings::text("导入").into()),
-            extensions: (!folders).then(|| extensions.iter().map(|e| SharedString::from(*e)).collect()),
+            files: !folders || !extensions.is_empty(), directories: folders, multiple: !folders, prompt: Some(crate::settings::text("导入").into()),
+            extensions: (!extensions.is_empty()).then(|| extensions.iter().map(|e| SharedString::from(*e)).collect()),
         };
         let prompt = picked.is_none().then(|| cx.prompt_for_paths(options));
         cx.spawn_in(window, async move |this, cx| {
@@ -571,6 +602,7 @@ impl Workspace {
             let Some(paths) = paths.filter(|p| !p.is_empty()) else { return };
             let _ = this.update_in(cx, |w, window, cx| match kind {
                 ImportKind::Folder => w.import_folder(&paths[0], parent.clone(), true, window, cx),
+                ImportKind::SiYuan => w.import_siyuan(&paths[0], parent.clone(), window, cx),
                 _ => w.import_paths(&paths, parent.clone(), true, window, cx),
             });
         })
@@ -581,7 +613,7 @@ impl Workspace {
     pub(crate) fn render_import_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (parent, pos) = self.import_menu.clone()?;
         Some(deferred(anchored().anchor(Anchor::TopRight).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("import-items").menu().min_w(px(210.))
+            crate::design::Popover::new("import-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).min_w(px(210.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.import_menu = None; cx.notify(); }))
                 .children(self.import_items(parent, cx)),
         )).with_priority(3).into_any_element())
@@ -598,6 +630,7 @@ impl Workspace {
         let mut out = vec![
             item("import-md", "doc-md", crate::settings::tr("导入 Markdown 文件…", "Import Markdown Files…"), ImportKind::Markdown),
             item("import-folder", "folder", crate::settings::tr("导入文件夹…", "Import Folder…"), ImportKind::Folder),
+            item("import-siyuan", "doc-blocks", crate::settings::tr("导入思源笔记…", "Import from SiYuan…"), ImportKind::SiYuan),
             item("import-xml", "doc", crate::settings::tr("导入 DocxXML…", "Import DocxXML…"), ImportKind::DocxXml),
         ];
         if crate::DATATABLE { out.push(item("import-csv", "datatable", crate::settings::tr("从 CSV 新建数据表…", "New Data Table from CSV…"), ImportKind::Csv)); }
@@ -612,7 +645,7 @@ impl Workspace {
             else if cfg!(target_os = "windows") { crate::settings::tr("在文件资源管理器中打开", "Open in File Explorer") }
             else { crate::settings::tr("在文件管理器中打开", "Open in File Manager") };
         Some(deferred(anchored().anchor(Anchor::TopRight).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("place-items").menu().w(px(210.))
+            crate::design::Popover::new("place-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).w(px(210.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.place_menu = None; cx.notify(); }))
                 .child(crate::design::MenuItem::new("place-open").icon("folder").label(label)
                     .on_click(cx.listener(move |w, _, _, cx| {
@@ -630,8 +663,11 @@ impl Workspace {
             .selected(open)
             .when(!open, |d| d.tip(crate::settings::tr("更多", "More"), None))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
-                w.place_menu = if w.place_menu.is_some() { None } else { Some((folder.clone(), ev.position() + point(px(18.), px(20.)))) };
+            .relative().child(self.home.track(id))
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
+                // hung from the measured button, never the pointer; not yet measured: not yet
+                let Some(b) = w.home.anchor(id) else { return };
+                w.place_menu = if w.place_menu.is_some() { None } else { Some((folder.clone(), crate::design::hang(b, crate::design::Align::End, None).0)) };
                 cx.notify();
             }))
     }
@@ -643,8 +679,11 @@ impl Workspace {
             .selected(open)
             .tip(crate::settings::tr("导入", "Import"), None)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
-                w.import_menu = if w.import_menu.is_some() { None } else { Some((parent.clone(), ev.position() + point(px(18.), px(20.)))) };
+            .relative().child(self.home.track(id))
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
+                // hung from the measured button, never the pointer; not yet measured: not yet
+                let Some(b) = w.home.anchor(id) else { return };
+                w.import_menu = if w.import_menu.is_some() { None } else { Some((parent.clone(), crate::design::hang(b, crate::design::Align::End, None).0)) };
                 cx.notify();
             }))
     }
@@ -652,6 +691,7 @@ impl Workspace {
     /// 导入文件夹: pick a folder; it lands at the top of 我的文档 as a folder,
     /// its sub-folders as folders, its Markdown and DocxXML files as documents.
     pub fn open_import_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.still_loading(cx) { return }
         self.open_import_kind(ImportKind::Folder, None, window, cx);
     }
 
@@ -677,7 +717,7 @@ impl Workspace {
         let parent = self.store.real_parent(parent.as_deref()).map(str::to_string);
         let dir = dir.to_path_buf();
         let task = cx.background_executor().spawn(async move {
-            let imported = match scan_folder(&dir, 0) {
+            match scan_folder(&dir, 0) {
                 None => Imported::Empty { cloud: 0 },
                 Some(tree) if tree.files == 0 => Imported::Empty { cloud: tree.cloud },
                 Some(tree) if tree.files > IMPORT_FOLDER_LIMIT => Imported::TooMany(tree.files),
@@ -690,23 +730,73 @@ impl Workspace {
             let batch = writer.begin_batch().is_ok();
             let top = import_tree(&mut writer, &tree, parent.as_deref(), &mut failed);
             let saved = if batch { writer.end_batch() } else { Ok(()) };
-            Imported::Done { top, failed, cloud: tree.cloud, saved, changes: journal.take() }
+            let changes = journal.take();
+            Imported::Done { top, failed, cloud: tree.cloud, saved, changes, listed: Listed::of(key, writer) }
                 }
-            };
-            match imported {
-                Imported::Empty { .. } | Imported::TooMany(_) => (imported, Vec::new()),
-                Imported::Done { .. } => (imported, writer.list()),
             }
         });
         self.show_toast_kind(ToastKind::Info, crate::settings::tr("正在导入…", "Importing…"), cx);
         cx.spawn_in(window, async move |this, cx| {
-            let _task_guard = task_guard;
-            let (imported, entries) = task.await;
-            let _ = this.update_in(cx, |w, window, cx| { let entries = if entries.is_empty() { entries } else { w.store.merge_entries(&key, entries) }; w.finish_import_folder(imported, entries, open, then, window, cx) });
+            let imported = task.await;
+            drop(task_guard);
+            let _ = this.update_in(cx, |w, window, cx| w.finish_import_folder(imported, open, then, window, cx));
         }).detach();
     }
 
-    fn finish_import_folder(&mut self, imported: Imported, entries: Vec<crate::store::Entry>, open: bool, then: Option<AfterImport>, window: &mut Window, cx: &mut Context<Self>) {
+    /// 导入思源笔记: a workspace, notebook or `.sy.zip` into `parent`, off the
+    /// window's thread on its own store as `import_folder_then` does.
+    pub(crate) fn import_siyuan(&mut self, path: &Path, parent: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        if self.store.file_task_busy() || self.file_history.busy || self.tree_writes_pending() { return; }
+        if !fdl_core::siyuan::recognizes(path) {
+            return self.show_toast_kind(ToastKind::Error, crate::settings::tr("这不是思源笔记的工作空间、笔记本文件夹或 .sy.zip 文件", "This is not a SiYuan workspace, notebook folder or .sy.zip file"), cx);
+        }
+        let (again, retry) = (path.to_path_buf(), parent.clone());
+        if !self.save_before(cx, move |w, window, cx| w.import_siyuan(&again, retry.clone(), window, cx)) { return; }
+        let Some((key, mut writer)) = self.store.tree_writer(parent.as_deref()) else { return self.show_toast_kind(ToastKind::Error, &crate::shared_store::no_folder().to_string(), cx) };
+        let Some(task_guard) = self.store.begin_file_task() else { return };
+        let parent = self.store.real_parent(parent.as_deref()).map(str::to_string);
+        let path = path.to_path_buf();
+        let task = cx.background_executor().spawn(async move {
+            let journal = writer.track_file_changes();
+            let batch = writer.begin_batch().is_ok();
+            let done = crate::siyuan::import(&mut writer, &path, parent.as_deref());
+            let saved = if batch { writer.end_batch() } else { Ok(()) };
+            let changes = journal.take();
+            (done.and_then(|d| saved.map(|_| d)), changes, Listed::of(key, writer))
+        });
+        self.show_toast_kind(ToastKind::Info, crate::settings::tr("正在导入…", "Importing…"), cx);
+        cx.spawn_in(window, async move |this, cx| {
+            let (done, changes, listed) = task.await;
+            drop(task_guard);
+            let _ = this.update_in(cx, |w, window, cx| {
+                w.take_import(listed, cx);
+                w.remember_file_changes(changes, crate::settings::tr("导入思源笔记", "Import from SiYuan"));
+                match done {
+                    Ok((top, report)) => {
+                        if let Some(id) = &top { w.reveal_in_tree(id); w.open(id, window, cx); }
+                let (error, text) = crate::siyuan::summary(&report);
+                        w.show_toast_kind(if error { ToastKind::Error } else { ToastKind::Info }, &text, cx);
+                    }
+                    Err(e) => w.show_toast_kind(ToastKind::Error, &crate::localized_format!("导入未能完成：{}", "Import could not finish: {}", crate::settings::diagnostic(&e.to_string())), cx),
+                }
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    /// After an import written off the window's thread, its file task let go (`open` waits while
+    /// one runs): the window's library takes over what the writer read and wrote (`Store::adopt`),
+    /// so opening a new page finds it, and the list the writer made there. Reading the library
+    /// again here instead held the window 90 ms for 2000 notes.
+    fn take_import(&mut self, listed: Listed, cx: &mut Context<Self>) {
+        let Listed { key, writer, entries } = listed;
+        let entries = self.store.adopt_listed(&key, writer, entries);
+        self.sync_peers(cx, &entries, None);
+        self.entries = entries;
+        self.sort();
+    }
+
+    fn finish_import_folder(&mut self, imported: Imported, open: bool, then: Option<AfterImport>, window: &mut Window, cx: &mut Context<Self>) {
         let (top, failed, cloud, saved, changes) = match imported {
             Imported::Empty { cloud } => {
                 let msg = if cloud > 0 { cloud_skipped(cloud) } else { crate::settings::tr("这个文件夹里没有 Markdown 或 XML 文件", "This folder has no Markdown or XML files").to_string() };
@@ -717,11 +807,8 @@ impl Workspace {
                 self.show_toast_kind(ToastKind::Error, &crate::localized_format!("文件夹里有 {} 个文件，一次最多导入 {} 个", "The folder has {} files; up to {} can be imported at once", files, IMPORT_FOLDER_LIMIT), cx);
                 return;
             }
-            Imported::Done { top, failed, cloud, saved, changes } => (top, failed, cloud, saved, changes),
+            Imported::Done { top, failed, cloud, saved, changes, listed } => { self.take_import(listed, cx); (top, failed, cloud, saved, changes) }
         };
-        self.sync_peers(cx, &entries, None);
-        self.entries = entries;
-        self.sort();
         self.remember_file_changes(changes, crate::settings::tr("导入文件夹", "Import folder"));
         if let Some(id) = top {
             if let Some(then) = then { then(self, &id); }
@@ -892,6 +979,10 @@ mod tests {
         assert_eq!(pics.iter().map(|p| p.1).collect::<Vec<_>>(), [None, Some(300.), None, None], "{text}");
         assert!(pics.iter().all(|(p, _)| p.starts_with(&assets) && p.is_file()), "{text}");
         assert!(text.contains("width=\"300\"") && text.trim_end().ends_with("![[Other]]") && !text.contains("![[red"), "{text}");
+        // Relative to the file, so the library can move: `.assets/…` beside it, or `../.assets/…` from a folder.
+        let rel = store.file_path(&e.id).unwrap().parent().unwrap().strip_prefix(tmp.join("library")).unwrap().components().count();
+        let up = "../".repeat(rel);
+        assert!(!text.contains(&*tmp.to_string_lossy()) && text.matches(&format!("({up}.assets/")).count() == 3 && text.contains(&format!("src=\"{up}.assets/")), "{text}");
         std::fs::remove_dir_all(tmp).unwrap();
     }
 
@@ -1132,6 +1223,42 @@ mod tests {
         let (doc, _) = super::read_markdown(&from.join("page.md"), None, &assets).unwrap();
         let BlockKind::Image { src, .. } = &doc.blocks[0].kind else { panic!("{:?}", doc.blocks[0].kind) };
         assert_eq!(mtime(std::path::Path::new(src)), THEN);
+        std::fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[test]
+    fn siyuan_markdown_comes_in_as_plain_markdown_with_its_times() {
+        let (tmp, from, mut store) = places("siyuan-md");
+        // 思源's 导出 Markdown of a notebook: pages in folders, pictures once in `assets/` at the top.
+        let nb = from.join("笔记本");
+        std::fs::create_dir_all(nb.join("assets")).unwrap();
+        image::RgbImage::new(2, 2).save(nb.join("assets").join("图-20240101120000-abcdefg.png")).unwrap();
+        aged(&nb.join("文档").join("页.md"), "# 标题\n{: id=\"20240101120000-aaaaaaa\"}\n\n见 ((20240101120000-bbbbbbb \"另一篇\"))，#读书#。\n\n![图](assets/图-20240101120000-abcdefg.png)\n\n{{SELECT * FROM blocks WHERE content LIKE '%x%'}}\n\n{: id=\"20240101120000-ccccccc\" title=\"页\" type=\"doc\" updated=\"20240305081500\"}\n", THEN);
+        let t = super::scan_folder(&nb, 0).unwrap();
+        let mut failed = 0;
+        super::import_tree(&mut store, &t, None, &mut failed);
+        assert_eq!(failed, 0);
+        let page = store.list().into_iter().find(|e| e.title == "页").unwrap();
+        assert_eq!((page.meta.created, page.meta.modified), (fdl_core::siyuan::time("20240101120000").unwrap(), fdl_core::siyuan::time("20240305081500").unwrap()));
+        let doc = store.load(&page.id).unwrap();
+        let texts: Vec<&str> = doc.blocks.iter().map(|b| b.text.text.as_str()).collect();
+        assert_eq!(&texts[..2], ["标题", "见 另一篇，#读书。"]);
+        let BlockKind::Image { src, .. } = &doc.blocks[2].kind else { panic!("{:?}", doc.blocks[2].kind) };
+        assert!(std::path::Path::new(src).is_file() && !src.contains("笔记本"), "{src}");
+        assert!(matches!(&doc.blocks[3].kind, BlockKind::Code { lang, .. } if lang == "SQL"), "{:?}", doc.blocks[3].kind);
+        std::fs::remove_dir_all(tmp).unwrap();
+    }
+
+    #[test]
+    fn other_markdown_reads_as_before() {
+        let (tmp, from, _store) = places("plain-md");
+        for (k, text) in ["# Heading\n\n## Two #\n\nC# and F#; issue #12 and #34.\n", "A [link](http://x/#a#b), {curly}, {: not an attribute list}, ((parens)).\n\n- [ ] task\n\n```\n{: id=\"20240101120000-aaaaaaa\"}\n#code#\n```\n", "Text#with#hashes and ![pic](assets/none.png)\n"].iter().enumerate() {
+            let path = from.join(format!("{k}.md"));
+            aged(&path, text, THEN);
+            let (doc, _) = super::read_markdown(&path, None, &crate::store::Store::assets_in(&tmp.join("library"))).unwrap();
+            let plain = crate::markdown::parse_file(text, &k.to_string(), Some(&from));
+            assert_eq!(crate::docxml::serialize(&doc), crate::docxml::serialize(&plain), "{text}");
+        }
         std::fs::remove_dir_all(tmp).unwrap();
     }
 }
