@@ -601,7 +601,7 @@ impl Onboarding {
                 .on_click(cx.listener(move |w, _, _, cx| w.set_lang(l, cx)))
         });
         let anchor = self.lang_anchor.clone();
-        let menu = crate::design::Popover::new("onb-lang-menu").menu().w(px(160.))
+        let menu = crate::design::Popover::new("onb-lang-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if anchor.get().is_some_and(|b| b.contains(&ev.position)) { return }
                 w.lang_menu = None;

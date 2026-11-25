@@ -1015,7 +1015,7 @@ impl Workspace {
         }).collect::<Vec<_>>();
         let anchors = self.pref_anchors.clone();
         let id = m.id;
-        let menu = Popover::new("pref-menu").menu().min_w(px(160.))
+        let menu = Popover::new("pref-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if anchors.borrow().get(id).is_some_and(|b| b.contains(&ev.position)) { return }
                 w.pref_menu = None;
@@ -1295,7 +1295,7 @@ impl Workspace {
                 .on_click(cx.listener(move |w, _, _, cx| { w.lang_menu = None; w.set_pref(|p| p.set_lang(l), cx) }))
         });
         let anchor = self.lang_anchor.clone();
-        let menu = Popover::new("lang-menu").menu().w(px(160.))
+        let menu = Popover::new("lang-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if anchor.get().is_some_and(|b| b.contains(&ev.position)) { return }
                 w.lang_menu = None;

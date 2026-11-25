@@ -697,10 +697,10 @@ impl Workspace {
         use crate::design::MenuItem;
         vec![
             MenuItem::new("vault-in-place").icon("folder").label(crate::settings::tr("原位打开（推荐）", "Open where it is (recommended)"))
-                .description(crate::settings::tr("继续和 Obsidian 共用这个库，两边改的是同一份文件", "Keep sharing the vault with Obsidian: both edit the same files"))
+                .description(crate::settings::tr("和 Obsidian 共用同一份文件", "Shared with Obsidian"))
                 .ml(px(24.)).on_click(cx.listener(|w, _, window, cx| w.choose_vault(true, window, cx))).into_any_element(),
             MenuItem::new("vault-copy").icon("copy").label(crate::settings::tr("导入一份副本", "Import a copy"))
-                .description(crate::localized_format!("复制到「{}」，之后和 Obsidian 互不影响", "Copied into “{}”; from then on the two are apart", place))
+                .description(crate::localized_format!("复制到「{}」", "Copies into “{}”", place))
                 .ml(px(24.)).on_click(cx.listener(|w, _, window, cx| w.choose_vault(false, window, cx))).into_any_element(),
         ]
     }
@@ -766,8 +766,8 @@ impl Workspace {
         };
         let mut out = vec![
             // The two that read like 打开: the line under each says it copies.
-            item("import-md", "doc-md", crate::settings::tr("导入 Markdown 文件…", "Import Markdown Files…"), ImportKind::Markdown).description(crate::settings::tr("复制到这里，原文件不变", "Copied here; the originals stay as they are")),
-            item("import-folder", "folder", crate::settings::tr("导入文件夹…", "Import Folder…"), ImportKind::Folder).description(crate::settings::tr("复制到这里，原文件夹不变", "Copied here; the folder stays as it is")),
+            item("import-md", "doc-md", crate::settings::tr("导入 Markdown 文件…", "Import Markdown Files…"), ImportKind::Markdown).description(crate::settings::tr("复制到这里", "Copies here")),
+            item("import-folder", "folder", crate::settings::tr("导入文件夹…", "Import Folder…"), ImportKind::Folder).description(crate::settings::tr("复制到这里", "Copies here")),
             {
                 let parent = parent.clone();
                 crate::design::MenuItem::new("import-apps").icon("import").label(crate::settings::tr("从其他应用导入…", "Import from Another App…"))
@@ -785,17 +785,17 @@ impl Workspace {
         let pos = self.place_menu?;
         let item = |id: &'static str, glyph: &'static str, label: &'static str| crate::design::MenuItem::new(id).icon(glyph).label(label);
         Some(deferred(anchored().anchor(Anchor::TopRight).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("place-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).min_w(px(240.))
+            crate::design::Popover::new("place-items").menu().fit(crate::design::room(pos, Anchor::TopRight)).w(px(crate::design::menu_w::MD))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.place_menu = None; cx.notify(); }))
                 // a single file opened where it is; 从其他应用导入 copies, so it is a folder's (its "+"),
                 // not 主页's: a vault opened in place is just 打开文件夹
                 .child(item("home-open-file", "doc-md", crate::settings::tr("打开 Markdown 文件…", "Open Markdown File…"))
-                    .description(crate::settings::tr("单独打开，在原位置编辑", "Opened on its own, edited where it is"))
+                    .description(crate::settings::tr("原位编辑", "Edits in place"))
                     .on_click(cx.listener(|w, _, window, cx| { w.place_menu = None; w.open_file_dialog(window, cx) })))
                 // 主页 holds no files of its own, so nothing is copied into it: say where 导入 is
                 .child(crate::design::MenuSeparator::new())
-                .child(div().px(px(12.)).py(px(6.)).max_w(px(260.)).text_size(px(12.)).line_height(px(17.)).text_color(crate::design::color::muted_foreground())
-                    .child(crate::settings::tr("要把文件复制进来，请进入某个文件夹，用它的「+」导入。", "To copy files in, open a folder and import from its “+”."))),
+                .child(div().px(px(12.)).py(px(6.)).text_size(px(12.)).line_height(px(17.)).text_color(crate::design::color::muted_foreground())
+                    .child(crate::settings::tr("在文件夹的「+」里导入文件。", "Import from a folder’s “+”."))),
         )).with_priority(3).into_any_element())
     }
 

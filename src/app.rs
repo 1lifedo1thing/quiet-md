@@ -431,11 +431,6 @@ pub struct Workspace {
     pub on_top: bool,
     /// Last-frame bounds of the open submenu (clicks there keep the menu open).
     pub doc_sub_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
-    /// Rendered width of the open 「…」 menu, for placing its submenus (#225).
-    pub doc_menu_w: Rc<Cell<Option<f32>>>,
-    /// The same for the sidebar row menu, whose 下载 submenu sits beside it
-    /// (#225).
-    pub row_menu_w: Rc<Cell<Option<f32>>>,
     pub doc_info: Option<DocInfo>,
     /// 版本历史 drawer, open for `HistoryView::id`.
     pub history: Option<crate::history::HistoryView>,
@@ -735,8 +730,6 @@ impl Workspace {
             on_top: false,
             doc_sub: None,
             doc_sub_bounds: Rc::new(Cell::new(None)),
-            doc_menu_w: Rc::new(Cell::new(None)),
-            row_menu_w: Rc::new(Cell::new(None)),
             doc_info: None,
             history: None,
             preview: None,
