@@ -170,7 +170,7 @@ impl Workspace {
         }
         // 主页: one top-level folder shows its contents under 我的文档; several show as rows
         // of the tree there; none, a way to open one.
-        let tops = self.store.top_folders();
+        let tops = self.store.shown_tops();
         if tops.is_empty() {
             list = list.child(self.empty_home(cx));
         } else {

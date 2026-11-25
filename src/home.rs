@@ -780,7 +780,7 @@ impl Workspace {
     pub(crate) fn render_home(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let header = self.topbar(None, window, cx);
         // No top-level folder open (2.8): nothing to list or sort, a way to open one.
-        if self.store.top_folders().is_empty() {
+        if self.store.shown_tops().is_empty() {
             return div().flex_1().min_w_0().h_full().flex().flex_col().child(header).child(self.empty_main(cx)).into_any_element();
         }
         let entries = self.home_entries();
