@@ -254,7 +254,7 @@ impl Editor {
     }
 
     /// Handle bounds (window coords) for a block: centered on its first line.
-    fn handle_rect(&self, id: BlockId, add: bool) -> Option<Bounds<Pixels>> {
+    pub(super) fn handle_rect(&self, id: BlockId, add: bool) -> Option<Bounds<Pixels>> {
         let b = self.block_rect(id)?;
         let (top, lh) = {
             let first = self.probed(Probe::Point(Pos::new(id, 0)));
@@ -385,6 +385,15 @@ impl Editor {
                 }),
             );
         Some(at(point(px(left), px(top)), Anchor::TopLeft, el))
+    }
+
+    /// The handle as the drag card carries it, white as the card, under the pointer
+    /// that grabbed it (the closed hand stays over its open-hand segments).
+    pub(super) fn handle_face(&self, id: BlockId) -> Option<AnyElement> {
+        let kind = self.core.kind_of(id)?;
+        let glyph = icon(kind_icon(kind), 12., kind_color(kind));
+        let face = crate::design::toolbar::block_handle(id.0, Some(glyph), 42., false);
+        Some(div().relative().child(face).child(div().absolute().inset_0().cursor(CursorStyle::ClosedHand)).into_any_element())
     }
 
     // ---- slash / add menu
