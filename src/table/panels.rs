@@ -476,7 +476,8 @@ fn order_panel(t: &Table, view: &View, kind: Kind, cx: &Context<TableView>) -> A
 
 fn height_panel(view: &View, cx: &Context<TableView>) -> AnyElement {
     let cur = view.opts.row_height;
-    let mut p = shell("tb-panel-height", 140., cx).py(px(8.)).child(div().px(px(12.)).pb(px(4.)).child(title("设置行高")));
+    // the menu's heading, not one of its rows: shadcn's DropdownMenuLabel (text-xs, muted)
+    let mut p = shell("tb-panel-height", 140., cx).py(px(8.)).child(crate::design::MenuLabel::new(label("设置行高")));
     for (i, h) in RowHeight::ALL.iter().copied().enumerate() {
         p = p.child(menu_item(("tb-ph", i), "", label(h.label()), false).when(h == cur, |d| d.text_color(crate::design::color::foreground()).child(icon("check", 14., crate::design::color::foreground())))
             .on_click(cx.listener(move |v, _, window, cx| { v.edit_view(cx, |view| view.opts.row_height = h); v.close_popup(window, cx); })));
