@@ -35,11 +35,11 @@ db.close()
 
 # where things are in a 1300×850 window (light theme, Chinese)
 TABLE_ROW = "62 166"            # 书单 in the sidebar: the first row, its notes under it once it has some
-ADD_FIELD = "844 111"            # 「+」: a 文本 column at once, its name ready to type
-NEW_TYPE = "795 119"            # the new column's type icon: its settings
+ADD_FIELD = "828 111"            # 「+」: a 文本 column at once, its name ready to type
+NEW_TYPE = "779 119"            # the new column's type icon: its settings
 TYPE_BOX = "953 265"
 TYPE_NOTE = "848 567"           # 笔记, the type list scrolled to its end
-NOTE_1, NOTE_2 = "861 149", "861 185"   # the 笔记 cells of rows 1 and 2
+NOTE_1, NOTE_2 = "845 149", "845 185"   # the 笔记 cells of rows 1 and 2
 PANEL_CLOSE = "1265 124"
 NOTE_BODY, NOTE_TITLE = "885 581", "830 223"
 NOTE_FULL = "1229 124"
@@ -153,7 +153,7 @@ wait 200
 rclick {NOTE_1}
 wait 400
 shot cell-menu
-click 924 401
+click 908 401
 wait 500
 shot ask
 click 797 464
@@ -172,10 +172,10 @@ more = run("point", OPEN + ADD_COLUMN + WRITE + f"""click {NOTE_2}
 wait 200
 rclick {NOTE_2}
 wait 400
-click 937 305
+click 921 305
 wait 500
 shot pick
-click 929 306
+click 913 306
 wait 500
 move 1200 800
 shot pointed
@@ -214,7 +214,7 @@ key enter
 wait 2800
 move 1200 800
 shot sidebar-renamed
-click 650 185
+click 634 185
 wait 200
 type 大刘
 key enter

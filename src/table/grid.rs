@@ -540,8 +540,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 })))
     };
     let mut hdr_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line())
-        .child(div().id("tb-hdr-check").group("tb-hdr-all").relative().flex_none().w(px(GUTTER_W)).h_full().border_r_1().border_color(line()).cursor_pointer()
-            .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
+        // the header's checkbox stays (all the rows, or none), over the rows' own
+        .child(div().id("tb-hdr-check").relative().flex_none().w(px(GUTTER_W)).h_full().border_r_1().border_color(line()).cursor_pointer()
+            .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().child(checkbox(all_sel)))
             .on_click(cx.listener(|v, _, _, cx| {
                 let ids: Vec<RecId> = { let st = v.state.read(cx); st.doc.base.table(v.table).map(|t| v.result.records.iter().map(|i| t.records[*i].id).collect()).unwrap_or_default() };
                 if v.rows_sel.len() == ids.len() { v.rows_sel.clear(); } else { v.rows_sel = ids.into_iter().collect(); }
@@ -663,9 +664,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 let gutter = div().id(("tb-gutter", rid as usize)).relative().flex_none().w(px(GUTTER_W)).h_full().flex().items_center().justify_center()
                     .border_r_1().border_b_1().border_color(line())
                     .when(checked, |d| d.bg(sel_bg()))
-                    .when(manual, |d| d.child(div().id(("tb-grab", rid as usize)).absolute().left(px(4.)).top_0().bottom_0().w(px(16.)).flex().items_center().justify_center()
+                    .when(manual, |d| d.child(div().id(("tb-grab", rid as usize)).absolute().left(px(GRAB_X)).top_0().bottom_0().w(px(CHECK_X - GRAB_X)).flex().items_center().justify_center()
                         .invisible().group_hover("tb-row", |s| s.visible()).cursor(CursorStyle::OpenHand)
-                        .child(icon("grip-vertical", 14., Theme::text_placeholder()))
+                        .child(icon("grip-vertical", 13., Theme::text_placeholder()))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                             cx.stop_propagation();
                             v.commit_edit(true, window, cx);
@@ -676,16 +677,17 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             let off = y - f32::from(v.body.get().origin.y) + v.scroll.y - top - v.scroll.y + above * row_h;
                             v.drag = Some(Drag::RowMove { ids, to: pos, y0: y, y, off, moved: false });
                         }))))
-                    // its number at rest; the checkbox in its place on hover, and while ticked
-                    .when(!checked, |d| d.child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().group_hover("tb-row", |s| s.invisible())
+                    // its number at rest, across the whole start; hovered, the handle, the checkbox and 展开 (a ticked one keeps its box)
+                    .when(!checked, |d| d.child(div().absolute().left_0().right_0().top_0().bottom_0().flex().items_center().justify_center().group_hover("tb-row", |s| s.invisible())
                         .text_size(px(12.)).text_color(Theme::text_caption()).child(format!("{number}"))))
                     .child(div().id(("tb-check", rid as usize)).absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().cursor_pointer()
                         .when(!checked, |d| d.invisible().group_hover("tb-row", |s| s.visible())).child(checkbox(checked))
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| { cx.stop_propagation(); v.tick_row(rid, ev.modifiers.shift, window, cx); })))
 
                     // 展开: the record, in 记录详情 (as Supabase's row ⤢; 飞书 hangs a 查看 on the title cell, over its text)
-                    .child(div().absolute().left(px(CHECK_X + NUM_W)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
-                        .child({ use crate::ui::TipExt; crate::design::Button::ghost(("tb-open", rid as usize)).icon("expand").sized(crate::design::ButtonSize::Xs).tip(&crate::settings::label("查看详情"), None) }
+                    .child(div().absolute().left(px(EXPAND_X)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
+                        .child({ use crate::ui::TipExt; div().id(("tb-open", rid as usize)).size(px(NUM_W)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center().cursor_pointer()
+                            .hover(|s| s.bg(Theme::fill_hover_strong())).child(icon("expand", 13., Theme::icon())).tip(&crate::settings::label("查看详情"), None) }
                             .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))));
                 let cell = |ci: usize| {
                     let f = fields[ci];
@@ -961,9 +963,12 @@ fn ghost_col(cell: AnyElement, left: f32, bg: Hsla) -> AnyElement {
 }
 
 /// Where a row's checkbox sits in its controls (and the header's, above them).
-const CHECK_X: f32 = 20.;
+const CHECK_X: f32 = 14.;
 /// The slot its number (or checkbox) takes.
-const NUM_W: f32 = 26.;
+const NUM_W: f32 = 20.;
+/// The row's handle, first, then the checkbox, then 展开 (each `NUM_W` across): `GUTTER_W` in all.
+const GRAB_X: f32 = 2.;
+const EXPAND_X: f32 = CHECK_X + NUM_W;
 
 impl TableView {
     /// A row in or out of the ticked ones; ⇧, everything from the last ticked row to this one.
