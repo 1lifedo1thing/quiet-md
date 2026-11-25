@@ -2,9 +2,9 @@
 //! `ScrollHandle`: a trackless `border`-coloured thumb, 7 wide (the bar's `w-2.5` less its `p-px` and
 //! clear `border-l`), 1 in from every edge; it shows while the pointer is over the box, while it
 //! scrolls and while it is dragged, and fades out `HIDE` after (Radix's `scrollHideDelay`). The fade
-//! is ours: shadcn switches it. Inside a rounded surface the bar still runs flush and full length, and
-//! the surface's corners cut the thumb's ends as they pass, the way a browser clips shadcn's bar to its
-//! `rounded` box (`paint_thumb`: GPUI masks only rectangles). The pages' own scrollbar (the editor's virtualized list) takes
+//! is ours: shadcn switches it. Inside a rounded surface the bar stays flush to the side and its
+//! round ends stay whole: it keeps from the top and bottom just what clears the corner (`ends_for`),
+//! as shadcn's `p-px` does against its smaller corners. The pages' own scrollbar (the editor's virtualized list) takes
 //! the same look from `THUMB`, `PAD`, `thumb_color` and `Fade`.
 
 use super::color;
@@ -24,6 +24,19 @@ pub const MIN: f32 = 24.;
 pub const HIDE: Duration = Duration::from_millis(600);
 /// Fade in and out.
 pub const FADE: Duration = Duration::from_millis(150);
+
+/// How far a flush thumb (`PAD` in from the side) keeps from the box's top and bottom so its round
+/// ends stay whole inside a surface rounded `r`: shadcn's corners are small enough that `p-px` does
+/// (8 against a 3.5 end), ours (12) need 4.5. No cut, no gap at the side.
+pub fn ends_for(r: f32) -> f32 {
+    let half = THUMB / 2.;
+    let cx = PAD + half;
+    if r <= cx { return PAD; }
+    let reach = (r - half) * (r - half) - (r - cx) * (r - cx);
+    if reach <= 0. { return PAD; }
+    let i = r - half - reach.sqrt();
+    ((i * 2.).ceil() / 2.).max(PAD)
+}
 
 /// Paints a thumb at `thumb` (round-ended, `THUMB` wide) cut to `clip` rounded `r`: where the thumb
 /// passes the surface's corner it takes the corner's arc, as overflow-hidden on a rounded box cuts
@@ -117,15 +130,15 @@ pub struct ScrollBar {
     /// (held still so the thumb stays under the pointer as newly measured rows refine the estimate).
     grab: Cell<Option<(Pixels, Pixels, Pixels)>>,
     fade: Fade,
-    /// The radius of the surface the box fills (0: square), whose corners cut the thumb's ends.
+    /// The radius of the surface the box fills (0: square), whose corners the thumb's ends keep clear of.
     radius: Cell<f32>,
     /// The pointer was over the box last paint.
     over: Cell<bool>,
 }
 
 impl ScrollBar {
-    /// A scrollbar in a box that fills a surface rounded `r` (0 for a square box): flush and full length,
-    /// its thumb cut by the corners.
+    /// A scrollbar in a box that fills a surface rounded `r` (0 for a square box): flush to the side, its
+    /// ends clear of the corners (`ends_for`).
     pub fn rounded(r: f32) -> Self { let s = Self::default(); s.radius.set(r); s }
 
     pub fn render(self: &std::rc::Rc<Self>, handle: &ScrollHandle) -> impl IntoElement + use<> {
@@ -135,14 +148,16 @@ impl ScrollBar {
             move |_, window, _| {
                 let area = list.bounds();
                 let inset = px(PAD);
+                // flush to the side; at the ends just far enough that the round end clears the corner
+                let ends = px(ends_for(sb.radius.get()));
                 let view = area.size.height;
                 let content = view + list.max_offset().y;
                 if content <= view + px(1.) { return None; }
-                let track = (view - inset * 2.).max(px(1.));
+                let track = (view - ends * 2.).max(px(1.));
                 let h = match sb.grab.get() { Some((_, _, h)) => h, None => (track * (view / content)).max(px(MIN)).min(track) };
                 let content = sb.grab.get().map_or(content, |(_, c, _)| c);
                 let offset = -list.offset().y;
-                let top = area.top() + inset + (track - h) * (offset / (content - view)).clamp(0., 1.);
+                let top = area.top() + ends + (track - h) * (offset / (content - view)).clamp(0., 1.);
                 let zone = Bounds::new(point(area.right() - px(BAR), area.top()), size(px(BAR), view));
                 Some((area, top, h, track, inset, content, offset, window.insert_hitbox(zone, HitboxBehavior::BlockMouseExceptScroll)))
             },
@@ -176,7 +191,7 @@ impl ScrollBar {
                         match sb.grab.get() {
                             Some((dy, _, h)) if ev.pressed_button == Some(MouseButton::Left) => {
                                 let travel = (track - h).max(px(1.));
-                                let f = ((ev.position.y - dy - area.top() - inset) / travel).clamp(0., 1.);
+                                let f = ((ev.position.y - dy - area.top() - px(ends_for(sb.radius.get()))) / travel).clamp(0., 1.);
                                 // At the end, the real bottom: rows there may not be measured yet.
                                 list.set_offset(point(list.offset().x, -list.max_offset().y * f));
                                 window.refresh();
