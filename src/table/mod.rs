@@ -188,8 +188,6 @@ pub(crate) enum Drag {
     ColWidth { field: FieldId, x0: f32, w0: f32, w: f32 },
     /// Extending the selection.
     Select,
-    /// The fill handle: from the selection to this record's row.
-    Fill(RecId),
     /// A picked header pressed, then (past a few pixels) dragged: `to` is the gap
     /// it would drop into, as a column index. Released unmoved, it was a click: on the one picked
     /// header (`rename`), its name is edited.
@@ -578,7 +576,9 @@ impl TableView {
         let Some(name) = name else { return };
         self.popup = None;
         // the name at the size it shows in, all of it selected
-        self.aux.update(cx, |t, cx| { t.size = 14.; t.line_height = 20.; t.set_placeholder("", cx); t.set_text(&name, cx); t.select_all_text(cx); });
+        // a column's name at the header's own size (it is edited in place), a table's at 14
+        let size = if matches!(r, Rename::Field(_)) { text_sm() } else { 14. };
+        self.aux.update(cx, |t, cx| { t.size = size; t.font = matches!(r, Rename::Field(_)).then_some(crate::theme::DOC_UI_FONT); t.line_height = 20.; t.set_placeholder("", cx); t.set_text(&name, cx); t.select_all_text(cx); });
         window.focus(&self.aux.focus_handle(cx), cx);
         self.rename = Some(r);
         cx.notify();
@@ -635,7 +635,10 @@ impl Render for TableView {
             // (as Home's cards), set in from the pane's edges
             const GAP: f32 = 8.;
             const RADIUS: f32 = crate::design::R + 4.;
+            // Home's document cards' shadow (`theme::shadow_sheet`), not cast down but all round
+            let around: Vec<BoxShadow> = crate::theme::shadow_sheet().into_iter().map(|mut s| { s.offset = point(px(0.), px(0.)); s }).collect();
             root.p(px(GAP)).child(div().relative().flex_1().min_h_0()
+                .child(div().absolute().inset_0().rounded(px(RADIUS)).shadow(around))
                 .child(crate::ui::squircle_surface(RADIUS, Theme::bg_body()).absolute().inset_0())
                 .child(div().absolute().inset_0().rounded(px(RADIUS)).overflow_hidden().flex().flex_col().child(menus::bar(self, t, v, cx)).child(body))
                 .child(crate::ui::squircle_outline(RADIUS, 0.5, crate::theme::Theme::line_sheet())))

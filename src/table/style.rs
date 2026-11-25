@@ -88,9 +88,9 @@ pub fn frozen_line() -> Hsla { color::border() }
 pub fn sel_bg() -> Hsla { color::muted() }
 /// A picked column's header.
 pub fn sel_header() -> Hsla { color::muted() }
-/// The selection's frame: `primary`, at 1pt (`grid::RING_W`); shadcn's `ring` grey reads as
-/// nothing picked at that weight.
-pub fn ring() -> Hsla { color::primary() }
+/// The picked cell's frame (`grid::RING_W`): the app's blue (craft B500), as Supabase and 飞书 frame
+/// it; shadcn's `ring` grey reads as nothing picked over the grid lines.
+pub fn ring() -> Hsla { crate::theme::Theme::primary() }
 /// A range selection's fill over the cells.
 pub fn range_bg() -> Hsla { color::muted() }
 pub fn star() -> Hsla { crate::theme::c(crate::theme::craft::O350) }

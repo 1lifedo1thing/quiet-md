@@ -282,7 +282,6 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
             if px_ > right - 12. { v.scroll.x += 16.; } else if px_ < left + 12. && px_ > left - 40. { v.scroll.x -= 16.; }
             v.clamp_scroll(&cols, row_px(view.opts.row_height));
         }
-        Drag::Fill(to) => { if let Some(cell) = v.hit_cell(ev.position, t, &cols) { *to = cell.0; } }
         Drag::ColMove { x0, x, to, .. } => {
             *x = px_;
             if (px_ - *x0).abs() > 4. || to.is_some() {
@@ -327,31 +326,6 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
     match drag {
         Drag::ColWidth { field, w, w0, .. } => if (w - w0).abs() >= 1. { v.edit_view(cx, |view| { view.opts.widths.insert(field, w.round()); }); },
         Drag::Select | Drag::Thumb { .. } => {}
-        Drag::Fill(to) => {
-            let plan = {
-                let st = v.state.read(cx);
-                let (Some(t), Some(view)) = (st.doc.base.table(tid), st.doc.base.table(tid).and_then(|t| t.view(v.view))) else { return };
-                let cols = v.cols(t, view);
-                let (Some((r0, r1, c0, c1)), Some(end)) = (v.sel_rect(&cols), v.order.get(&to).copied()) else { return };
-                let rid = |p: usize| t.records[v.result.records[p]].id;
-                let src: Vec<RecId> = (r0..=r1).map(rid).collect();
-                let dst: Vec<RecId> = if end > r1 { (r1 + 1..=end).map(rid).collect() } else if end < r0 { (end..r0).rev().map(rid).collect() } else { vec![] };
-                let fields: Vec<FieldId> = cols.ids[c0..=c1].to_vec();
-                let head = if end > r1 || end < r0 { rid(end) } else { rid(r1) };
-                (src, dst, fields, head)
-            };
-            let (src, dst, fields, head) = plan;
-            if !dst.is_empty() {
-                // filling upwards repeats the source from its last row
-                let src = if v.order.get(&dst[0]) < v.order.get(&src[0]) { src.into_iter().rev().collect() } else { src };
-                v.edit(cx, |d| d.fill(tid, &src, &dst, &fields));
-                if let Some(s) = v.sel.as_mut() {
-                    let (a, h) = (v.order.get(&s.anchor.0).copied().unwrap_or(0), v.order.get(&head).copied().unwrap_or(0));
-                    let first = v.order.get(&s.head.0).copied().unwrap_or(0).min(a);
-                    if h < first { s.anchor.0 = head; } else { s.head.0 = head; }
-                }
-            }
-        }
         Drag::ColMove { field, to: Some(to), x, off, .. } => {
             let order = {
                 let st = v.state.read(cx);
@@ -443,7 +417,6 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     if dragged_col.is_none() { fx.cols.retain(|_, s| s.p != s.target || s.v[0] != 0.); }
     let vs = v.view_size();
     let sel = v.sel_rect(&cols);
-    let fill_to = match &v.drag { Some(Drag::Fill(r)) => v.order.get(r).copied(), _ => None };
     let manual = view.opts.sorts.is_empty() && view.opts.groups.is_empty();
     let all_sel = !v.result.records.is_empty() && v.rows_sel.len() == v.result.records.len();
     let today = field::today();
@@ -462,6 +435,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         let sorted = view.opts.sorts.iter().find(|s| s.field == fid).map(|s| s.desc);
         // its left on screen, from the list's left: where a drag of it takes hold
         let col_left = cols.x[ci] - if ci >= cols.frozen { sx } else { 0. };
+        let renaming = matches!(v.rename, Some(Rename::Field(r)) if r == fid);
         div().id(("tb-hdr", fid)).group("tb-hdr").relative().flex_none().w(px(w)).h_full().flex().items_center().gap(px(4.)).px(px(cell_pad_x()))
             .border_r_1().border_color(line())
             .when(on, |d| d.bg(sel_header()))
@@ -476,8 +450,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     menus::edit_field(v, fid, point(ev.position.x - px(12.), ev.position.y + px(16.)), window, cx);
                 })))
             // shadcn's table head: `foreground` names by a `muted-foreground` glyph; renaming, the name's box in its place
-            .child(if matches!(v.rename, Some(Rename::Field(r)) if r == fid) {
-                div().flex_1().min_w_0().child(menus::rename_box(v, cx).w_full()).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).into_any_element()
+            // renaming: edited in place as a cell is, the name's own text the box, the head framed as an edited cell
+            .child(if renaming {
+                div().flex_1().min_w_0().child(v.aux.clone()).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).into_any_element()
             } else {
                 div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(header_text()).child(ui_text(f.name.clone())).into_any_element()
             })
@@ -496,7 +471,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 v.commit_edit(true, window, cx);
                 window.focus(&v.focus, cx);
                 // a double click edits the name in place (the type's icon opens the field's settings)
-                if ev.click_count >= 2 { v.drag = None; v.col_sel = vec![fid]; v.begin_rename(Rename::Field(fid), window, cx); return; }
+                // (the name's box keeps the focus: the press must not reach the view's own track_focus)
+                if ev.click_count >= 2 { v.drag = None; v.col_sel = vec![fid]; v.begin_rename(Rename::Field(fid), window, cx); window.prevent_default(); return; }
                 // ⇧: every column from the last picked one to this; ⌘: this one in or out
                 if ev.modifiers.shift || ev.modifiers.platform {
                     v.sel = None;
@@ -529,6 +505,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 v.sel = None;
                 v.open_popup(ev.position, Popup::FieldMenu(fid), cx);
             }))
+            .when(renaming, |d| d.child(div().absolute().inset_0().border(px(RING_W)).border_color(ring())
+                .on_mouse_down_out(cx.listener(|v, _, _, cx| v.finish_rename(true, cx)))))
             // the right edge drags the width
             .child(div().id(("tb-grip", fid)).absolute().top_0().bottom_0().right(px(-4.)).w(px(8.)).flex().justify_center().cursor(CursorStyle::ResizeLeftRight)
                 // the line it lights is the whole column's (`col_edges`), not a stub in the header
@@ -659,7 +637,6 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 let number = place.unwrap_or(pos) + 1;
                 let checked = v.rows_sel.contains(&rid);
                 let tint = query::row_color(base, t, r, view, today);
-                let in_fill = fill_to.zip(sel).is_some_and(|(to, (r0, r1, _, _))| (pos > r1 && pos <= to) || (pos < r0 && pos >= to));
                 let dragging = matches!(&v.drag, Some(Drag::RowMove { ids, moved: true, .. }) if ids.contains(&rid));
                 let gutter = div().id(("tb-gutter", rid as usize)).relative().flex_none().w(px(GUTTER_W)).h_full().flex().items_center().justify_center()
                     .border_r_1().border_b_1().border_color(line())
@@ -688,15 +665,14 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     .child(div().absolute().left(px(EXPAND_X)).top_0().bottom_0().flex().items_center().invisible().group_hover("tb-row", |s| s.visible())
                         .child({ use crate::ui::TipExt; div().id(("tb-open", rid as usize)).size(px(NUM_W)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center().cursor_pointer()
                             .hover(|s| s.bg(Theme::fill_hover_strong())).child(icon("expand", 13., Theme::icon())).tip(&crate::settings::label("查看详情"), None) }
-                            .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); record::open(v, rid, window, cx); }))));
+                            // a toggle: this record's panel open, the same press shuts it
+                            .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, window, cx| { cx.stop_propagation(); v.commit_edit(true, window, cx); if v.expanded == Some(rid) { record::close(v, window, cx) } else { record::open(v, rid, window, cx) } }))));
                 let cell = |ci: usize| {
                     let f = fields[ci];
                     let id: CellId = (rid, f.id);
                     let in_sel = sel.is_some_and(|(r0, r1, c0, c1)| pos >= r0 && pos <= r1 && ci >= c0 && ci <= c1);
                     let multi = sel.is_some_and(|(r0, r1, c0, c1)| r0 != r1 || c0 != c1);
                     let editing = v.editing == Some(id);
-                    let corner = sel.is_some_and(|(_, r1, _, c1)| pos == r1 && ci == c1) && !editing && v.drag.as_ref().is_none_or(|d| matches!(d, Drag::Fill(_)));
-                    let filling = in_fill && sel.is_some_and(|(_, _, c0, c1)| ci >= c0 && ci <= c1);
                     let found = hits.contains(&id);
                     // a link's cell: ⌘-click opens it (in the browser 设置 picks), as a link in a page does
                     let link = match r.get(f.id) { Value::Text(s) if matches!(f.ty, FieldType::Url | FieldType::Email) && !s.trim().is_empty() => Some(href(f.ty, s.trim())), _ => None };
@@ -707,12 +683,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                         .when(v.col_sel.contains(&f.id), |d| d.bg(sel_bg()))
                         .when(found, |d| d.bg(if hit_now == Some(id) { found_current() } else { found_bg() }))
                         // a range is filled, all of it, and not framed (`cursor_ring`)
-                        .when((in_sel && multi) || filling, |d| d.bg(range_bg()))
+                        .when(in_sel && multi, |d| d.bg(range_bg()))
                         .when(editing, |d| d.bg(Theme::bg_body()))
                         .child(div().w_full().h(px(row_h.min(one_line_h()) - 1.)).flex().items_center().when(row_h > one_line_h(), |d| d.h_full().items_start().py(px(10.))).child(content))
-                        .when(corner, |d| d.child(div().id(("tb-fill", rid as usize)).absolute().right(px(-1.)).bottom(px(-1.)).size(px(7.)).bg(ring()).border_1().border_color(Theme::bg_body())
-                            .cursor(CursorStyle::Crosshair)
-                            .on_mouse_down(MouseButton::Left, cx.listener(move |v, _, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Fill(rid)); cx.notify(); }))))
                         .when(link.is_some(), |d| { use crate::ui::TipExt; d.tip("打开链接", Some(&crate::settings::label("⌘ + 点击"))) })
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                             if ev.modifiers.platform && let Some(url) = &link { crate::editor::open_link(cx, url); return; }
