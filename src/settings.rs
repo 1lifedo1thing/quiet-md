@@ -1610,6 +1610,13 @@ impl Workspace {
                             w.set_pref(|p| p.opaque_window = !p.opaque_window, cx);
                             window.refresh();
                         }))).into_any_element(),
+                ]))
+                // 界面, then 文档: each font before its size, and the document theme last, right above
+                // the sample it shapes (the user's order, 2026-11-25)
+                .child(group("group-interface", Some(tr("界面", "Interface")), vec![
+                    // 界面字体: the chrome — sidebar, menus, this page.
+                    self.font_row(FontTarget::Ui, tr("界面字体", "Interface font"),
+                        tr("侧栏、菜单和设置页用这个字体；文档用下面的「文档字体」。", "The sidebar, menus and settings use it; the note has its own below."), cx).into_any_element(),
                     // 界面字号: the sidebar and this page together, so the pairs
                     // (label, description) stay in proportion.
                     row(tr("界面字号", "Interface size"), None, {
@@ -1617,10 +1624,8 @@ impl Workspace {
                         segmented("ui-font", &[tr("小", "Small"), tr("标准", "Default"), tr("大", "Large")], sel,
                             |w, i, cx| w.set_pref(|p| p.ui_font = ["small", "", "large"][i].into(), cx), cx)
                     }).into_any_element(),
-                    // 界面字体: the chrome — sidebar, menus, this page.
-                    self.font_row(FontTarget::Ui, tr("界面字体", "Interface font"),
-                        tr("侧栏、菜单和设置页用这个字体；文档用下面的「文档字体」。", "The sidebar, menus and settings use it; the note has its own below."), cx).into_any_element(),
-                    row(tr("文档主题", "Document theme"), None, picker).into_any_element(),
+                ]))
+                .child(group("group-document", Some(tr("文档", "Document")), vec![
                     // 文档字体: every family the system has, for the note's
                     // body text and headings (code keeps the theme's).
                     self.font_row(FontTarget::Doc, tr("文档字体", "Document font"),
@@ -1631,6 +1636,7 @@ impl Workspace {
                         segmented("doc-size", &[tr("小", "Small"), tr("标准", "Default"), tr("大", "Large"), tr("特大", "Extra large")], sel,
                             |w, i, cx| w.set_pref(|p| p.doc_size = ["small", "", "large", "xlarge"][i].into(), cx), cx)
                     }).into_any_element(),
+                    row(tr("文档主题", "Document theme"), None, picker).into_any_element(),
                     sample.into_any_element(),
                 ].into_iter().chain(THEME_CSS.then(|| {
                     row(tr("主题 CSS", "Theme CSS"), Some(where_),
