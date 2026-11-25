@@ -157,7 +157,8 @@ pub mod chip {
     pub const LIME: Chip = Chip(0xd8f999, 0x3c6300, 0x192e03, 0.6, 0x7ccf00);
     pub const YELLOW: Chip = Chip(0xfff085, 0x894b00, 0x432004, 0.6, 0xf0b100);
     pub const ORANGE: Chip = Chip(0xffd6a7, 0x9f2d00, 0x441306, 0.6, 0xff6900);
-    pub const ROSE: Chip = Chip(0xffccd3, 0xa50036, 0x4d0218, 0.6, 0xff2056);
+    // rose-400 in the dark, not the 500 (#ff2056 read 4.4:1 on its fill), the same hue
+    pub const ROSE: Chip = Chip(0xffccd3, 0xa50036, 0x4d0218, 0.6, 0xff637e);
     pub const PINK: Chip = Chip(0xfccee8, 0xa3004c, 0x510424, 0.6, 0xfb64b6);
     pub const PURPLE: Chip = Chip(0xe9d4ff, 0x6e11b0, 0x3c0366, 0.6, 0xc27aff);
     pub const CYAN: Chip = Chip(0xa2f4fd, 0x005f78, 0x053345, 0.6, 0x00d3f2);
@@ -170,7 +171,8 @@ pub mod chip {
         if dark() { (alpha(hex(c.2), c.3), hex(c.4)) } else { (hex(c.0), hex(c.1)) }
     }
     /// The grey option: `secondary` under `muted-foreground`.
-    pub fn neutral() -> (Hsla, Hsla) { (super::color::secondary(), super::color::muted_foreground()) }
+    /// In the light its text a step darker than `muted-foreground` (#737373 read 4.35:1 on `secondary`).
+    pub fn neutral() -> (Hsla, Hsla) { (super::color::secondary(), if dark() { super::color::muted_foreground() } else { hex(0x6b6b6b) }) }
 }
 
 /// Corner radii past the `R` steps.
