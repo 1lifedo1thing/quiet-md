@@ -8,7 +8,7 @@ note there already is; a new title renames the note's file and the cell
 follows; 整页打开 opens the note as a page; a search finds what was written;
 a note renamed in the sidebar stays through the undo of other edits.
 
-Build with --release --features devtools,datatable, then run this file.
+Build with --release --features devtools, then run this file.
 FDL_BIN selects another build; TABLE_NOTE_SHOTS a folder to copy the screenshots to.
 """
 import json

@@ -1074,7 +1074,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("无法读取文档库，未清理：{}", "Impossible de lire la bibliothèque ; rien n’a été retiré : {}"),
     ("已移出 {} 个未使用资源", "{} ressources inutilisées retirées"),
     ("{} 个文件（{}）将移到文档库的 .quiet/removed-assets 文件夹，{} 天后自动删除；在此之前可以从那里拖回 .assets。", "{} fichiers ({}) seront déplacés dans .quiet/removed-assets dans la bibliothèque, puis supprimés après {} jours ; d’ici là, vous pouvez les faire glisser à nouveau dans .assets."),
-    ("此版本不支持数据表", "Les tables de données ne sont pas prises en charge dans cette version"),
     ("需要更新 Quiet.md", "Quiet.md doit être mis à jour"),
     ("这个版本需要更新后才能继续使用。{} 已下载好，重启即可完成更新，打开的文档会先保存。", "Cette version doit être mise à jour avant de continuer. La version {} est téléchargée ; Quiet.md redémarre pour terminer, et les documents ouverts sont d’abord enregistrés."),
     ("立即重启更新", "Redémarrer et mettre à jour"),
