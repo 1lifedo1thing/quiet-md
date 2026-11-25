@@ -141,7 +141,7 @@ pub(crate) fn select_popup(v: &TableView, t: &Table, rec: RecId, fid: FieldId, e
     let query = v.aux.read(cx).text.trim().to_lowercase();
     let shown: Vec<&SelectOption> = f.opts.options.iter().filter(|o| query.is_empty() || o.name.to_lowercase().contains(&query)).collect();
     let exact = f.opts.options.iter().any(|o| o.name.to_lowercase() == query);
-    let mut list = div().id("tb-select-list").max_h(px(280.)).overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("tb-select-list").max_h(px(280.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-select-list")).flex().flex_col();
     for o in shown {
         let (oid, on, name) = (o.id, chosen.contains(&o.id), o.name.clone());
         list = list.child(div().id(("tb-opt", oid)).group("tb-opt").flex_none().h(px(32.)).mx(px(4.)).px(px(8.)).flex().items_center().gap(px(8.)).rounded(px(crate::design::geo().menu_row_r)).cursor_pointer()
@@ -174,7 +174,7 @@ pub(crate) fn select_popup(v: &TableView, t: &Table, rec: RecId, fid: FieldId, e
     }
     shell
         .child(div().px(px(8.)).pb(px(6.)).child(input_box("tb-opt-search").child(icon("search", 14., Theme::text_placeholder())).gap(px(6.)).child(div().flex_1().child(v.aux.clone()))))
-        .child(list)
+        .child(list.child(crate::design::scroll::bar("tb-select-list", &crate::design::scroll::handle("tb-select-list"), 0.)))
         .into_any_element()
 }
 
@@ -238,7 +238,7 @@ pub(crate) fn links_popup(v: &TableView, base: &Base, t: &Table, rec: RecId, fid
     let linked: Vec<RecId> = match r.get(fid) { Value::Links(l) => l.clone(), _ => vec![] };
     let query = v.aux.read(cx).text.trim().to_lowercase();
     let single = f.opts.single;
-    let mut list = div().id("tb-links-list").max_h(px(320.)).overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("tb-links-list").max_h(px(320.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-links-list")).flex().flex_col();
     let mut shown = 0;
     for o in &other.records {
         let title = other.title(o);
@@ -266,7 +266,7 @@ pub(crate) fn links_popup(v: &TableView, base: &Base, t: &Table, rec: RecId, fid
     close_on_out(crate::design::Popover::new("tb-links").w(px(320.)).py(px(6.)), cx)
         .child(div().px(px(12.)).pb(px(6.)).text_size(px(12.)).text_color(Theme::text_caption()).child(format!("{}「{}」", crate::settings::label("关联到"), other.name)))
         .child(div().px(px(8.)).pb(px(6.)).child(input_box("tb-link-search").child(icon("search", 14., Theme::text_placeholder())).gap(px(6.)).child(div().flex_1().child(v.aux.clone()))))
-        .child(list)
+        .child(list.child(crate::design::scroll::bar("tb-links-list", &crate::design::scroll::handle("tb-links-list"), 0.)))
         .into_any_element()
 }
 

@@ -10,7 +10,7 @@ fn label(s: &str) -> String { crate::settings::label(s) }
 
 /// The tools of a view as icons (a set one blue with its count), each with its tip:
 /// 添加记录 when `add`, then 字段配置, 筛选, 分组, 排序, 行高 and 填色.
-fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div {
+fn tool_icons(v: &TableView, t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div {
     let o = &view.opts;
     let hidden = o.hidden.iter().filter(|f| t.field(**f).is_some()).count();
     let mut tools: Vec<(&'static str, &'static str, &'static str, usize, panels::Kind)> = vec![
@@ -26,8 +26,9 @@ fn tool_icons(t: &Table, view: &View, add: bool, cx: &Context<TableView>) -> Div
             let name = crate::settings::label(tip);
             crate::design::Button::ghost(id).icon(glyph).selected(n > 0).label(if n > 0 { format!("{name} {n}") } else { name.to_string() })
         } else { tool_btn(id, glyph, n).tip_above(crate::settings::text(tip), None) };
-        row = row.child(b
-            .on_click(cx.listener(move |v, ev: &ClickEvent, window, cx| { let p = ev.position(); panels::open(v, kind, point(p.x - px(200.), p.y + px(18.)), window, cx); })));
+        // hung from the button (at the bar's right: its right edges lined up), its height kept to the window
+        row = row.child(b.relative().child(v.anchor(id))
+            .on_click(cx.listener(move |v, _, window, cx| v.hang_popup(id, crate::design::Align::End, |v, pos| panels::open(v, kind, pos, window, cx)))));
     }
     row
 }
@@ -46,10 +47,10 @@ pub(crate) fn bar(v: &TableView, t: &Table, view: &View, cx: &Context<TableView>
         .child(icon_button("tb-undo", "undo", !can_undo).on_click(cx.listener(|v, _, _, cx| v.undo(cx))))
         .child(icon_button("tb-redo", "redo", !can_redo).on_click(cx.listener(|v, _, _, cx| v.redo(cx))))
         .child(divider())
-        .child(tool_icons(t, view, true, cx))
+        .child(tool_icons(v, t, view, true, cx))
         .child(divider())
         .child(icon_button("tb-find", "search", false).on_click(cx.listener(|v, _, window, cx| v.open_find(window, cx))))
-        .child(icon_button("tb-more", "ellipsis", false).on_click(cx.listener(|v, ev: &ClickEvent, _, cx| { let p = ev.position(); v.open_popup(point(p.x - px(160.), p.y + px(18.)), Popup::More, cx); })))
+        .child(icon_button("tb-more", "ellipsis", false).relative().child(v.anchor("tb-more")).on_click(cx.listener(|v, _, _, cx| v.hang_popup("tb-more", crate::design::Align::End, |v, pos| v.open_popup(pos, Popup::More, cx)))))
         .when(!v.standalone, |d| d.child(icon_button("tb-collapse", "x", false).tip_above(crate::settings::text("退出全屏"), None).on_click(cx.listener(|_, _, _, cx| cx.emit(TableEvent::Close)))));
     div().id("tb-bar").flex_none().h(px(BAR_H)).flex().items_center().justify_between().gap(px(8.)).px(px(12.)).border_b_1().border_color(line())
         .child(left).child(right)
@@ -77,7 +78,7 @@ pub(crate) fn inline_header(v: &TableView, t: &Table, view: &View, cx: &Context<
             .on_click(cx.listener(move |v, _, window, cx| v.begin_rename(Rename::Table(tid), window, cx)))));
     let open = v.popup.is_some();
     let right = div().flex_none().flex().items_center().gap(px(4.)).when(!open, |d| d.invisible().group_hover("tb-block", |s| s.visible()))
-        .child(tool_icons(t, view, false, cx))
+        .child(tool_icons(v, t, view, false, cx))
         .child(div().flex_none().w(px(1.)).h(px(16.)).mx(px(4.)).bg(line()))
         .child(icon_button("tb-in-full", "maximize", false).tip_above(crate::settings::text("全屏"), None).on_click(cx.listener(|_, _, _, cx| cx.emit(TableEvent::Expand))));
     // an active filter / sort / group shows even at rest: the rows are not all there
@@ -161,8 +162,8 @@ pub(crate) fn edit_field(v: &mut TableView, fid: FieldId, pos: Point<Pixels>, wi
     v.open_popup(pos, Popup::FieldForm(form), cx);
 }
 
-fn shell(id: &'static str, w: f32, cx: &Context<TableView>) -> crate::design::Popover {
-    crate::design::Popover::new(id).occlude().w(px(w)).py(px(4.)).on_mouse_down_out(cx.listener(|v, _, window, cx| if v.dropdown.is_none() { v.close_popup(window, cx) }))
+fn shell(id: &'static str, w: f32, room: f32, cx: &Context<TableView>) -> crate::design::Popover {
+    crate::design::Popover::new(id).occlude().w(px(w)).py(px(4.)).fit(room).on_mouse_down_out(cx.listener(|v, _, window, cx| if v.dropdown.is_none() { v.close_popup(window, cx) }))
 }
 
 /// The open popup, hung at its position.
@@ -178,15 +179,16 @@ pub(crate) fn popup(v: &TableView, base: &Base, t: &Table, view: &View, _window:
         Popup::Files { rec, field } => editors::files_popup(v, t, *rec, *field, cx),
         Popup::NotePick { rec, field } => notes::pick_popup(v, *rec, *field, cx),
         Popup::Panel(panel) => panels::render(v, base, t, view, panel, cx),
-        Popup::More => more_menu(cx),
+        Popup::More => more_menu(v, cx),
     };
-    Some(deferred(anchored().position(*pos).snap_to_window_with_margin(px(8.)).child(el)).with_priority(5).into_any_element())
+    // hung from its button by the corner `hang` gave; at the pointer, by its top left
+    Some(deferred(anchored().anchor(v.popup_corner.unwrap_or(Anchor::TopLeft)).position(*pos).snap_to_window_with_margin(px(8.)).child(el)).with_priority(5).into_any_element())
 }
 
 /// The list on top of a popup (a form's select boxes).
 pub(crate) fn dropdown(v: &TableView, cx: &Context<TableView>) -> Option<AnyElement> {
     let d = v.dropdown.as_ref()?;
-    let mut list = crate::design::Popover::new("tb-dropdown").occlude().w(px(d.width)).max_h(px(320.)).overflow_y_scroll().py(px(4.))
+    let mut list = crate::design::Popover::new("tb-dropdown").occlude().w(px(d.width)).fit(320.).py(px(4.))
         .on_mouse_down_out(cx.listener(|v, _, _, cx| { v.dropdown = None; cx.notify(); }));
     for (i, it) in d.items.iter().enumerate() {
         let pick = d.pick.clone();
@@ -217,7 +219,7 @@ fn field_menu(v: &TableView, t: &Table, view: &View, fid: FieldId, pos: Point<Pi
         v.open_popup(pos, Popup::FieldForm(form), cx);
     };
     let sort = move |v: &mut TableView, desc: bool, window: &mut Window, cx: &mut Context<TableView>| { v.edit_view(cx, |view| view.opts.sorts = vec![SortBy { field: fid, desc }]); close(v, window, cx); };
-    shell("tb-field-menu", 228., cx)
+    shell("tb-field-menu", 228., v.popup_room(), cx)
         .child(menu_item("tb-fm-edit", "pen-line", label("修改字段/列"), false).on_click(cx.listener(move |v, _, window, cx| { v.popup = None; edit_field(v, fid, pos, window, cx); })))
         .child(menu_item("tb-fm-dup", "copy", label("复制字段/列"), false).on_click(cx.listener(move |v, _, window, cx| { v.edit(cx, |d| d.duplicate_field(tid, fid)); close(v, window, cx); })))
         .child(menu_rule())
@@ -257,7 +259,7 @@ fn cell_menu(v: &TableView, t: &Table, view: &View, rec: RecId, cx: &Context<Tab
         if let (Some(id), Some(f)) = (ids.first(), first) { v.sel = Some(Sel { anchor: (*id, f), head: (*id, f) }); }
         v.close_popup(window, cx);
     };
-    shell("tb-cell-menu", 216., cx)
+    shell("tb-cell-menu", 216., v.popup_room(), cx)
         .when(manual, |d| d
             .child(menu_item("tb-cm-up", "plus", label("向上插入 1 行"), false).on_click(cx.listener(move |v, _, window, cx| insert(v, false, window, cx))))
             .child(menu_item("tb-cm-down", "plus", label("向下插入 1 行"), false).on_click(cx.listener(move |v, _, window, cx| insert(v, true, window, cx))))
@@ -280,8 +282,8 @@ fn cell_menu(v: &TableView, t: &Table, view: &View, rec: RecId, cx: &Context<Tab
         .into_any_element()
 }
 
-fn more_menu(cx: &Context<TableView>) -> AnyElement {
-    shell("tb-more-menu", 220., cx)
+fn more_menu(v: &TableView, cx: &Context<TableView>) -> AnyElement {
+    shell("tb-more-menu", 220., v.popup_room(), cx)
         .child(menu_item("tb-mm-export", "export", label("导出为 CSV"), false).on_click(cx.listener(|v, _, window, cx| { v.close_popup(window, cx); keys::export_csv(v, window, cx); })))
         .child(menu_item("tb-mm-md", "copy", label("复制为 Markdown 表格"), false).on_click(cx.listener(|v, _, window, cx| { keys::copy(v, true, cx); v.close_popup(window, cx); })))
         .into_any_element()

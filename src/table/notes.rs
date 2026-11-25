@@ -341,7 +341,7 @@ pub(crate) fn pick_popup(v: &TableView, rec: RecId, fid: FieldId, cx: &Context<T
     let query = v.aux.read(cx).text.trim().to_lowercase();
     let mut notes: Vec<(&String, &NoteInfo)> = v.notes.index.iter().filter(|(_, n)| query.is_empty() || n.title.to_lowercase().contains(&query)).collect();
     notes.sort_by(|a, b| field::text_cmp(&a.1.title, &b.1.title).then(a.0.cmp(b.0)));
-    let mut list = div().id("tb-note-list").max_h(px(320.)).overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("tb-note-list").max_h(px(320.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-note-list")).flex().flex_col();
     let none = notes.is_empty();
     for (i, (rel, n)) in notes.into_iter().take(200).enumerate() {
         let (rel, id) = (rel.clone(), n.id.clone());
@@ -365,7 +365,7 @@ pub(crate) fn pick_popup(v: &TableView, rec: RecId, fid: FieldId, cx: &Context<T
         .on_mouse_down_out(cx.listener(|v, _, window, cx| v.close_popup(window, cx)))
         .child(div().px(px(12.)).pb(px(6.)).text_size(px(12.)).text_color(Theme::text_caption()).child(label("指向已有笔记")))
         .child(div().px(px(8.)).pb(px(6.)).child(input_box("tb-note-search").child(icon("search", 14., Theme::text_placeholder())).gap(px(6.)).child(div().flex_1().child(v.aux.clone()))))
-        .child(list)
+        .child(list.child(crate::design::scroll::bar("tb-note-list", &crate::design::scroll::handle("tb-note-list"), 0.)))
         .into_any_element()
 }
 

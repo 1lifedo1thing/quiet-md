@@ -30,6 +30,12 @@ doc_id = "aaaaaaaa-0000-0000-0000-000000000001"
 (source / "docs" / f"{doc_id}.xml").write_text("<title>已有的笔记</title>\n<p>一段正文</p>\n")
 db = sqlite3.connect(source / "书单.sqlite")
 db.executescript("""CREATE TABLE "书单" ("书名" TEXT, "作者" TEXT); INSERT INTO "书单" VALUES ('三体','刘慈欣'),('球状闪电','刘慈欣'),('',NULL);""")
+# a 数据表 file of ours (a library lists no other SQLite file): its bookkeeping tables, empty; the
+# table it holds is taken in as one written by another program
+db.executescript("""CREATE TABLE _tables (id INTEGER PRIMARY KEY, name TEXT, position INTEGER, next_auto INTEGER);
+CREATE TABLE _fields (id INTEGER PRIMARY KEY, table_id INTEGER, table_name TEXT, name TEXT, position INTEGER, type TEXT, options TEXT, description TEXT);
+CREATE TABLE _views (id INTEGER PRIMARY KEY, table_id INTEGER, table_name TEXT, name TEXT, position INTEGER, type TEXT, config TEXT);
+CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO _meta VALUES ('format', '2'), ('app', 'Quiet.md');""")
 db.commit()
 db.close()
 

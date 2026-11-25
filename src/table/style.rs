@@ -34,7 +34,6 @@ impl Theme {
     /// Links stay the app's blue: a URL in a cell reads as a link.
     pub fn link() -> Hsla { crate::theme::Theme::link() }
     pub fn danger() -> Hsla { color::destructive() }
-    pub fn scrollbar_thumb() -> Hsla { crate::theme::Theme::scrollbar_thumb() }
 }
 
 /// The row's start (as 飞书's 多维表格): its number in the rows shown, a checkbox in its place while the

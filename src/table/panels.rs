@@ -85,13 +85,15 @@ pub(crate) fn closing(v: &mut TableView, cx: &mut Context<TableView>) {
     v.edit_view(cx, |view| { for i in empty.into_iter().rev() { if i < view.opts.colors.len() { view.opts.colors.remove(i); } } });
 }
 
-pub(crate) fn render(_v: &TableView, _base: &Base, t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
+pub(crate) fn render(v: &TableView, _base: &Base, t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
+    // the panel's height kept to the window's room under (or over) its button
+    let room = v.popup_room();
     match panel.kind {
-        Kind::Fields => field_list(t, view, panel, cx),
-        Kind::Filter => filter_panel(t, view, panel, cx),
-        Kind::Group | Kind::Sort => order_panel(t, view, panel.kind, cx),
-        Kind::RowHeight => height_panel(view, cx),
-        Kind::Color => color_panel(t, view, panel, cx),
+        Kind::Fields => field_list(t, view, panel, room, cx),
+        Kind::Filter => filter_panel(t, view, panel, room, cx),
+        Kind::Group | Kind::Sort => order_panel(t, view, panel.kind, room, cx),
+        Kind::RowHeight => height_panel(view, room, cx),
+        Kind::Color => color_panel(t, view, panel, room, cx),
     }
 }
 
@@ -236,8 +238,8 @@ fn pick_options(v: &mut TableView, kind: Kind, i: usize, pos: Point<Pixels>, cx:
 
 // ---- parts ----
 
-fn shell(id: &'static str, w: f32, cx: &Context<TableView>) -> crate::design::Popover {
-    crate::design::Popover::new(id).occlude().w(px(w)).flex().flex_col().text_size(px(text_sm()))
+fn shell(id: &'static str, w: f32, room: f32, cx: &Context<TableView>) -> crate::design::Popover {
+    crate::design::Popover::new(id).occlude().w(px(w)).fit(room).flex().flex_col().text_size(px(text_sm()))
         .on_mouse_down_out(cx.listener(|v, _, window, cx| if v.dropdown.is_none() { v.close_popup(window, cx) }))
 }
 
@@ -321,10 +323,10 @@ fn cond_controls(t: &Table, kind: Kind, i: usize, c: &Cond, panel: &Panel, field
 
 // ---- 字段配置 ----
 
-fn field_list(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
+fn field_list(t: &Table, view: &View, panel: &Panel, room: f32, cx: &Context<TableView>) -> AnyElement {
     let query = panel.search.as_ref().map(|(e, _)| e.read(cx).text.trim().to_lowercase()).unwrap_or_default();
     let primary = t.fields.first().map(|f| f.id);
-    let mut list = div().id("tb-pl-list").max_h(px(420.)).overflow_y_scroll().flex().flex_col()
+    let mut list = div().id("tb-pl-list").max_h(px(420.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-pl-list")).flex().flex_col()
         // let go anywhere over the list: where the gap is
         .on_drop(cx.listener(|v, d: &FieldDrag, _, cx| {
             let to = panel_mut(v).and_then(|p| p.drop_at.take()).filter(|(id, _)| *id == d.id).map(|(_, to)| to);
@@ -374,10 +376,10 @@ fn field_list(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) ->
         v.edit_view(cx, |view| view.opts.hidden = ids.into_iter().collect());
         if hide { v.col_sel.clear(); }
     }));
-    shell("tb-panel-fields", 280., cx).py(px(6.))
+    shell("tb-panel-fields", 280., room, cx).py(px(6.))
         .children(panel.search.as_ref().map(|(e, _)| div().flex_none().h(px(36.)).px(px(12.)).mb(px(4.)).flex().items_center().gap(px(6.)).border_b_1().border_color(Theme::line_divider())
             .child(icon("search", 14., Theme::text_placeholder())).child(div().flex_1().min_w_0().child(e.clone()))))
-        .child(list)
+        .child(list.child(crate::design::scroll::bar("tb-pl-list", &crate::design::scroll::handle("tb-pl-list"), 0.)))
         .child(menu_rule())
         .child(div().flex_none().px(px(6.)).flex().items_center().gap(px(4.)).child(every("tb-pl-all", "全部显示", false)).child(every("tb-pl-none", "全部隐藏", true)))
         .child(menu_rule())
@@ -394,9 +396,9 @@ fn field_list(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) ->
 /// A condition panel with nothing in it yet: only its title and an add button, so narrow.
 const EMPTY_W: f32 = 280.;
 
-fn filter_panel(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
+fn filter_panel(t: &Table, view: &View, panel: &Panel, room: f32, cx: &Context<TableView>) -> AnyElement {
     let f = &view.opts.filter;
-    let mut p = shell("tb-panel-filter", if f.conds.is_empty() { EMPTY_W } else { 560. }, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置筛选条件"));
+    let mut p = shell("tb-panel-filter", if f.conds.is_empty() { EMPTY_W } else { 560. }, room, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置筛选条件"));
     if f.conds.len() >= 2 {
         let all = f.all;
         p = p.child(div().flex().items_center().gap(px(8.)).text_color(Theme::text_caption())
@@ -426,9 +428,9 @@ fn filter_panel(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) 
 /// 分组 nests this deep.
 const GROUP_LEVELS: usize = 3;
 
-fn order_panel(t: &Table, view: &View, kind: Kind, cx: &Context<TableView>) -> AnyElement {
+fn order_panel(t: &Table, view: &View, kind: Kind, room: f32, cx: &Context<TableView>) -> AnyElement {
     let (list, group) = (sorts(view, kind), kind == Kind::Group);
-    let mut p = shell(if group { "tb-panel-group" } else { "tb-panel-sort" }, if list.is_empty() { EMPTY_W } else { 400. }, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title(if group { "设置分组条件" } else { "设置排序条件" }));
+    let mut p = shell(if group { "tb-panel-group" } else { "tb-panel-sort" }, if list.is_empty() { EMPTY_W } else { 400. }, room, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title(if group { "设置分组条件" } else { "设置排序条件" }));
     for (i, s) in list.iter().enumerate() {
         let f = t.field(s.field);
         let (asc, desc) = order_words(f.map(|f| f.ty));
@@ -474,10 +476,10 @@ fn order_panel(t: &Table, view: &View, kind: Kind, cx: &Context<TableView>) -> A
 
 // ---- 行高 ----
 
-fn height_panel(view: &View, cx: &Context<TableView>) -> AnyElement {
+fn height_panel(view: &View, room: f32, cx: &Context<TableView>) -> AnyElement {
     let cur = view.opts.row_height;
     // the menu's heading, not one of its rows: shadcn's DropdownMenuLabel (text-xs, muted)
-    let mut p = shell("tb-panel-height", 140., cx).py(px(8.)).child(crate::design::MenuLabel::new(label("设置行高")));
+    let mut p = shell("tb-panel-height", 140., room, cx).py(px(8.)).child(crate::design::MenuLabel::new(label("设置行高")));
     for (i, h) in RowHeight::ALL.iter().copied().enumerate() {
         p = p.child(menu_item(("tb-ph", i), "", label(h.label()), false).when(h == cur, |d| d.text_color(crate::design::color::foreground()).child(icon("check", 14., crate::design::color::foreground())))
             .on_click(cx.listener(move |v, _, window, cx| { v.edit_view(cx, |view| view.opts.row_height = h); v.close_popup(window, cx); })));
@@ -487,8 +489,8 @@ fn height_panel(view: &View, cx: &Context<TableView>) -> AnyElement {
 
 // ---- 填色 ----
 
-fn color_panel(t: &Table, view: &View, panel: &Panel, cx: &Context<TableView>) -> AnyElement {
-    let mut p = shell("tb-panel-color", 560., cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置填色条件"));
+fn color_panel(t: &Table, view: &View, panel: &Panel, room: f32, cx: &Context<TableView>) -> AnyElement {
+    let mut p = shell("tb-panel-color", 560., room, cx).p(px(crate::design::geo().popover_pad)).gap(px(crate::design::geo().panel_gap)).child(title("设置填色条件"));
     for (i, rule) in view.opts.colors.iter().enumerate() {
         let cur = rule.color % 10;
         p = p.child(div().flex().items_center().gap(px(8.))

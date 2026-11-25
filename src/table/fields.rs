@@ -293,7 +293,7 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
         .on_click(cx.listener(|v, _, _, cx| with(v, cx, |f| f.types_open = !f.types_open)));
     let mut out = div().flex().flex_col().gap(px(4.)).child(head);
     if open {
-        let mut list = inset_list("tb-ff-types").max_h(px(300.)).overflow_y_scroll();
+        let mut list = inset_list("tb-ff-types").max_h(px(300.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-ff-types"));
         for g in [FieldGroup::General, FieldGroup::Business, FieldGroup::Advanced] {
             list = list.child(menu_title(label(g.label())));
             // a file is one table: 关联 and 查找引用 (which reach into another) are not offered, only kept where a file has them
@@ -309,7 +309,7 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
                     .when(ok, |d| d.cursor_pointer().hover(|s| s.bg(Theme::fill_hover())).on_click(cx.listener(move |v, _, window, cx| { if let Some(f) = form(v) { f.retype(ty, window, cx); } cx.notify(); }))));
             }
         }
-        out = out.child(list);
+        out = out.child(list.child(crate::design::scroll::bar("tb-ff-types", &crate::design::scroll::handle("tb-ff-types"), 0.)));
     }
     block("字段类型", out)
 }
@@ -317,7 +317,7 @@ fn type_box(f: &FieldForm, cx: &Context<TableView>) -> Div {
 /// 单选 / 多选's options, 人员's members: colour, name, remove; 添加 under them.
 fn options(f: &FieldForm, cx: &Context<TableView>) -> Div {
     let person = f.ty == FieldType::Person;
-    let mut list = div().id("tb-ff-opts").max_h(px(228.)).overflow_y_scroll().flex().flex_col().gap(px(6.));
+    let mut list = div().id("tb-ff-opts").max_h(px(228.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-ff-opts")).flex().flex_col().gap(px(6.));
     for (i, (o, row)) in f.opts.options.iter().zip(&f.rows).enumerate() {
         let (bg, fg) = tag_colors(o.color);
         list = list.child(div().flex_none().flex().items_center().gap(px(6.))
@@ -341,7 +341,7 @@ fn options(f: &FieldForm, cx: &Context<TableView>) -> Div {
     let add = ghost_btn("tb-ff-opt-add", "plus", label(if person { "添加成员" } else { "添加选项" }))
         .on_click(cx.listener(|v, _, window, cx| add_option(v, window, cx)));
     block(if person { "成员" } else { "选项内容" }, div().p(px(8.)).rounded(px(crate::design::geo().menu_row_r)).bg(Theme::primary_fill_1()).flex().flex_col().gap(px(6.))
-        .when(!f.rows.is_empty(), |d| d.child(list))
+        .when(!f.rows.is_empty(), |d| d.child(list.child(crate::design::scroll::bar("tb-ff-opts", &crate::design::scroll::handle("tb-ff-opts"), 0.))))
         .child(div().flex().child(add)))
 }
 
@@ -364,7 +364,7 @@ fn formula_blocks(f: &FieldForm, t: &Table, problem: &Option<String>, cx: &Conte
     };
     let fns = formula::functions();
     let head = |s: String| div().flex_none().h(px(26.)).px(px(8.)).flex().items_center().text_size(px(12.)).text_color(Theme::text_caption()).child(s);
-    let mut list = inset_list("tb-ff-ref").max_h(px(180.)).overflow_y_scroll();
+    let mut list = inset_list("tb-ff-ref").max_h(px(180.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-ff-ref"));
     list = list.child(head(label("字段引用")));
     for (i, fld) in t.fields.iter().enumerate().filter(|(_, fld)| f.orig.as_ref().is_none_or(|o| o.id != fld.id)) {
         let (name, add) = (fld.name.clone(), append);
@@ -387,7 +387,7 @@ fn formula_blocks(f: &FieldForm, t: &Table, problem: &Option<String>, cx: &Conte
     let hint = f.hint.and_then(|i| fns.get(i)).map(|d| div().flex_none().flex().flex_col().gap(px(2.)).text_size(px(12.))
         .child(div().font_family(crate::feishu_theme::MONO_FONT).child(d.sig))
         .child(div().text_color(Theme::text_caption()).child(label(d.desc))));
-    out.push(block("字段与函数", div().flex().flex_col().gap(px(6.)).child(list).children(hint)));
+    out.push(block("字段与函数", div().flex().flex_col().gap(px(6.)).child(list.child(crate::design::scroll::bar("tb-ff-ref", &crate::design::scroll::handle("tb-ff-ref"), 0.))).children(hint)));
     out.push(number_format("字段格式", &f.opts, cx));
     out
 }
@@ -452,7 +452,7 @@ fn legacy_note() -> Div {
 pub(crate) fn render(_v: &TableView, base: &Base, t: &Table, form: &FieldForm, cx: &Context<TableView>) -> AnyElement {
     let problem = form.problem(base, t, cx);
     let bounds = form.bounds.clone();
-    let body = div().id("tb-ff-body").max_h(px(560.)).overflow_y_scroll().px(px(PAD)).pb(px(4.)).flex().flex_col().gap(px(crate::design::geo().popover_gap))
+    let body = div().id("tb-ff-body").max_h(px(560.)).overflow_y_scroll().track_scroll(&crate::design::scroll::handle("tb-ff-body")).px(px(PAD)).pb(px(4.)).flex().flex_col().gap(px(crate::design::geo().popover_gap))
         .child(block("标题", text_input(&form.name)))
         .child(type_box(form, cx))
         .children(settings(form, base, t, &problem, cx));
@@ -460,7 +460,7 @@ pub(crate) fn render(_v: &TableView, base: &Base, t: &Table, form: &FieldForm, c
     crate::design::Popover::new("tb-field-form").occlude().relative().w(px(W)).pt(px(PAD)).flex().flex_col().text_size(px(text_sm()))
         .on_mouse_down_out(cx.listener(|v, _, window, cx| if v.dropdown.is_none() { v.close_popup(window, cx) }))
         .child(canvas(move |b, _, _| bounds.set(b), |_, _, _, _| {}).absolute().size_full())
-        .child(body)
+        .child(body.child(crate::design::scroll::bar("tb-ff-body", &crate::design::scroll::handle("tb-ff-body"), 0.)))
         .child(div().flex_none().p(px(PAD)).flex().justify_end().gap(px(8.))
             .child(plain_btn("tb-ff-cancel", label("取消")).on_click(cx.listener(|v, _, window, cx| v.close_popup(window, cx))))
             .child(primary_btn("tb-ff-ok", label("确定")).when(!ok, |d| d.opacity(0.5).cursor_default()).when(ok, |d| d.on_click(cx.listener(|v, _, window, cx| confirm(v, window, cx))))))

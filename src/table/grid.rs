@@ -470,15 +470,17 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     .into_any_element()
             })
             .when_some(sorted, |d, desc| d.child(icon(if desc { "caret-down" } else { "caret-up" }, 12., Theme::primary())))
-            .child(div().id(("tb-hdr-menu", fid)).flex_none().flex().items_center().justify_center().size(px(18.)).rounded(px(4.)).cursor_pointer()
+            .child(div().id(("tb-hdr-menu", fid)).relative().flex_none().flex().items_center().justify_center().size(px(18.)).rounded(px(4.)).cursor_pointer()
+                .child(v.anchor(format!("tb-hdr-menu-{fid}")))
                 .hover(|s| s.bg(Theme::fill_hover_strong())).when(!on, |d| d.invisible().group_hover("tb-hdr", |s| s.visible()))
                 .child(icon("chevron-down", 13., Theme::text_caption()))
-                .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                .on_mouse_down(MouseButton::Left, cx.listener(move |v, _: &MouseDownEvent, window, cx| {
                     cx.stop_propagation();
                     v.commit_edit(true, window, cx);
                     if !v.col_sel.contains(&fid) { v.col_sel = vec![fid]; }
                     v.sel = None;
-                    v.open_popup(point(ev.position.x - px(w - 24.).min(px(200.)), ev.position.y + px(14.)), Popup::FieldMenu(fid), cx);
+                    // hung from the ▾ (its right edge), not the pointer
+                    v.hang_popup(&format!("tb-hdr-menu-{fid}"), crate::design::Align::End, |v, pos| v.open_popup(pos, Popup::FieldMenu(fid), cx));
                 })))
             .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                 v.commit_edit(true, window, cx);
@@ -808,29 +810,46 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
 
 /// Thin scroll thumbs along the right and bottom edges of the body, each dragged to scroll (a band
 /// wider than the thumb takes the press). `quiet`: only while the pointer is over the block (a table in a page).
-fn scrollbars(v: &TableView, max_x: f32, max_y: f32, vs: Size<f32>, frozen_w: f32, quiet: bool, cx: &Context<TableView>) -> Vec<AnyElement> {
+fn scrollbars(v: &TableView, max_x: f32, max_y: f32, vs: Size<f32>, frozen_w: f32, _quiet: bool, cx: &Context<TableView>) -> Vec<AnyElement> {
+    use crate::design::scroll::{BAR, MIN, PAD, THUMB, thumb_color};
     let mut out = vec![];
-    let thumb = |d: Div| d.rounded(px(3.)).bg(Theme::scrollbar_thumb());
-    if max_y > 0. {
+    // the thumbs' places (from the grid's top left), and a band as wide as the shared bar takes the press
+    let down = (max_y > 0.).then(|| {
         let track = vs.height;
-        let len = (track * track / (track + max_y)).max(28.);
-        let top = header_h() + (track - len) * (v.scroll.y / max_y);
-        let per = max_y / (track - len).max(1.);
-        out.push(div().id("tb-thumb-y").absolute().right_0().top(px(top)).w(px(10.)).h(px(len)).flex().justify_center().when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible()))
-            .child(thumb(div().w(px(6.)).h_full()))
+        let len = (track * track / (track + max_y)).max(MIN);
+        (header_h() + (track - len) * (v.scroll.y / max_y), len, max_y / (track - len).max(1.))
+    });
+    let across = (max_x > 0.).then(|| {
+        let track = vs.width - frozen_w;
+        let len = (track * track / (track + max_x)).max(MIN);
+        (frozen_w + (track - len) * (v.scroll.x / max_x), len, max_x / (track - len).max(1.))
+    });
+    if let Some((top, len, per)) = down {
+        out.push(div().id("tb-thumb-y").absolute().right_0().top(px(top)).w(px(BAR)).h(px(len))
             .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Thumb { across: false, p0: f32::from(ev.position.y), s0: v.scroll.y, per }); cx.notify(); }))
             .into_any_element());
     }
-    if max_x > 0. {
-        let track = vs.width - frozen_w;
-        let len = (track * track / (track + max_x)).max(28.);
-        let left = frozen_w + (track - len) * (v.scroll.x / max_x);
-        let per = max_x / (track - len).max(1.);
-        out.push(div().id("tb-thumb-x").absolute().bottom_0().left(px(left)).h(px(10.)).w(px(len)).flex().items_center().when(quiet, |d| d.invisible().group_hover("tb-block", |s| s.visible()))
-            .child(thumb(div().h(px(6.)).w_full()))
+    if let Some((left, len, per)) = across {
+        out.push(div().id("tb-thumb-x").absolute().bottom_0().left(px(left)).h(px(BAR)).w(px(len))
             .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, _, cx| { cx.stop_propagation(); v.drag = Some(Drag::Thumb { across: true, p0: f32::from(ev.position.x), s0: v.scroll.x, per }); cx.notify(); }))
             .into_any_element());
     }
+    // drawn as the shared ScrollArea's (`design::scroll`): its width, inset and colour, shown while the
+    // pointer is over the grid, a thumb is held or it scrolls, fading out after
+    let fades = v.bar_fades.clone();
+    let (sx, sy) = (v.scroll.x, v.scroll.y);
+    let held = matches!(v.drag, Some(Drag::Thumb { .. }));
+    out.push(canvas(|_, _, _| {}, move |b, _, window, cx| {
+        let over = b.contains(&window.mouse_position()) || held;
+        if let Some((top, len, _)) = down {
+            let a = fades[0].step(over, sy, window, cx);
+            if a > 0. { window.paint_quad(fill(Bounds::new(point(b.right() - px(PAD + THUMB), b.top() + px(top)), size(px(THUMB), px(len))), thumb_color(a)).corner_radii(px(THUMB / 2.))); }
+        }
+        if let Some((left, len, _)) = across {
+            let a = fades[1].step(over, sx, window, cx);
+            if a > 0. { window.paint_quad(fill(Bounds::new(point(b.left() + px(left), b.bottom() - px(PAD + THUMB)), size(px(len), px(THUMB))), thumb_color(a)).corner_radii(px(THUMB / 2.))); }
+        }
+    }).absolute().inset_0().into_any_element());
     out
 }
 
@@ -1031,5 +1050,5 @@ fn col_edge(v: &TableView, cols: &Cols) -> Option<AnyElement> {
     let edge = cols.x[ci] + cols.w[ci] - if scrolled { v.scroll.x } else { 0. };
     if scrolled && edge < cols.frozen_w { return None }
     let end = header_h() + v.tops.last().copied().unwrap_or(0.) - v.scroll.y;
-    Some(div().absolute().top_0().h(px(end.max(header_h()))).left(px(edge - 1.)).w(px(RING_W)).bg(Theme::primary()).into_any_element())
+    Some(div().absolute().top_0().h(px(end.max(header_h()))).left(px(edge - 1.)).w(px(RING_W)).bg(ring()).into_any_element())
 }

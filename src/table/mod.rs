@@ -297,6 +297,12 @@ pub struct TableView {
     pub(crate) slide: std::cell::RefCell<SlideFx>,
     /// 适应内容: each cell's lines as last measured, by its text and its column's width (`grid::fit_heights`).
     pub(crate) fit_lines: HashMap<CellId, (u64, u32, u8)>,
+    /// The buttons a menu hangs from, as last laid out (`anchor`), and the open popup's corner at its
+    /// point when it hangs from one (`hang_popup`); a popup opened at the pointer has none.
+    pub(crate) anchors: Rc<std::cell::RefCell<HashMap<SharedString, Bounds<Pixels>>>>,
+    pub(crate) popup_corner: Option<Anchor>,
+    /// The grid's scroll thumbs' fades, down and across (`design::scroll::Fade`).
+    pub(crate) bar_fades: Rc<[crate::design::scroll::Fade; 2]>,
     _refresh: Task<()>,
     _subs: Vec<Subscription>,
 }
@@ -357,7 +363,7 @@ impl TableView {
             sel: None, rows_sel: HashSet::new(), col_sel: vec![], editing: None, input, aux, scroll: point(0., 0.),
             body: Rc::new(Cell::new(Bounds::default())), drag: None, popup: None, dropdown: None, rename: None,
             expanded: None, record: Default::default(), notes: Default::default(), find: None, find_input,
-            grip_hover: None, slide: Default::default(), fit_lines: HashMap::new(), _refresh: refresh, _subs: subs,
+            grip_hover: None, slide: Default::default(), fit_lines: HashMap::new(), anchors: Default::default(), popup_corner: None, bar_fades: Default::default(), _refresh: refresh, _subs: subs,
         }
     }
 
@@ -440,7 +446,28 @@ impl TableView {
     pub(crate) fn open_popup(&mut self, pos: Point<Pixels>, popup: Popup, cx: &mut Context<Self>) {
         self.dropdown = None;
         self.popup = Some((pos, popup));
+        self.popup_corner = None;
         cx.notify();
+    }
+
+    /// A button's menu or panel, hung from the button as last laid out (`design::hang`), never the
+    /// pointer; a button not laid out yet opens nothing. `open` opens it at the point given.
+    pub(crate) fn hang_popup(&mut self, key: &str, align: crate::design::Align, open: impl FnOnce(&mut Self, Point<Pixels>)) {
+        let Some(b) = self.anchors.borrow().get(key).copied() else { return };
+        let (pos, corner) = crate::design::hang(b, align, None);
+        open(self, pos);
+        self.popup_corner = Some(corner);
+    }
+
+    /// The open popup's room to the window's edge, for its `Popover::fit` (`design::room`).
+    pub(crate) fn popup_room(&self) -> f32 {
+        self.popup.as_ref().map_or(600., |(pos, _)| crate::design::room(*pos, self.popup_corner.unwrap_or(Anchor::TopLeft)))
+    }
+
+    /// Records where the button it is laid over is, for `hang_popup` (`key` its id).
+    pub(crate) fn anchor(&self, key: impl Into<SharedString>) -> AnyElement {
+        let (record, key) = (self.anchors.clone(), key.into());
+        canvas(move |b, _, _| { record.borrow_mut().insert(key.clone(), b); }, |_, _, _, _| {}).absolute().inset_0().into_any_element()
     }
 
     pub(crate) fn close_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
