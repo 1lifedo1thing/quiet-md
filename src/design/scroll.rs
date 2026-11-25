@@ -176,6 +176,8 @@ impl ScrollBar {
 }
 
 thread_local! {
+    /// `handle`'s scroll handles, by the key their box gives.
+    static HANDLES: std::cell::RefCell<std::collections::HashMap<&'static str, ScrollHandle>> = Default::default();
     /// `bar`'s scrollbars, by the key their box gives.
     static BARS: std::cell::RefCell<std::collections::HashMap<&'static str, std::rc::Rc<ScrollBar>>> = Default::default();
 }
@@ -184,4 +186,9 @@ thread_local! {
 /// the box's last child (it paints over the box wherever the box is, and takes no room).
 pub fn bar(key: &'static str, handle: &ScrollHandle, r: f32) -> impl IntoElement + use<> {
     BARS.with(|m| m.borrow_mut().entry(key).or_insert_with(|| std::rc::Rc::new(ScrollBar::rounded(r))).clone()).render(handle)
+}
+
+/// A scroll handle kept under `key`, for a box with none of its own to `track_scroll` and give `bar`.
+pub fn handle(key: &'static str) -> ScrollHandle {
+    HANDLES.with(|m| m.borrow_mut().entry(key).or_insert_with(ScrollHandle::new).clone())
 }

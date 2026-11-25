@@ -722,7 +722,7 @@ impl Workspace {
             .when(!renaming && key != "doc" && batch.is_none(), |d| d.child(self.more_button(e, key, cx)))
     }
 
-    pub(crate) fn render_row_menu(&self, _window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_row_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let Some(m) = self.row_menu.clone() else { return vec![] };
         if let Some(key) = crate::shared_store::top_of_row(&m.id).map(str::to_string) { return self.top_row_menu(&key, m, cx); }
         if !m.batch && self.entries.iter().any(|e| e.id == m.id && e.meta.folder.is_some() && e.note.is_none()) { return self.folder_row_menu(m, cx); }
@@ -849,17 +849,19 @@ impl Workspace {
             );
         let extra = usize::from(child);
         let menu_h = row_menu_height(ROW_ITEMS + extra, ROW_DIVIDERS);
-        // From the "…" button: hang 2px below it, or sit 2px above it when
-        // there's no room below. From a right-click: at the pointer.
         // From the "…" button: where `design::hang` put it (under the button, or above when there's no
         // room below). From a right-click: at the pointer.
         let (origin, corner) = (m.pos, m.corner);
+        // capped to the room there (`room`), scrolled under the shared scrollbar: the submenu levels
+        // with 下载 where it is now
+        let room = crate::design::room(origin, corner);
+        let scrolled = window.use_keyed_state("row-menu-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let menu_top = match corner {
-            Anchor::BottomLeft | Anchor::BottomRight => f32::from(origin.y) - menu_h,
+            Anchor::BottomLeft | Anchor::BottomRight => f32::from(origin.y) - menu_h.min(room),
             _ => f32::from(origin.y),
-        };
+        } + f32::from(scrolled.offset().y);
         let mut out = vec![
-            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(origin, corner))))
+            deferred(anchored().anchor(corner).position(origin).snap_to_window_with_margin(px(8.)).child(menu.fit(room).scroll(&scrolled)))
                 .with_priority(2)
                 .into_any_element(),
         ];

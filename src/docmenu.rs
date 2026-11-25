@@ -124,7 +124,7 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn render_doc_menu(&self, _window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_doc_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         if !self.doc_menu {
             return vec![];
         }
@@ -294,14 +294,16 @@ impl Workspace {
         let Some(b) = self.more_btn_bounds.get() else { return vec![] };
         let (at, _) = crate::design::hang(b, crate::design::Align::End, None);
         let (right, menu_top) = (at.x, at.y);
+        // the menu scrolls when the window is short: submenus level with their rows where they are now
+        let scrolled = window.use_keyed_state("doc-menu-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let mut out = vec![
-            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight))))
+            deferred(anchored().anchor(Anchor::TopRight).position(point(right, menu_top)).child(menu.fit(crate::design::room(point(right, menu_top), Anchor::TopRight)).scroll(&scrolled)))
                 .with_priority(2)
                 .into_any_element(),
         ];
         // Submenus open to the left, 4px from the menu, level with their item.
         let sub_at = point(right - px(self.doc_menu_w.get().unwrap_or(MENU_W) + 4.), px(0.));
-        let item_top = |k: usize, d: usize| f32::from(menu_top) + item_top(k, d);
+        let item_top = |k: usize, d: usize| f32::from(menu_top) + f32::from(scrolled.offset().y) + item_top(k, d);
         let record = self.doc_sub_bounds.clone();
         record.set(None);
         let recorder = move || {

@@ -970,7 +970,7 @@ impl Workspace {
                 w.theme_menu = None;
                 cx.notify();
             }))
-            .child(div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().py(px(menu::PAD)).flex().flex_col().children(rows));
+            .child({ let h = crate::design::scroll::handle("theme-menu-list"); div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().track_scroll(&h).py(px(menu::PAD)).flex().flex_col().children(rows).child(crate::design::scroll::bar("theme-menu-list", &h, crate::design::geo().menu_r)) });
         Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 

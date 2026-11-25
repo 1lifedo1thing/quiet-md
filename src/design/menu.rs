@@ -82,17 +82,20 @@ pub const MIN_W: f32 = 128.;
 /// It has an opaque ground, which the shadow-drawn edge needs. `menu()` makes it a column of rows
 /// (`DropdownMenuContent`: p-1, at least 128 wide).
 #[derive(IntoElement)]
-pub struct Popover { id: ElementId, base: Stateful<Div>, menu: bool, padded: bool, fit: Option<f32> }
+pub struct Popover { id: ElementId, base: Stateful<Div>, menu: bool, padded: bool, fit: Option<f32>, handle: Option<ScrollHandle> }
 element!(Popover, parent);
 
 impl Popover {
-    pub fn new(id: impl Into<ElementId>) -> Self { let id = id.into(); Popover { base: div().id(id.clone()), id, menu: false, padded: false, fit: None } }
+    pub fn new(id: impl Into<ElementId>) -> Self { let id = id.into(); Popover { base: div().id(id.clone()), id, menu: false, padded: false, fit: None, handle: None } }
     /// A column of menu rows, `PAD` above and below them (rows keep `PAD` from the sides), `min-w-32`.
     pub fn menu(mut self) -> Self { self.menu = true; self }
     /// A popover holding a form: padded 16 (p-4), a column with 16 between its fields (gap-4).
     pub fn padded(mut self) -> Self { self.padded = true; self }
     /// At most `max_h` tall (`room`), the rest scrolling under the shared scrollbar (`scroll::ScrollBar`).
     pub fn fit(mut self, max_h: f32) -> Self { self.fit = Some(max_h); self }
+    /// `fit` with the caller's handle, for a caller that needs how far it scrolled (a submenu levelled
+    /// with its row).
+    pub fn scroll(mut self, handle: &ScrollHandle) -> Self { self.handle = Some(handle.clone()); self }
 }
 
 impl RenderOnce for Popover {
@@ -101,7 +104,8 @@ impl RenderOnce for Popover {
         set_viewport(window);
         let fit = self.fit.map(|h| {
             let st = window.use_keyed_state((self.id.clone(), "fit"), cx, |_, _| (ScrollHandle::new(), Rc::new(super::scroll::ScrollBar::rounded(g.menu_r))));
-            (h, st.read(cx).clone())
+            let (own, bar) = st.read(cx).clone();
+            (h, (self.handle.clone().unwrap_or(own), bar))
         });
         let d = under(self.base, |d| {
             d.occlude().bg(color::popover()).rounded(px(g.menu_r)).shadow(shadow::popover()).font_family(crate::theme::ui_family())
