@@ -1,11 +1,12 @@
 //! The header "…" menu: page width, find & replace, move, pin, star,
 //! 新建子文档, duplicate, 下载为 PDF / Markdown, 复制为 Markdown, 打印, document info,
-//! 阅读模式 and 显示引用列表 switches, delete.
+//! 阅读模式, 显示引用列表 and 窗口保持在最前 switches, delete.
 
 use crate::app::Workspace;
 use crate::settings::display_title;
 use crate::store::PageWidth;
 use crate::design::{MenuItem, MenuSeparator, Popover, Switch, menu};
+use crate::ui::TipExt;
 use gpui::{prelude::FluentBuilder, *};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -28,7 +29,7 @@ fn item_top(k: usize, dividers: usize) -> f32 {
 /// What a page's 「…」 holds, by what the page is: each kind its own list, nothing in it that the
 /// page can't do.
 #[derive(Clone, Copy, PartialEq)]
-enum Item { Width, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Read, Refs, Delete, Shortcuts, Rule }
+enum Item { Width, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Read, Refs, OnTop, Delete, Shortcuts, Rule }
 
 /// The page open: a document, one with a 画板 opened in its place, a 画板 file, a 数据表 file.
 #[derive(Clone, Copy, PartialEq)]
@@ -38,14 +39,17 @@ fn items(page: Page, child: bool) -> Vec<Item> {
     use Item::*;
     let print: &[Item] = if crate::printing::SUPPORTED { &[Print, Rule] } else { &[] };
     let child: &[Item] = if child { &[Child] } else { &[] };
+    // 窗口保持在最前, where the window can keep on top
+    let top: &[Item] = if crate::on_top::SUPPORTED { &[OnTop] } else { &[] };
+    let top_rule: &[Item] = if crate::on_top::SUPPORTED { &[OnTop, Rule] } else { &[] };
     let list: Vec<&[Item]> = match page {
-        Page::Doc => vec![&[Width, Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs, Rule, Delete, Rule, Shortcuts]],
+        Page::Doc => vec![&[Width, Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs], top, &[Rule, Delete, Rule, Shortcuts]],
         // a board isn't the page: no page width, no find in its text, its own shortcut help (`?`)
-        Page::Board => vec![&[Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs, Rule, Delete]],
+        Page::Board => vec![&[Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Read, Refs], top, &[Rule, Delete]],
         // a board file: no Markdown, no reading mode or references either
-        Page::BoardFile => vec![&[Move, Pin, Star, Rule, Copy, Download, Rule], print, &[Info, History, Rule, Delete]],
+        Page::BoardFile => vec![&[Move, Pin, Star, Rule, Copy, Download, Rule], print, &[Info, History, Rule], top_rule, &[Delete]],
         // a 数据表 file: the file's own things; finding, exporting and copying are the table's (its bar)
-        Page::Table => vec![&[Move, Pin, Star, Rule, Copy, Rule, History, Rule, Delete]],
+        Page::Table => vec![&[Move, Pin, Star, Rule, Copy, Rule, History, Rule], top_rule, &[Delete]],
     };
     list.concat()
 }
@@ -71,7 +75,7 @@ impl Workspace {
 
     pub fn set_page_width(&mut self, width: PageWidth, cx: &mut Context<Self>) {
         let Some(id) = self.current.clone() else { return };
-        if let Some(e) = self.entries.iter_mut().find(|e| e.id == id) {
+        if let Some(e) = self.entries.edit().iter_mut().find(|e| e.id == id) {
             e.meta.width = width;
         }
         let _ = self.store.set_width(&id, width);
@@ -99,7 +103,7 @@ impl Workspace {
         self.close_doc_menu(cx);
         self.row_menu = None;
         if let Some(new) = self.copy_doc(id, cx) {
-            self.entries = self.store.list();
+            self.entries.set(self.store.list());
             self.sort();
             self.open(&new, window, cx);
         }
@@ -162,6 +166,7 @@ impl Workspace {
         // which list the 「…」 shows (`items`)
         let page = self.editor.as_ref().map_or(Page::Doc, |e| { let e = e.read(cx); if e.table_file { Page::Table } else if e.board_file { Page::BoardFile } else if e.board_open() { Page::Board } else { Page::Doc } });
         let reading = self.reading();
+        let on_top = self.on_top;
         let sub = self.doc_sub;
         let hover_sub = |s: Option<DocSub>| {
             cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
@@ -260,6 +265,14 @@ impl Workspace {
                     .on_click(cx.listener(move |w, _, _, cx| {
                         w.close_doc_menu(cx);
                         w.ask_refs(!refs_shown, cx);
+                    })).into_any_element(),
+                Item::OnTop => menu_item("dm-on-top", crate::on_top::ICON, crate::settings::tr("窗口保持在最前", "Keep Window on Top"), false, false)
+                    .child(Switch::new(on_top))
+                    .tip_right(crate::settings::tr("窗口会一直显示在其他应用的窗口之上", "Stays above other apps' windows"), None)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, window, cx| {
+                        w.close_doc_menu(cx);
+                        w.set_on_top(!on_top, window, cx);
                     })).into_any_element(),
                 Item::Delete => menu_item("dm-delete", "bin", crate::settings::text("删除"), false, false)
                     .on_hover(hover_sub(None))

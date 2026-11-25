@@ -1,10 +1,11 @@
 use crate::app::Workspace;
 use crate::store::Entry;
+use crate::tree_writes::{PendingMove, TreeWrite};
 use crate::theme::{self, Theme};
 use crate::ui::{icon, ui_text};
 use gpui::{prelude::FluentBuilder, *};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::{cell::Cell, collections::{HashSet, VecDeque}, rc::Rc};
+use std::{cell::Cell, collections::HashSet, rc::Rc};
 use web_time::Instant;
 
 const PITCH: f32 = crate::sidebar::ROW_H + crate::sidebar::ROW_GAP;
@@ -18,7 +19,8 @@ const INDENT: f32 = 18.;
 #[derive(Clone)]
 struct Row { entry: Rc<Entry>, depth: usize }
 
-/// The tree's rows, kept while nothing they are made of changes: building them
+/// The tree's rows, kept while the entries (`key`: their `generation`), order and
+/// expanded folders stay as they were: building them
 /// walks every entry, most of a frame in a vault of 15,000 notes.
 #[derive(Default)]
 struct RowCache { key: u64, order: Option<crate::home::Order>, expanded: HashSet<String>, rows: Vec<Row>, parents: HashSet<String> }
@@ -160,17 +162,12 @@ pub(crate) struct Drag {
     lift: Fade,
 }
 
-#[derive(Clone)]
-struct PendingMove { id: String, parent: Option<String>, before: Option<String>, history: u64 }
-
 #[derive(Default)]
 pub(crate) struct SidebarDrag {
     pub active: Option<Drag>,
     bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     springs: FxHashMap<String, Spring>,
     last_frame: Option<Instant>,
-    pending: VecDeque<PendingMove>,
-    saving: bool,
     fx: FxHashMap<String, RowFx>,
     shown: Vec<Row>,
     leaving: FxHashMap<String, Leaving>,
@@ -225,7 +222,7 @@ fn faded(shadows: Vec<BoxShadow>, a: f32) -> Vec<BoxShadow> {
 
 impl Workspace {
     fn drag_rows(&self) -> Vec<Row> {
-        let (key, order) = (crate::tree::shape_key(&self.entries), self.home.order());
+        let (key, order) = (self.entries.generation(), self.home.order());
         let mut c = self.folder_drag.rows.borrow_mut();
         if c.key != key || c.order != Some(order) || c.expanded != self.expanded {
             c.rows = crate::tree::Tree::with_order(&self.entries, Some(order)).rows(|id| self.expanded.contains(id)).into_iter()
@@ -381,11 +378,10 @@ impl Workspace {
         if self.expanded.contains(&movement.id) { self.folder_drag.reopen = Some(movement.id.clone()); }
         if !cancel {
             if let Some(parent) = &movement.parent { self.expanded.insert(parent.clone()); }
-            let file_before = self.entries.clone();
+            let file_before = self.entries.to_vec();
             self.apply_tree_move(&movement);
             movement.history = self.remember_tree_move(file_before, crate::settings::tr("拖拽移动", "Drag move"));
-            self.folder_drag.pending.push_back(movement);
-            self.save_next_tree_move(cx);
+            self.queue_tree_write(TreeWrite::Move(movement), cx);
             self.sync_sub_pages(cx);
         }
         if reorder { self.show_toast_kind(crate::ui::ToastKind::Info, crate::settings::tr("自动排序时不能拖动调整顺序，可在主页改为手动排序", "Pages are sorted automatically. Switch to Manual order on Home to rearrange them."), cx); }
@@ -395,79 +391,12 @@ impl Workspace {
     /// Put `id` last in `folder` (a drop on 主页's folder card), saved like a sidebar drop.
     pub(crate) fn move_into_folder(&mut self, id: &str, folder: &str, cx: &mut Context<Self>) {
         let mut movement = PendingMove { id: id.to_string(), parent: Some(folder.to_string()), before: None, history: 0 };
-        let file_before = self.entries.clone();
+        let file_before = self.entries.to_vec();
         self.apply_tree_move(&movement);
         movement.history = self.remember_tree_move(file_before, crate::settings::tr("拖拽移动", "Drag move"));
-        self.folder_drag.pending.push_back(movement);
-        self.save_next_tree_move(cx);
+        self.queue_tree_write(TreeWrite::Move(movement), cx);
         self.sync_sub_pages(cx);
         cx.notify();
-    }
-
-
-    pub(crate) fn reapply_pending_tree_moves(&mut self) {
-        for movement in self.folder_drag.pending.clone() { self.apply_tree_move(&movement); }
-    }
-
-    fn apply_tree_move(&mut self, movement: &PendingMove) {
-        let tree = crate::tree::Tree::new(&self.entries);
-        let mut siblings: Vec<String> = tree.children(movement.parent.as_deref()).iter()
-            .filter(|e| e.id != movement.id).map(|e| e.id.clone()).collect();
-        let pos = movement.before.as_ref().and_then(|id| siblings.iter().position(|key| key == id)).unwrap_or(siblings.len());
-        siblings.insert(pos, movement.id.clone());
-        for e in &mut self.entries {
-            if e.id == movement.id { e.meta.parent = movement.parent.clone(); }
-            if let Some(i) = siblings.iter().position(|id| *id == e.id) {
-                if movement.parent.is_none() { e.meta.top_order = Some(i as u64 + 1); }
-                else { e.meta.order = i as u64 + 1; e.meta.top_order = None; }
-            }
-        }
-    }
-
-    pub(crate) fn tree_writes_pending(&self) -> bool { self.folder_drag.saving || !self.folder_drag.pending.is_empty() }
-
-    fn save_next_tree_move(&mut self, cx: &mut Context<Self>) {
-        if self.folder_drag.saving { return; }
-        let Some(movement) = self.folder_drag.pending.front().cloned() else { return };
-        self.folder_drag.saving = true;
-        let history = movement.history;
-        let Some((key, mut writer)) = self.store.tree_writer(Some(&movement.id)) else { self.folder_drag.saving = false; self.folder_drag.pending.pop_front(); return; };
-        // Moves stay inside a top-level folder (W7); a top-level folder's row is its top level.
-        let allowed = self.store.same_top(&movement.id, movement.parent.as_deref());
-        let (parent, before) = (self.store.real_parent(movement.parent.as_deref()).map(str::to_string), self.store.real_parent(movement.before.as_deref()).map(str::to_string));
-        let task = cx.background_executor().spawn(async move {
-            let journal = writer.track_file_changes();
-            let result = allowed.and_then(|_| writer.move_in_tree(&movement.id, parent.as_deref(), before.as_deref()));
-            let restored = if result.is_err() { Some(writer.list()) } else { None };
-            (result, restored, journal.take())
-        });
-        cx.spawn(async move |this, cx| {
-            let (result, restored, changes) = task.await;
-            let _ = this.update(cx, |w, cx| {
-                let restored = restored.map(|r| w.store.merge_entries(&key, r));
-                w.folder_drag.pending.pop_front();
-                w.folder_drag.saving = false;
-                if let Err(ref e) = result {
-                    w.forget_file_change(history);
-                    // Restore only hierarchy, preserving edits made while the write was pending.
-                    if let Some(restored) = restored {
-                        for entry in &mut w.entries {
-                            if let Some(saved) = restored.iter().find(|e| e.id == entry.id) {
-                                entry.meta.parent = saved.meta.parent.clone();
-                                entry.meta.order = saved.meta.order;
-                                entry.meta.top_order = saved.meta.top_order;
-                            }
-                        }
-                    }
-                    for movement in w.folder_drag.pending.clone() { w.apply_tree_move(&movement); }
-                    w.sync_sub_pages(cx);
-                    w.show_toast_kind(crate::ui::ToastKind::Error, &e.to_string(), cx);
-                }
-                if result.is_ok() { w.confirm_tree_history(history, changes); }
-                w.save_next_tree_move(cx);
-                cx.notify();
-            });
-        }).detach();
     }
 
     /// The row the selection pill sits on: the open doc, or the open folder.

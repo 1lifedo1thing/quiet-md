@@ -70,7 +70,6 @@ impl SharedStore {
         self.0.borrow().ws.folders.iter().map(|r: &TopFolder| (r.key.clone(), r.name(), r.path.clone(), r.error.clone())).collect()
     }
     pub fn add_folder(&self, dir: &Path) -> std::result::Result<String, AddError> { let r = self.0.borrow_mut().ws.add(dir); self.folders_changed(); r }
-    pub fn create_folder_top(&self, dir: &Path) -> std::result::Result<String, AddError> { let r = self.0.borrow_mut().ws.create(dir); self.folders_changed(); r }
     pub fn remove_folder(&self, key: &str) -> Result<()> {
         let mut sh = self.0.borrow_mut();
         if let Some(s) = sh.ws.store(key) { let _ = s.flush_view_state(); }
@@ -314,7 +313,6 @@ impl SharedStore {
     pub fn delete_version(&self, id: &str, name: &str) -> Result<()> { self.on_res(id, |s| s.delete_version(id, name)) }
     pub fn restore_version(&self, id: &str, name: &str) -> Result<Document> { self.on_res(id, |s| s.restore_version(id, name)) }
     pub fn save_version_now(&self, id: &str) -> Result<bool> { self.on_res(id, |s| s.save_version_now(id)) }
-    pub fn rename(&mut self, id: &str, title: &str) -> Result<Meta> { self.on_res(id, |s| s.rename(id, title)).map(|m| self.as_row(id, m)) }
     pub fn touch(&mut self, id: &str) -> Option<Meta> { self.on(id, |s| s.touch(id)).flatten().map(|m| self.as_row(id, m)) }
     pub fn create_folder(&mut self, title: &str, parent: Option<&str>) -> Result<String> { self.put(parent, |s, parent| s.create_folder(title, parent)) }
     pub fn accept_file_title(&self, id: &str, title: &str) -> Result<()> { self.on_res(id, |s| s.accept_file_title(id, title)) }
@@ -341,6 +339,20 @@ impl SharedStore {
         let mut sh = self.0.borrow_mut();
         let w = sh.ws.store(&key)?.tree_writer();
         Some((key, w))
+    }
+    /// `tree_writer` for a write of the tree made ahead on screen (`tree_writes.rs`), with
+    /// its library's `Store::writes` now, for `adopt_written`.
+    pub fn tree_writer_at(&self, id: &str) -> Option<(String, u64, Store)> {
+        let key = self.top_of(id)?;
+        let mut sh = self.0.borrow_mut();
+        let s = sh.ws.store(&key)?;
+        Some((key, s.writes(), s.tree_writer()))
+    }
+    /// That writer done and listed: its library takes it over when nothing was written
+    /// here meanwhile, else lists itself (reading what the writer left). The window's rows.
+    pub fn adopt_written(&self, key: &str, n: u64, writer: Store, entries: Vec<Entry>) -> Vec<Entry> {
+        let fresh = match self.0.borrow_mut().ws.store(key) { Some(s) if s.writes() == n => { s.adopt(writer); entries } Some(s) => s.list(), None => entries };
+        self.merge_entries(key, fresh)
     }
     /// `tree_writer` for top-level folder `key`.
     pub fn top_writer(&self, key: &str) -> Option<Store> { self.0.borrow_mut().ws.store(key).map(|s| s.tree_writer()) }

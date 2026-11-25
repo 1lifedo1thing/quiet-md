@@ -34,7 +34,7 @@ impl Workspace {
                 self.search_open = false;
                 self.doc_info = None;
                 self.home.sort_menu = false;
-                self.entries = self.store.list();
+                self.entries.set(self.store.list());
                 self.sort();
                 if let Some(p) = &parent { self.expanded.insert(p.clone()); }
                 self.search.update(cx, |s, cx| s.set_text("", cx));
@@ -59,7 +59,7 @@ impl Workspace {
                 self.search_open = false;
                 self.doc_info = None;
                 self.home.sort_menu = false;
-                self.entries = self.store.list();
+                self.entries.set(self.store.list());
                 self.sort();
                 if let Some(p) = &parent { self.expanded.insert(p.clone()); }
                 self.search.update(cx, |s, cx| s.set_text("", cx));
@@ -82,7 +82,7 @@ impl Workspace {
                 self.search_open = false;
                 self.doc_info = None;
                 self.home.sort_menu = false;
-                self.entries = self.store.list();
+                self.entries.set(self.store.list());
                 self.sort();
                 if let Some(p) = &parent { self.expanded.insert(p.clone()); }
                 self.search.update(cx, |s, cx| s.set_text("", cx));
@@ -133,7 +133,7 @@ impl Workspace {
         self.editor = None;
         self.current = None;
         if self.folder_current.as_deref() != Some(id) { self.reset_folder_scroll(); }
-        if let Some(meta) = self.store.touch(id) && let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) { entry.meta = meta; }
+        if let Some(meta) = self.store.touch(id) && let Some(entry) = self.entries.edit().iter_mut().find(|e| e.id == id) { entry.meta = meta; }
         self.schedule_view_state(cx);
         if self.manual_home_sort() { self.prepare_manual_order(cx); }
         self.folder_current = Some(id.to_string());
@@ -154,7 +154,7 @@ impl Workspace {
         self.create_menu = None;
         match self.store.create_folder(tr("未命名文件夹", "Untitled folder"), parent.as_deref()) {
             Ok(id) => {
-                self.entries = self.store.list(); self.sort();
+                self.entries.set(self.store.list()); self.sort();
                 if let Some(p) = parent { self.expanded.insert(p); }
                 // Select and open the new folder (like 新建文档), then focus its name
                 // field. open_folder focuses the pane, so start_rename must follow it.
@@ -195,7 +195,14 @@ impl Workspace {
         let id = self.folder_current.clone().unwrap_or_default();
         let title = self.entries.iter().find(|e| e.id == id).map(|e| display_title(&e.title)).unwrap_or_else(|| tr("文件夹", "Folder").to_string());
         // 我的文档 › … › parent › this folder; a long path folds its middle into "…".
-        let sep = || div().mx(px(4.)).flex_none().child(icon("chevron-right", 12., Theme::icon()));
+        let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., Theme::text_caption()));
+        // A top-level folder's own row (two or more top-level folders) is the first crumb, by name.
+        let path: Vec<_> = self.ancestors(&id).into_iter().filter(|e| crate::shared_store::top_of_row(&e.id).is_none()).collect();
+        // a long path folds its middle into a "…" that opens the folded crumbs
+        let mut more = (path.len() > 2).then(|| {
+            let hidden: Vec<Crumb> = path[1..path.len() - 1].iter().map(|e| (display_title(&e.title), Some(e.id.clone()))).collect();
+            self.crumb_more("folder-crumb-more", hidden, cx)
+        });
         let link = |key: String, label: String, target: Option<String>| {
             div().id(SharedString::from(format!("folder-crumb-{key}"))).no_drag().flex_none().max_w(px(220.)).px(px(4.)).rounded(px(6.))
                 .overflow_hidden().whitespace_nowrap().text_ellipsis().cursor_pointer()
@@ -203,28 +210,26 @@ impl Workspace {
                 .child(ui_text(label))
                 .on_click(cx.listener(move |w, _, window, cx| match &target { Some(t) => w.open(t, window, cx), None => w.show_view(View::Home, cx) }))
         };
-        // A top-level folder's own row (two or more top-level folders) is the first crumb, by name.
-        let path: Vec<_> = self.ancestors(&id).into_iter().filter(|e| crate::shared_store::top_of_row(&e.id).is_none()).collect();
         // The path starts at its top-level folder, by that folder's name (W5).
         let root = self.entries.iter().find(|e| e.id == id).map(|e| e.top.clone()).unwrap_or_default();
-        let first = link("home".into(), self.folder_name(&root), None).into_any_element();
+        // 主页 is the one root (W5 named the path after its top-level folder; that comes second now).
+        let home = link("home".into(), crate::settings::text("主页").to_string(), None).into_any_element();
+        let first = link("top".into(), self.folder_name(&root), self.top_crumb(&root)).into_any_element();
         // A top-level folder's own page is the top-level folder: its name is the page's title, not a crumb before it.
         let own = crate::shared_store::top_of_row(&id).is_some();
-        let mut crumbs = div().min_w_0().flex().items_center().text_size(px(17.)).line_height(px(24.)).when(!own, |d| d.child(first));
+        let mut crumbs = div().min_w_0().flex().items_center().text_size(px(crate::ui::CRUMB_SIZE)).line_height(px(20.)).child(home).when(!own, |d| d.child(sep()).child(first));
         for (i, e) in path.iter().enumerate() {
             if path.len() > 2 && i > 0 && i < path.len() - 1 {
-                if i == 1 {
-                    let hidden: Vec<String> = path[1..path.len() - 1].iter().map(|e| display_title(&e.title)).collect();
-                    crumbs = crumbs.child(sep()).child(div().id("folder-crumb-more").flex_none().px(px(4.)).text_color(Theme::text_caption()).tip(&hidden.join(" / "), None).child("…"));
-                }
+                if let Some(m) = more.take() { crumbs = crumbs.child(sep()).child(m); }
                 continue;
             }
             crumbs = crumbs.child(sep()).child(link(e.id.clone(), display_title(&e.title), Some(e.id.clone())));
         }
-        crumbs = crumbs.when(!own, |d| d.child(sep())).child(div().min_w_0().px(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
-            .font_weight(FontWeight::SEMIBOLD).text_color(Theme::text()).child(ui_text(title)));
+        crumbs = crumbs.child(sep()).child(div().min_w_0().px(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
+            .text_color(Theme::text_caption()).child(ui_text(title)));
         let doc = id.clone();
-        let header = crate::trash::page_header_with(self, crumbs, 26., cx)
+        // Inset as a document's header (`top_bar`), so the path does not move between the two.
+        let header = crate::trash::page_header_with(self, crumbs, 18., cx)
             .child(self.place_button("folder-more", Some(id.clone()), cx))
             .child(self.import_button("folder-import", Some(id.clone()), cx))
             .child(crate::ui::header_icon("folder-new", "plus")
@@ -261,5 +266,49 @@ impl Workspace {
             .child(row("fr-move", "folder-input", tr("移动到", "Move to")).on_click(cx.listener(move |w, _, window, cx| w.open_move(vec![mv.clone()], window, cx))))
             .child(row("fr-delete", "bin", tr("删除", "Delete")).on_click(cx.listener(move |w, _, _, cx| w.ask_delete(&del, cx))))))
             .with_priority(2).into_any_element()]
+    }
+}
+
+/// Where a breadcrumb goes: 主页 (None), or a page or folder by id.
+pub(crate) type Crumb = (String, Option<String>);
+
+impl Workspace {
+    /// A breadcrumb's "…" for the crumbs it folds (shadcn's BreadcrumbEllipsis): a click opens them
+    /// as a menu hung from it; hovering shows the path.
+    pub(crate) fn crumb_more(&self, key: &'static str, hidden: Vec<Crumb>, cx: &mut Context<Self>) -> Stateful<Div> {
+        let path = hidden.iter().map(|c| c.0.as_str()).collect::<Vec<_>>().join(" / ");
+        let open = self.crumb_menu.is_some();
+        div().id(key).no_drag().relative().flex_none().size(px(20.)).flex().items_center().justify_center().rounded(px(4.)).cursor_pointer()
+            .text_color(Theme::text_caption()).hover(|s| s.text_color(Theme::text())).when(open, |d| d.text_color(Theme::text()))
+            .child(self.home.track(key)).child("…")
+            .when(!open, |d| d.tip(&path, None))
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
+                // hung from the measured "…", never the pointer
+                let Some(b) = w.home.anchor(key) else { return };
+                let (pos, corner) = crate::design::hang(b, crate::design::Align::Start, None);
+                w.crumb_menu = if w.crumb_menu.is_some() { None } else { Some((hidden.clone(), pos, corner)) };
+                cx.notify();
+            }))
+    }
+
+    /// The menu of a breadcrumb's folded crumbs.
+    pub(crate) fn render_crumb_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (items, pos, corner) = self.crumb_menu.clone()?;
+        let menu = crate::design::Popover::new("crumb-menu").menu().fit(crate::design::room(pos, corner)).min_w(px(180.)).max_w(px(320.))
+            .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.crumb_menu = None; cx.notify(); }))
+            .children(items.into_iter().enumerate().map(|(i, (label, target))| crate::design::MenuItem::new(("crumb-item", i)).label(label)
+                .on_click(cx.listener(move |w, _, window, cx| {
+                    w.crumb_menu = None;
+                    match &target { Some(t) => { w.open(t, window, cx); } None => w.show_view(View::Home, cx) }
+                    cx.notify();
+                }))));
+        Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(3).into_any_element())
+    }
+
+    /// Where a path's top-level folder crumb goes: its own page when it has one, else 主页.
+    pub(crate) fn top_crumb(&self, key: &str) -> Option<String> {
+        let row = crate::shared_store::top_row(key);
+        self.entries.iter().any(|e| e.id == row).then_some(row)
     }
 }

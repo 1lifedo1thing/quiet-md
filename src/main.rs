@@ -45,6 +45,7 @@ mod html;
 mod input;
 mod logging;
 mod modes;
+mod import_sources;
 mod onboarding;
 #[cfg(target_os = "macos")]
 mod native_header;
@@ -52,6 +53,7 @@ mod native_header;
 #[path = "native_header_fallback.rs"]
 mod native_header;
 mod mermaid;
+mod on_top;
 mod printing;
 mod search;
 mod siyuan;
@@ -90,6 +92,8 @@ mod theme;
 mod transfer;
 mod trash;
 mod tree;
+mod entries;
+mod tree_writes;
 mod ui;
 mod update;
 #[cfg(target_family = "wasm")]

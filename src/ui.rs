@@ -746,6 +746,10 @@ pub fn wave_fill(fraction: f32, color: Hsla) -> impl IntoElement {
 }
 
 
+/// The breadcrumbs' size in every page header (a document's, a folder's, 主页's): shadcn's
+/// Breadcrumb, text-sm.
+pub const CRUMB_SIZE: f32 = 14.;
+
 /// A page header's icon button (search, new, more): `Button::ghost`, header-tall.
 pub fn header_icon(id: &'static str, name: &'static str) -> crate::design::Button {
     crate::design::Button::ghost(id).icon(name).size(px(crate::app::HEADER_ACTIONS_H)).no_drag()
