@@ -539,8 +539,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                     cx.notify();
                 })))
     };
-    let mut hdr_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().when(cols.frozen > 0, |d| d.border_r_1().border_color(frozen_line()))
-        .child(div().id("tb-hdr-check").group("tb-hdr-all").relative().flex_none().w(px(GUTTER_W)).h_full().cursor_pointer()
+    let mut hdr_frozen = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line())
+        .child(div().id("tb-hdr-check").group("tb-hdr-all").relative().flex_none().w(px(GUTTER_W)).h_full().border_r_1().border_color(line()).cursor_pointer()
             .child(div().absolute().left(px(CHECK_X)).top_0().bottom_0().w(px(NUM_W)).flex().items_center().justify_center().when(!all_sel, |d| d.invisible().group_hover("tb-hdr-all", |s| s.visible())).child(checkbox(all_sel)))
             .on_click(cx.listener(|v, _, _, cx| {
                 let ids: Vec<RecId> = { let st = v.state.read(cx); st.doc.base.table(v.table).map(|t| v.result.records.iter().map(|i| t.records[*i].id).collect()).unwrap_or_default() };
@@ -660,8 +660,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 let tint = query::row_color(base, t, r, view, today);
                 let in_fill = fill_to.zip(sel).is_some_and(|(to, (r0, r1, _, _))| (pos > r1 && pos <= to) || (pos < r0 && pos >= to));
                 let dragging = matches!(&v.drag, Some(Drag::RowMove { ids, moved: true, .. }) if ids.contains(&rid));
-                // the row's start isn't a cell (飞书's): no grid lines round it, the rows' lines start at the first column
                 let gutter = div().id(("tb-gutter", rid as usize)).relative().flex_none().w(px(GUTTER_W)).h_full().flex().items_center().justify_center()
+                    .border_r_1().border_b_1().border_color(line())
                     .when(checked, |d| d.bg(sel_bg()))
                     .when(manual, |d| d.child(div().id(("tb-grab", rid as usize)).absolute().left(px(4.)).top_0().bottom_0().w(px(16.)).flex().items_center().justify_center()
                         .invisible().group_hover("tb-row", |s| s.visible()).cursor(CursorStyle::OpenHand)
@@ -742,7 +742,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             v.open_popup(ev.position, Popup::CellMenu(rid), cx);
                         }))
                 };
-                let mut fz = div().flex_none().flex().w(px(cols.frozen_w)).h_full().when(cols.frozen > 0, |d| d.border_r_1().border_color(frozen_line())).child(gutter);
+                let mut fz = div().flex_none().flex().w(px(cols.frozen_w)).h_full().border_r_1().border_color(frozen_line()).child(gutter);
                 let placed = |ci: usize| if Some(ci) == dragged_col { hole(ci) } else { cell(ci).left(px(col_dx[ci])).into_any_element() };
                 for ci in 0..cols.frozen { fz = fz.child(placed(ci)); }
                 let mut sc = div().flex().h_full().ml(px(-sx));
