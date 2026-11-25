@@ -2231,6 +2231,19 @@ impl Render for Workspace {
                 }
             }))
             // Esc leaves 批量操作 (closing its menu or confirmation first), even from the editor.
+            // Esc closes the document's menus first (Radix's DropdownMenu). The editor binds Esc to its
+            // own action, which runs before any key listener, and spends it selecting the block: take
+            // the action on its way down while a menu is open (a switch row keeps the menu open, so
+            // Esc is how it goes).
+            .capture_action(cx.listener(|w, _: &crate::editor::keymap::Escape, _, cx| {
+                if w.doc_menu || w.mode_menu {
+                    w.mode_menu = false;
+                    w.doc_menu = false;
+                    w.doc_sub = None;
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
             .capture_key_down(cx.listener(|w, ev: &KeyDownEvent, _, cx| {
                 // A required update waits for 立即重启更新 (↩): no key reaches the window beneath.
                 if crate::update::blocking(cx) {

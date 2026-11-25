@@ -245,3 +245,11 @@
 | 链接 | BreadcrumbLink：`muted-foreground`，hover `foreground` | 同（原来悬停变蓝 `primary_500`） | 改 |
 | 当前页 | BreadcrumbPage：`foreground`、常规字重 | `muted-foreground`、常规字重，和前面几段一样，不响应点击 | 有意不同：用户 2026-11-25 要求整条路径同色同字重（「这里不用加黑吧，感觉有点不太统一」）；原来是加粗黑色 |
 | 分隔符 | `>` 图标，随列表 `muted-foreground` | 同（原来是图标色，比文字深） | 改 |
+
+## 菜单里的开关行（`MenuItem::switch`）
+
+| 属性 | shadcn / Radix | 我们 | 处理 |
+|---|---|---|---|
+| 切换后 | DropdownMenuCheckboxItem 默认选中后关菜单，`onSelect` 里 `preventDefault` 才留住 | 固定留住：点行或开关只切换，Esc、点外面才关 | 按留住做（用户 2026-11-25：「开关开启或者关闭完之后，能不能不要自动关闭菜单」，和页宽选择一致） |
+| 开关动画 | Switch 的 thumb `transition-transform`，track `transition-all` | `Switch::keyed`：150ms ease-out 滑动，轨道和滑块颜色同步过渡 | 一致 |
+| Esc | 关菜单 | 关菜单；编辑器把 Esc 绑成自己的动作，在窗口根部用 `capture_action` 先截住 | 一致（原来编辑器有焦点时 Esc 被拿去选块，菜单关不掉） |

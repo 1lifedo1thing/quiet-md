@@ -9,7 +9,7 @@ use super::view::{BlockAct, BlockSub, CtxKind, Editor, Mark, Menu};
 use crate::model::*;
 use crate::feishu_theme::{self as theme, Theme};
 use crate::editor_ui::{TipExt, icon};
-use crate::design::{Button, ButtonSize, Field, FieldSize, MenuItem, MenuLabel, MenuSeparator, Popover, Switch, Textarea, color};
+use crate::design::{Button, ButtonSize, Field, FieldSize, MenuItem, MenuLabel, MenuSeparator, Popover, Textarea, color};
 use crate::design::menu::{LABEL_H, PAD, ROW_H, SEP_H};
 use crate::design::toolbar::{TOOLBAR_H, TOOLBAR_PAD, toolbar_layout};
 use crate::design::{ButtonGroup, ButtonGroupSeparator, Toggle, Toolbar};
@@ -1724,7 +1724,7 @@ impl Editor {
         let plain = |id: &'static str, ic: &'static str, label: &'static str, a: BlockAct| {
             row(id, ic, label, false, false).on_mouse_move(set_sub(None)).on_mouse_down(MouseButton::Left, act(a))
         };
-        let toggle = |id: &'static str, ic: &'static str, label: &'static str, on: bool, a: BlockAct| plain(id, ic, label, a).child(Switch::new(on));
+        let toggle = |id: &'static str, ic: &'static str, label: &'static str, on: bool, a: BlockAct| plain(id, ic, label, a).switch(on);
         let m = Popover::new("block-menu")
             .menu()
             .w(px(MENU_W))

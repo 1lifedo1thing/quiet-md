@@ -5,7 +5,7 @@
 use crate::app::Workspace;
 use crate::settings::display_title;
 use crate::store::PageWidth;
-use crate::design::{MenuItem, MenuSeparator, Popover, Switch, menu};
+use crate::design::{MenuItem, MenuSeparator, Popover, menu};
 use crate::ui::TipExt;
 use gpui::{prelude::FluentBuilder, *};
 
@@ -258,32 +258,24 @@ impl Workspace {
             .child(divider())
             // (a board file has no reading mode or references)
             .when(!board_file, |d| d.child(
+                // switch rows keep the menu open (`MenuItem::switch`): the click flips, nothing else
                 menu_item("dm-read", "eye-open", crate::settings::text("阅读模式"), false, false)
-                    .child(Switch::new(reading))
+                    .switch(reading)
                     .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, window, cx| {
-                        w.close_doc_menu(cx);
-                        w.set_mode(!reading, window, cx);
-                    })),
+                    .on_click(cx.listener(move |w, _, window, cx| w.set_mode(!reading, window, cx))),
             )
             .child(
                 menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
-                    .child(Switch::new(refs_shown))
+                    .switch(refs_shown)
                     .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, _, cx| {
-                        w.close_doc_menu(cx);
-                        w.ask_refs(!refs_shown, cx);
-                    })),
+                    .on_click(cx.listener(move |w, _, _, cx| w.ask_refs(!refs_shown, cx))),
             ))
             .when(crate::on_top::SUPPORTED, |d| d.child(
                 menu_item("dm-on-top", crate::on_top::ICON, crate::settings::tr("窗口保持在最前", "Keep Window on Top"), false, false)
-                    .child(Switch::new(on_top))
+                    .switch(on_top)
                     .tip_right(crate::settings::tr("窗口会一直显示在其他应用的窗口之上", "Stays above other apps' windows"), None)
                     .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, window, cx| {
-                        w.close_doc_menu(cx);
-                        w.set_on_top(!on_top, window, cx);
-                    })),
+                    .on_click(cx.listener(move |w, _, window, cx| w.set_on_top(!on_top, window, cx))),
             ))
             .when(!board_file || crate::on_top::SUPPORTED, |d| d.child(divider()))
             .child(

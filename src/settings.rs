@@ -517,7 +517,8 @@ fn desc(s: &'static str) -> Option<SharedString> { Some(s.into()) }
 
 /// A `Switch` that takes the click (the switch itself only draws).
 pub(crate) fn switch(id: impl Into<ElementId>, on: bool) -> Stateful<Div> {
-    div().id(id).flex_none().flex().items_center().cursor_pointer().child(Switch::new(on))
+    let id = id.into();
+    div().id(id.clone()).flex_none().flex().items_center().cursor_pointer().child(Switch::new(on).keyed(id))
 }
 
 /// 外观 › 主题 CSS (duplicate, edit, restore a theme's stylesheet): hidden in
