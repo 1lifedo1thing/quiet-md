@@ -63,7 +63,9 @@ impl Fade {
         let target = if active || scrolled || lingering { 1. } else { 0. };
         let (a, t) = self.at.get().unwrap_or((0., now));
         let step = now.duration_since(t).as_secs_f32() / FADE.as_secs_f32();
-        let a = if target > a { (a + step).min(1.) } else { (a - step).max(0.) };
+        // at the target it stays: stepping down from 1 while shown dimmed it every frame, then the next
+        // frame brought it back (the flicker over a resting pointer)
+        let a = if target > a { (a + step).min(1.) } else if target < a { (a - step).max(0.) } else { a };
         self.at.set(Some((a, now)));
         // A paint can't ask for the next one (`refresh` is ignored while drawing): a timer does, a
         // frame on while it fades, or when the hold runs out.
