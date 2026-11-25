@@ -758,6 +758,12 @@ pub(crate) fn tilde(p: &std::path::Path) -> String {
 /// Breadcrumb, text-sm.
 pub const CRUMB_SIZE: f32 = 14.;
 
+/// shadcn's Breadcrumb (the user's call, 2026-11-25): the crumbs before the page, their separators
+/// and the "…" in `muted-foreground` (BreadcrumbLink), `foreground` under the pointer; the current
+/// page in `foreground` (BreadcrumbPage), the same weight.
+pub fn crumb_ink() -> Hsla { crate::design::color::muted_foreground() }
+pub fn crumb_page() -> Hsla { crate::design::color::foreground() }
+
 /// A page header's icon button (search, new, more): `Button::ghost`, header-tall.
 pub fn header_icon(id: &'static str, name: &'static str) -> crate::design::Button {
     crate::design::Button::ghost(id).icon(name).size(px(crate::app::HEADER_ACTIONS_H)).no_drag()

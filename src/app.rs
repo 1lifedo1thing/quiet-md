@@ -1823,7 +1823,7 @@ impl Workspace {
             .map(|id| self.ancestors(id).iter().filter(|e| crate::shared_store::top_of_row(&e.id).is_none()).map(|e| (e.id.clone(), display_title(&e.title), e.icon.clone())).collect())
             .unwrap_or_default();
         let mut crumbs: Vec<AnyElement> = vec![];
-        let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., Theme::text_caption())).into_any_element();
+        let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., crate::ui::crumb_ink())).into_any_element();
         // Every path starts at the library, as a folder page's does; a file
         // under 本机文件 starts there, which has no page of its own.
         let local = self.current.as_ref().and_then(|id| self.entries.iter().find(|e| &e.id == id)).is_some_and(|e| e.meta.local());
@@ -1837,15 +1837,15 @@ impl Workspace {
         let home_label = crate::settings::text("主页").to_string();
         if self.current.is_some() {
             crumbs.push(div().id("crumb-home").no_drag().flex_none().px(px(4.)).rounded(px(4.))
-                .whitespace_nowrap().text_color(Theme::text_caption()).cursor_pointer().hover(|s| s.text_color(Theme::text()))
+                .whitespace_nowrap().text_color(crate::ui::crumb_ink()).cursor_pointer().hover(|s| s.text_color(crate::ui::crumb_page()))
                 .on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx)))
                 .child(ui_text(home_label.clone()))
                 .into_any_element());
             crumbs.push(sep());
             let target = top_target.clone();
             crumbs.push(div().id("crumb-library").no_drag().flex_none().px(px(4.)).rounded(px(4.))
-                .whitespace_nowrap().text_color(Theme::text_caption())
-                .when(!local, |d| d.cursor_pointer().hover(|s| s.text_color(Theme::text())).on_click(cx.listener(move |w, _, window, cx| match &target {
+                .whitespace_nowrap().text_color(crate::ui::crumb_ink())
+                .when(!local, |d| d.cursor_pointer().hover(|s| s.text_color(crate::ui::crumb_page())).on_click(cx.listener(move |w, _, window, cx| match &target {
                     Some(t) => w.open(t, window, cx),
                     None => w.show_view(View::Home, cx),
                 })))
@@ -1874,8 +1874,8 @@ impl Workspace {
                     .items_center()
                     .rounded(px(4.))
                     .cursor_pointer()
-                    .text_color(Theme::text_caption())
-                    .hover(|s| s.text_color(Theme::text()))
+                    .text_color(crate::ui::crumb_ink())
+                    .hover(|s| s.text_color(crate::ui::crumb_page()))
                     .when_some(em.clone(), |d, em| {
                         d.child(div().size(px(20.)).mr(px(4.)).flex_none().flex().items_center().justify_center().text_size(px(16.)).child(em))
                     })
@@ -1888,7 +1888,7 @@ impl Workspace {
         if board_block {
             crumbs.push(
                 div().id("crumb-board-doc").no_drag().min_w(px(28.)).max_w(px(200.)).px(px(4.)).flex().items_center().rounded(px(4.)).cursor_pointer()
-                    .text_color(Theme::text_caption()).hover(|s| s.text_color(Theme::text()))
+                    .text_color(crate::ui::crumb_ink()).hover(|s| s.text_color(crate::ui::crumb_page()))
                     .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(title.clone())))
                     .on_click(cx.listener(|w, _, window, cx| if let Some(e) = w.editor.clone() { e.update(cx, |e, cx| e.close_open_board(window, cx)) }))
                     .into_any_element(),
@@ -1899,7 +1899,7 @@ impl Workspace {
         if table_block {
             crumbs.push(
                 div().id("crumb-table-doc").no_drag().min_w(px(28.)).max_w(px(200.)).px(px(4.)).flex().items_center().rounded(px(4.)).cursor_pointer()
-                    .text_color(Theme::text_caption()).hover(|s| s.text_color(Theme::text()))
+                    .text_color(crate::ui::crumb_ink()).hover(|s| s.text_color(crate::ui::crumb_page()))
                     .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(title.clone())))
                     .on_click(cx.listener(|w, _, window, cx| if let Some(e) = w.editor.clone() { e.update(cx, |e, cx| e.close_open_table(window, cx)) }))
                     .into_any_element(),
@@ -1970,9 +1970,8 @@ impl Workspace {
                                     .min_w_0()
                                     .text_size(px(crate::ui::CRUMB_SIZE))
                                     .line_height(px(20.))
-                                    // the current page reads like the crumbs before it (the user's call, 2026-11-25;
-                                    // shadcn's BreadcrumbPage is `foreground`): one colour and weight along the path
-                                    .text_color(Theme::text_caption())
+                                    // the current page: `foreground`, the crumbs before it muted (`crate::ui::crumb_page`)
+                                    .text_color(crate::ui::crumb_page())
                                     .overflow_hidden()
                                     .whitespace_nowrap()
                                     .text_ellipsis()
