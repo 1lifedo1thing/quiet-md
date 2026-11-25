@@ -355,7 +355,7 @@ impl Workspace {
     /// language wraps; the cards share it equally.
     fn width_panel(&self, current: PageWidth, cx: &mut Context<Self>) -> Popover {
         use crate::design::{color, geo};
-        // A choice card: `primary` edge round the picked one, `accent` under the pointer.
+        // A choice card: the focus ring round the picked one, `accent` under the pointer.
         let card = |id: &'static str, label: &'static str, w: PageWidth, line: f32| {
             let on = w == current;
             let line_color = if on { color::foreground() } else { color::muted_foreground() };
@@ -371,7 +371,10 @@ impl Workspace {
                 .items_center()
                 .rounded(px(geo().button_r))
                 .border_1()
-                .border_color(if on { color::primary() } else { color::border() })
+                // the picked card wears the focus ring (shadcn: a `ring` edge and a 3pt `ring/50`
+                // halo), as a field with the keyboard in it does; not a thin near-black line
+                .border_color(if on { color::ring() } else { color::border() })
+                .when(on, |d| d.shadow(vec![crate::design::shadow::ring(color::focus_ring(), 3.)]))
                 .bg(color::popover())
                 .cursor_pointer()
                 .when(!on, |d| d.hover(|s| s.bg(color::accent())))
