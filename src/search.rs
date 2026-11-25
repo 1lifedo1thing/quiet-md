@@ -430,7 +430,8 @@ impl Workspace {
     /// [`Self::search_results`] as indices into `entries`.
     fn search_rows(&self, q: &str) -> Vec<usize> {
         if q.is_empty() {
-            let mut recent: Vec<usize> = (0..self.entries.len()).filter(|&i| self.entries[i].note.is_none()).collect();
+            // An attachment opened in its own window belongs to its page, not to 最近浏览.
+            let mut recent: Vec<usize> = (0..self.entries.len()).filter(|&i| self.entries[i].note.is_none() && !self.entries[i].meta.attachment()).collect();
             recent.sort_by_key(|&i| std::cmp::Reverse(self.entries[i].meta.opened.max(self.entries[i].meta.modified)));
             recent.truncate(RECENT);
             return recent;

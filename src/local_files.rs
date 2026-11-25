@@ -42,9 +42,10 @@ fn pick(cx: &mut App) -> impl std::future::Future<Output = Option<Vec<PathBuf>>>
 }
 
 impl Workspace {
-    /// 本机文件 (single files and opened folders, not what is in them), last opened first.
+    /// 本机文件 (single files and opened folders, not what is in them), last opened first;
+    /// an attachment opened in its own window is its page's, not one of them.
     pub(crate) fn local_entries(&self) -> Vec<&Entry> {
-        let mut v: Vec<&Entry> = self.entries.iter().filter(|e| e.meta.local() && e.meta.parent.is_none()).collect();
+        let mut v: Vec<&Entry> = self.entries.iter().filter(|e| e.meta.local() && !e.meta.attachment() && e.meta.parent.is_none()).collect();
         v.sort_by(|a, b| b.meta.opened.cmp(&a.meta.opened).then_with(|| a.id.cmp(&b.id)));
         v
     }

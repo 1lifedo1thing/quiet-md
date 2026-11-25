@@ -88,6 +88,10 @@ pub struct Meta {
 impl Meta {
     /// 本机文件: outside the library's tree.
     pub fn local(&self) -> bool { self.path.is_some() }
+    /// A 本机文件 that is a page's attachment (`.assets/files/…` of a library), opened in a
+    /// window of its own: kept out of 本机文件 and 最近浏览, and never renamed after its
+    /// title, so the page's card keeps finding it.
+    pub fn attachment(&self) -> bool { self.path.as_deref().is_some_and(|p| Path::new(p).components().any(|c| c.as_os_str() == ASSETS)) }
     /// Titled by its file name, not by a title inside it: Markdown and
     /// everything that is not a document.
     pub fn named_by_file(&self) -> bool { self.markdown || !self.kind.is_doc() }
@@ -2408,6 +2412,8 @@ impl Store {
     /// drops its number once the name is free again (#358).
     fn follow_title(&mut self, id: &str, title: &str, renamed: bool) -> Result<()> {
         let Some(m) = self.index.get(id) else { return Ok(()) };
+        // An attachment's name is what its page's card points at: a new title changes only its words.
+        if m.attachment() { return Ok(()); }
         if let Some(old) = m.path.clone().map(PathBuf::from) {
             let name = title.replace(['/', '\\', ':'], "_");
             let name = name.trim().trim_start_matches('.');
@@ -4415,6 +4421,18 @@ mod tests {
         d.blocks.push(crate::model::Block::text("added"));
         s.save(&id, &d).unwrap();
         assert_eq!(crate::vfs::read_to_string(&file).unwrap(), "# Notes\n\nfirst\n\nadded\n");
+        // An attachment, kept out of 本机文件; a title typed in its window changes no name: the
+        // page's card still finds the file where it was.
+        assert!(e.meta.attachment());
+        s.follow_name(&id, "新的标题").unwrap();
+        assert!(file.fs_is_file() && !dir.join("新的标题.md").exists());
+        assert_eq!(s.file_path(&id).unwrap().fs_canonicalize().unwrap(), file.fs_canonicalize().unwrap());
+        // A Markdown file opened from elsewhere is no attachment, and follows its title as before.
+        let outside = lib.0.parent().unwrap().join(format!("{}-outside.md", base_name(&lib.0.to_string_lossy())));
+        crate::vfs::write(&outside, "x\n").unwrap();
+        let o = s.open_local(&outside).unwrap();
+        assert!(!s.index[&o].attachment());
+        crate::vfs::remove_file(&outside).ok();
         // Reopened: still that one file, beside the page it is attached to.
         drop(s);
         let mut s = lib.open();
