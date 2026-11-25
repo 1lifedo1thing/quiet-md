@@ -1,6 +1,6 @@
 //! 主页's top-level folders from the window's side: 打开文件夹… (or the Finder's Open
 //! With, or a folder dropped on the window) adds a top-level folder to the
-//! sidebar, edited where it is; 新建文件夹… makes one first; 从侧栏移除
+//! sidebar, edited where it is (a new one is made in the system's open panel); 从侧栏移除
 //! forgets one and leaves every file alone. See docs/design/workspaces.md.
 
 use crate::app::{RowMenu, View, Workspace};
@@ -29,19 +29,6 @@ fn pick(cx: &mut App) -> impl std::future::Future<Output = Option<Vec<PathBuf>>>
     }
 }
 
-/// Where a new top-level folder goes: the system save panel, or a scripted answer.
-fn pick_new(cx: &mut App) -> impl std::future::Future<Output = Option<PathBuf>> + use<> {
-    let picked = crate::devtools::take_pick().and_then(|v| v.into_iter().next());
-    let base = dirs::document_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default());
-    let prompt = picked.is_none().then(|| cx.prompt_for_new_path(&base, Some("Quiet.md")));
-    async move {
-        match prompt {
-            Some(p) => p.await.ok().and_then(Result::ok).flatten(),
-            None => picked,
-        }
-    }
-}
-
 impl Workspace {
     /// 打开文件夹…: pick folders and add them to the sidebar where they are.
     pub fn open_folder_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -51,23 +38,6 @@ impl Workspace {
         cx.spawn_in(window, async move |this, cx| {
             let Some(paths) = paths.await else { return };
             let _ = this.update_in(cx, |w, window, cx| w.add_folders(&paths, window, cx));
-        })
-        .detach();
-    }
-
-    /// 新建文件夹…: make an empty folder and add it to the sidebar.
-    pub fn new_folder_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.row_menu = None;
-        if self.still_loading(cx) { return }
-        let path = pick_new(cx);
-        cx.spawn_in(window, async move |this, cx| {
-            let Some(path) = path.await else { return };
-            let _ = this.update_in(cx, |w, window, cx| {
-                match w.store.create_folder_top(&path) {
-                    Ok(key) => w.folder_added(&key, window, cx),
-                    Err(e) => w.add_failed(&path, e, window, cx),
-                }
-            });
         })
         .detach();
     }
@@ -255,14 +225,13 @@ impl Workspace {
         vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, m.corner)))).with_priority(2).into_any_element()]
     }
 
-    /// The sidebar with no top-level folder open: a way to open or make one.
+    /// The sidebar with no top-level folder open: a way to open one (a new one is made in the open panel).
     pub(crate) fn empty_home(&self, cx: &mut Context<Self>) -> Div {
         let button = |id: &'static str, label: &'static str| crate::design::MenuItem::new(id).label(label);
         div().flex().flex_col().gap(px(2.)).px(px(4.)).pt(px(12.))
             .child(div().px(px(8.)).pb(px(6.)).text_size(px(crate::theme::ui_font())).line_height(px(crate::theme::ui_font() + 7.)).text_color(Theme::text_caption())
                 .child(tr("还没有打开任何文件夹。笔记就是文件夹里的文件。", "No folder is open yet. Your notes are the files in a folder.")))
             .child(button("empty-open", tr("打开文件夹…", "Open folder…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))))
-            .child(button("empty-new", tr("新建文件夹…", "New folder…")).on_click(cx.listener(|w, _, window, cx| w.new_folder_dialog(window, cx))))
     }
 
     /// The main area with no top-level folder open (2.8), centred: what to do first.
@@ -271,8 +240,7 @@ impl Workspace {
             .child(img("illus/empty-list.svg").size(px(120.)))
             .child(div().mt(px(16.)).text_size(px(13.)).line_height(px(20.)).text_color(Theme::text_caption()).child(tr("还没有打开任何文件夹。笔记就是文件夹里的文件。", "No folder is open yet. Your notes are the files in a folder.")))
             .child(div().mt(px(20.)).flex().gap(px(8.))
-                .child(crate::design::Button::primary("empty-main-open").label(tr("打开文件夹…", "Open folder…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))))
-                .child(crate::design::Button::secondary("empty-main-new").label(tr("新建文件夹…", "New folder…")).on_click(cx.listener(|w, _, window, cx| w.new_folder_dialog(window, cx)))))
+                .child(crate::design::Button::primary("empty-main-open").label(tr("打开文件夹…", "Open folder…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx)))))
     }
 
     /// What the top of the tree is called where nothing names a top-level folder: the

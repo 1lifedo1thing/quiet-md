@@ -124,7 +124,7 @@ impl Workspace {
             .child(div().flex_1())
             .children(crate::settings::update_pill(cx));
 
-        // The nav: 主页, then 添加文件夹 (another folder beside the default one, as
+        // The nav: 主页, then 打开文件夹 (another folder beside the default one, as
         // 文件 › 打开文件夹… does). 36px items, a tint when selected. Their icon
         // column (x 17) is shared with 搜索 and the doc rows.
         let home_on = self.view == View::Home;
@@ -147,8 +147,8 @@ impl Workspace {
             .relative().children(crate::devtools::row_probe(label));
         let nav = div().flex_none().pt(px(4.)).pb(px(4.)).px(px(SB_X)).flex().flex_col().gap(px(ROW_GAP))
             .child(item("nav-home", "home", crate::settings::tr("主页", "Home"), home_on).on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))))
-            .child(item("nav-add-folder", "folder-plus", crate::settings::tr("添加文件夹", "Add a folder"), false)
-                .tip(crate::settings::tr("添加文件夹", "Add a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
+            .child(item("nav-add-folder", "folder-plus", crate::settings::tr("打开文件夹", "Open a folder"), false)
+                .tip(crate::settings::tr("打开文件夹", "Open a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
                 .on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))));
 
         let mut list = div().flex().flex_col().px(px(SB_X)).pb(px(8.));

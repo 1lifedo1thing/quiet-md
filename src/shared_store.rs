@@ -70,7 +70,6 @@ impl SharedStore {
         self.0.borrow().ws.folders.iter().map(|r: &TopFolder| (r.key.clone(), r.name(), r.path.clone(), r.error.clone())).collect()
     }
     pub fn add_folder(&self, dir: &Path) -> std::result::Result<String, AddError> { let r = self.0.borrow_mut().ws.add(dir); self.folders_changed(); r }
-    pub fn create_folder_top(&self, dir: &Path) -> std::result::Result<String, AddError> { let r = self.0.borrow_mut().ws.create(dir); self.folders_changed(); r }
     pub fn remove_folder(&self, key: &str) -> Result<()> {
         let mut sh = self.0.borrow_mut();
         if let Some(s) = sh.ws.store(key) { let _ = s.flush_view_state(); }

@@ -806,9 +806,9 @@ impl Workspace {
             .child(self.import_button("home-import", None, cx))
             .child(
             // 主页 makes no documents (which top-level folder they would land in isn't shown here): its one
-            // creation control adds a folder beside the others, as 添加文件夹 under 主页 does.
+            // creation control adds a folder beside the others, as 打开文件夹 under 主页 does.
             crate::ui::header_icon("home-new", "folder-plus")
-                .tip(crate::settings::tr("添加文件夹", "Add a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
+                .tip(crate::settings::tr("打开文件夹", "Open a folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + Shift + O")))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx))).into_any_element()
         );
