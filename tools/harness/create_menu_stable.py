@@ -1,11 +1,11 @@
 """The 新建 menu of 我的文档's "+" keeps its rows while it stays open.
 
-It ends with the 导入 rows when the library has one top-level folder. That used
-to be worked out again every frame, from the folder count and where the "+"
-sat, so a refresh behind the open menu (the library's background check, a big
-library still loading) could take the 导入 rows away under the pointer. Here
-the menu is opened, a file appears in the library while it is open (the
-background check lists it), and the menu must look the same seconds later.
+Every 新建 menu ends with the 导入 rows. They once depended on how many
+top-level folders there were and on where the "+" sat, worked out again every
+frame, so a refresh behind the open menu could take them away under the
+pointer. Here the menu is opened, a file appears in the library while it is
+open (the background check lists it), and the menu must look the same seconds
+later.
 
 Build with --release --features devtools, then run this file. Needs Pillow.
 FDL_BIN selects another build. Only a scratch library is used.

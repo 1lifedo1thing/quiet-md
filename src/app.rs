@@ -401,9 +401,6 @@ pub struct Workspace {
     sidebar_auto_hidden: bool,
     pub folder_current: Option<String>,
     pub create_menu: Option<(Option<String>, Point<Pixels>)>,
-    /// Whether the open 新建 menu ends with the 导入 rows, settled when it opens: what it is read
-    /// from (how many top-level folders, where its button sits) may change while it is open.
-    pub create_menu_import: bool,
     /// The header's 导入 menu: the folder it imports into, and where it hangs.
     pub import_menu: Option<(Option<String>, Point<Pixels>)>,
     /// The header's … menu on Home (None) or a folder page: where it hangs.
@@ -702,7 +699,6 @@ impl Workspace {
             sidebar_drag: false,
             folder_current: None,
             create_menu: None,
-            create_menu_import: false,
             import_menu: None,
             place_menu: None,
             folder_drag: Default::default(),
