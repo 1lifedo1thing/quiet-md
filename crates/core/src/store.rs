@@ -5269,6 +5269,8 @@ mod tests {
         let x = a.create_from(&doc("甲")).unwrap();
         let f = a.create_folder("夹", None).unwrap();
         let y = a.create_from_in(&doc("乙"), Some(&f)).unwrap();
+        #[cfg(not(unix))]
+        let _ = &y;
         a.list();
         a.list();
         // Only in iCloud now: a placeholder in its place.
