@@ -195,7 +195,7 @@ impl Workspace {
         let id = self.folder_current.clone().unwrap_or_default();
         let title = self.entries.iter().find(|e| e.id == id).map(|e| display_title(&e.title)).unwrap_or_else(|| tr("文件夹", "Folder").to_string());
         // 我的文档 › … › parent › this folder; a long path folds its middle into "…".
-        let sep = || div().mx(px(4.)).flex_none().child(icon("chevron-right", 12., Theme::icon()));
+        let sep = || div().mx(px(4.)).flex_none().child(icon("chevron-right", 12., Theme::text_caption()));
         let link = |key: String, label: String, target: Option<String>| {
             div().id(SharedString::from(format!("folder-crumb-{key}"))).no_drag().flex_none().max_w(px(220.)).px(px(4.)).rounded(px(6.))
                 .overflow_hidden().whitespace_nowrap().text_ellipsis().cursor_pointer()
@@ -222,7 +222,7 @@ impl Workspace {
             crumbs = crumbs.child(sep()).child(link(e.id.clone(), display_title(&e.title), Some(e.id.clone())));
         }
         crumbs = crumbs.when(!own, |d| d.child(sep())).child(div().min_w_0().px(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
-            .font_weight(FontWeight::SEMIBOLD).text_color(Theme::text()).child(ui_text(title)));
+            .text_color(Theme::text_caption()).child(ui_text(title)));
         let doc = id.clone();
         let header = crate::trash::page_header_with(self, crumbs, 26., cx)
             .child(self.place_button("folder-more", Some(id.clone()), cx))

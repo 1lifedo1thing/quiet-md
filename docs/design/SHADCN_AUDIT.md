@@ -237,3 +237,11 @@
 | 颜色 | thumb `bg-border`，rounded-full | 同（`thumb_color`） | 一致；页面、宽表格原来的 22% 黑和悬停加深去掉 |
 | 限高 | — | 按钮菜单上下都放不下时 `room` 限高、`Popover::fit` 滚动 | 新增 |
 | 子面板 | — | 贴菜单右边（`pos.x + SLASH_W`） | 改 |
+
+## 面包屑（文档页顶栏 `src/app.rs`，文件夹页 `src/folders.rs`）
+
+| 属性 | shadcn | 我们 | 处理 |
+|---|---|---|---|
+| 链接 | BreadcrumbLink：`muted-foreground`，hover `foreground` | 同（原来悬停变蓝 `primary_500`） | 改 |
+| 当前页 | BreadcrumbPage：`foreground`、常规字重 | `muted-foreground`、常规字重，和前面几段一样，不响应点击 | 有意不同：用户 2026-11-25 要求整条路径同色同字重（「这里不用加黑吧，感觉有点不太统一」）；原来是加粗黑色 |
+| 分隔符 | `>` 图标，随列表 `muted-foreground` | 同（原来是图标色，比文字深） | 改 |
