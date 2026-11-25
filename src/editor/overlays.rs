@@ -1225,7 +1225,8 @@ impl Editor {
         // instead of hanging past its edge (#95).
         let x_turn = at_x[0];
         let x_align = at_x[2];
-        let x_color = f32::min(at_x[11], tw - CALLOUT_PANEL_W).max(0.);
+        // a Markdown page has no colour button (nor the ones before it): nothing to place
+        let x_color = at_x.get(11).map_or(0., |&x| f32::min(x, tw - CALLOUT_PANEL_W).max(0.));
         let sep = ButtonGroupSeparator::new;
         let bar = Toolbar::new("toolbar")
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
