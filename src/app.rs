@@ -405,6 +405,8 @@ pub struct Workspace {
     pub import_menu: Option<(Option<String>, Point<Pixels>)>,
     /// The header's … menu on Home (None) or a folder page: where it hangs.
     pub place_menu: Option<(Option<String>, Point<Pixels>)>,
+    /// A breadcrumb's "…" open: the crumbs it folds, where its menu hangs.
+    pub crumb_menu: Option<(Vec<crate::folders::Crumb>, Point<Pixels>, Anchor)>,
     pub folder_drag: crate::sidebar_drag::SidebarDrag,
     /// The search dialog (command-center style) is open.
     pub search_open: bool,
@@ -703,6 +705,7 @@ impl Workspace {
             create_menu: None,
             import_menu: None,
             place_menu: None,
+            crumb_menu: None,
             folder_drag: Default::default(),
             search_open: false,
             downloading: None,
@@ -1804,10 +1807,24 @@ impl Workspace {
             let root = self.current.as_ref().and_then(|id| self.entries.iter().find(|e| &e.id == id)).map(|e| e.top.clone()).unwrap_or_default();
             self.folder_name(&root)
         };
+        // 主页 is the one root: every path starts there (a folder page's too), then the top-level folder.
+        let top_key = self.current.as_ref().and_then(|id| self.entries.iter().find(|e| &e.id == id)).map(|e| e.top.clone()).unwrap_or_default();
+        let top_target = if local { None } else { self.top_crumb(&top_key) };
+        let home_label = crate::settings::text("主页").to_string();
         if self.current.is_some() {
+            crumbs.push(div().id("crumb-home").no_drag().flex_none().px(px(4.)).rounded(px(4.))
+                .whitespace_nowrap().text_color(Theme::text_caption()).cursor_pointer().hover(|s| s.text_color(Theme::text()))
+                .on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx)))
+                .child(ui_text(home_label.clone()))
+                .into_any_element());
+            crumbs.push(sep());
+            let target = top_target.clone();
             crumbs.push(div().id("crumb-library").no_drag().flex_none().px(px(4.)).rounded(px(4.))
                 .whitespace_nowrap().text_color(Theme::text_caption())
-                .when(!local, |d| d.cursor_pointer().hover(|s| s.text_color(Theme::text())).on_click(cx.listener(|w, _, _, cx| w.show_view(View::Home, cx))))
+                .when(!local, |d| d.cursor_pointer().hover(|s| s.text_color(Theme::text())).on_click(cx.listener(move |w, _, window, cx| match &target {
+                    Some(t) => w.open(t, window, cx),
+                    None => w.show_view(View::Home, cx),
+                })))
                 .child(ui_text(start.to_string()))
                 .into_any_element());
             crumbs.push(sep());
@@ -1815,22 +1832,8 @@ impl Workspace {
         for (i, (id, name, em)) in chain.iter().enumerate() {
             if chain.len() > 2 && i > 0 && i < chain.len() - 1 {
                 if i == 1 {
-                    let hidden: Vec<&str> = chain[1..chain.len() - 1].iter().map(|c| c.1.as_str()).collect();
-                    crumbs.push(
-                        div()
-                            .id("crumb-more")
-                            .no_drag()
-                            .flex_none()
-                            .size(px(20.))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded(px(4.))
-                            .text_color(Theme::text_caption())
-                            .tip(&hidden.join(" / "), None)
-                            .child("…")
-                            .into_any_element(),
-                    );
+                    let hidden: Vec<crate::folders::Crumb> = chain[1..chain.len() - 1].iter().map(|c| (c.1.clone(), Some(c.0.clone()))).collect();
+                    crumbs.push(self.crumb_more("crumb-more", hidden, cx).into_any_element());
                     crumbs.push(sep());
                 }
                 continue;
@@ -1886,12 +1889,9 @@ impl Workspace {
         let left = if self.sidebar_open { 18. } else { theme::TRAFFIC_LIGHTS_W + 4. + 28. + 4. + 28. + 25. };
         let room = pane_w - left - crate::ui::header_right_inset() - 3. * HEADER_ACTIONS_H - 8. - 16.;
         if room < 360. && !crumbs.is_empty() {
-            let path: Vec<&str> = std::iter::once(start.as_str()).chain(chain.iter().map(|c| c.1.as_str())).collect();
-            crumbs = vec![
-                div().id("crumb-more").no_drag().flex_none().size(px(20.)).flex().items_center().justify_center().rounded(px(4.))
-                    .text_color(Theme::text_caption()).tip(&path.join(" / "), None).child("…").into_any_element(),
-                sep(),
-            ];
+            let path: Vec<crate::folders::Crumb> = [(home_label.clone(), None), (start.clone(), top_target.clone())].into_iter()
+                .chain(chain.iter().map(|c| (c.1.clone(), Some(c.0.clone())))).collect();
+            crumbs = vec![self.crumb_more("crumb-more", path, cx).into_any_element(), sep()];
         }
         let record_more = self.more_btn_bounds.clone();
         let doc_open = self.doc_menu;
@@ -2067,6 +2067,7 @@ impl Render for Workspace {
         let create_menu = self.render_create_menu(cx);
         let import_menu = self.render_import_menu(cx);
         let place_menu = self.render_place_menu(cx);
+        let crumb_menu = self.render_crumb_menu(cx);
         let search = self.render_search(window, cx);
         let doc_menu = self.render_doc_menu(window, cx);
         let doc_info = self.render_doc_info(cx);
@@ -2300,6 +2301,7 @@ impl Render for Workspace {
             .children(create_menu)
             .children(import_menu)
             .children(place_menu)
+            .children(crumb_menu)
             .children(forced_update)
             .children(toast)
             // Over everything, toasts included, until its last page is done.
