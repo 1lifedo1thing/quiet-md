@@ -25,13 +25,14 @@ static PREFS: RwLock<Option<Preferences>> = RwLock::new(None);
 /// The active document theme draws blocks the 飞书 way (else Craft's).
 pub fn feishu() -> bool { FEISHU.load(Ordering::Relaxed) }
 pub(crate) fn set_base(feishu: bool) { FEISHU.store(feishu, Ordering::Relaxed); }
-/// 界面语言, in the order Settings lists them. Chinese strings are the keys:
+/// 界面语言, in the order Settings lists them (English first, then the two Chinese).
+/// `ALL` keeps the variants' order: `LANG` holds a variant's index in it. Chinese strings are the keys:
 /// other languages look them up in `l10n` and fall back to English.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Lang { Zh, ZhTw, En, Ja, Ko, Fr, Es, Ar, Tr }
+pub enum Lang { En, Zh, ZhTw, Ja, Ko, Fr, Es, Ar, Tr }
 
 impl Lang {
-    pub const ALL: [Lang; 9] = [Lang::Zh, Lang::ZhTw, Lang::En, Lang::Ja, Lang::Ko, Lang::Fr, Lang::Es, Lang::Ar, Lang::Tr];
+    pub const ALL: [Lang; 9] = [Lang::En, Lang::Zh, Lang::ZhTw, Lang::Ja, Lang::Ko, Lang::Fr, Lang::Es, Lang::Ar, Lang::Tr];
     /// The `language` preference value.
     pub fn code(self) -> &'static str { match self { Lang::Zh => "zh", Lang::ZhTw => "zh-TW", Lang::En => "en", Lang::Ja => "ja", Lang::Ko => "ko", Lang::Fr => "fr", Lang::Es => "es", Lang::Ar => "ar", Lang::Tr => "tr" } }
     /// The language's own name, as Settings lists it.
