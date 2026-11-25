@@ -207,11 +207,11 @@ assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</ti
 # 6. the note renamed in the sidebar while the table is open: the cell follows, and the undo of another
 #    edit (the table's own ↶), then of the cell following, leaves the note where it is
 kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""move 48 169
-wait 400
+wait 700
 click 48 169
-wait 600
+wait 1000
 rclick 100 200
-wait 500
+wait 700
 click 157 484
 wait 500
 key cmd-a
