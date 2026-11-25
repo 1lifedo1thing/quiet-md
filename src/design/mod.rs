@@ -225,6 +225,8 @@ pub struct Geo {
     /// Between the lines of a filter / sort panel.
     pub panel_gap: f32,
     pub label_gap: f32,
+    /// Between a settings page's sections (a caption and its card): shadcn's settings forms, `gap-8`.
+    pub section_gap: f32,
     /// Dialogs: corners, padding, the gap between header, body and footer.
     pub dialog_r: f32,
     pub dialog_pad: f32,
@@ -285,7 +287,7 @@ pub const G: Geo = Geo {
     field_h: 36., field_r: R - 2., field_sm_h: 32., field_sm_r: R - 2., field_px: 10.,
     area_r: R - 2., area_pad: 10.,
     menu_r: R - 2., menu_pad: 4., menu_row_h: 32., menu_row_r: R - 4., menu_row_px: 8., menu_gap: 8., rule_inset: 12., sidebar_gap: 1.,
-    popover_pad: 16., popover_gap: 16., panel_gap: 8., label_gap: 8.,
+    popover_pad: 16., popover_gap: 16., panel_gap: 8., label_gap: 8., section_gap: 32.,
     dialog_r: R + 4., dialog_pad: 24., dialog_gap: 24.,
     badge_h: 20., badge_r: radius::PILL, badge_px: 8.,
     checkbox: 16., checkbox_r: 4., switch_w: 32., switch_h: 18.4, thumb: 16.,

@@ -502,7 +502,8 @@ pub(crate) fn group(id: impl Into<ElementId>, title: Option<&'static str>, rows:
         card = card.child(div().w_full().flex().flex_col().child(r));
         if i + 1 < n { card = card.child(Separator::new()); }
     }
-    div().w_full().flex().flex_col().gap(px(8.)).children(title.map(caption)).child(card)
+    // the caption hangs over its own card (`label_gap`), sections stand `section_gap` apart
+    div().w_full().flex().flex_col().gap(px(crate::design::geo().label_gap)).children(title.map(caption)).child(card)
 }
 
 pub(crate) fn caption(t: &'static str) -> Div {
@@ -1518,7 +1519,7 @@ impl Workspace {
                 }, cx)
             }).into_any_element()]
         };
-        div().w_full().flex().flex_col().gap(px(28.))
+        div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
             .child(group("group-general", None, vec![
                 row(tr("界面语言", "Interface language"), None, {
                     let anchor = self.lang_anchor.clone();
@@ -1615,8 +1616,8 @@ impl Workspace {
         // The page itself, the group's last row: no frame around it.
         let shown = { let list = themes::themes(); list.iter().find(|t| t.id == current).or_else(|| list.first()).map(|t| sample_page(t, PAGE_S)) };
         let sample = div().w_full().h(px(640.)).children(shown);
-        div().w_full().flex().flex_col().gap(px(28.))
-            .child(div().w_full().flex().flex_col().gap(px(8.))
+        div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
+            .child(div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
                 .child(group("group-appearance", None, vec![
                     row(tr("外观", "Appearance"), None, {
                         let at = match prefs().appearance.as_str() { "light" => 1, "dark" => 2, _ => 0 };
@@ -1735,7 +1736,7 @@ impl Workspace {
         // A new folder is made in the system's own open panel (its 新建文件夹 button), not here.
         folders.push(row(tr("打开文件夹", "Open a folder"), Some(tr("打开电脑上的文件夹，它会显示在侧栏里；要新的文件夹，在打开窗口里新建。", "Open a folder on your computer and it shows in the sidebar; for a new one, make it in the open window.").into()),
             button("open-folder", tr("打开…", "Open…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx)))).into_any_element());
-        div().w_full().flex().flex_col().gap(px(8.))
+        div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
             .child(group("group-folders", Some(tr("文件夹", "Folders")), folders))
             .child(group("group-library", None, vec![
                 row(tr("回收站", "Trash"), Some(crate::localized_format!("删除的文档保留 {} 天后自动清除。", "Deleted documents are kept for {} days.", crate::store::TRASH_DAYS).into()),
@@ -1765,7 +1766,7 @@ impl Workspace {
     }
 
     fn about_page(&self, cx: &mut Context<Self>) -> AnyElement {
-        div().w_full().flex().flex_col().gap(px(28.)).child(div().w_full().pt(px(24.)).flex().flex_col().items_center().gap(px(10.))
+        div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap)).child(div().w_full().pt(px(24.)).flex().flex_col().items_center().gap(px(10.))
             .child(img(about_icon()).size(px(88.)))
             .child(div().text_size(px(20.)).line_height(px(26.)).font_weight(FontWeight::SEMIBOLD).child("Quiet.md"))
             .child(div().text_size(px(theme::ui_font())).line_height(px(theme::ui_font() + 5.)).text_color(Theme::text_caption()).child(format!("{} {}", tr("版本", "Version"), env!("CARGO_PKG_VERSION"))))
