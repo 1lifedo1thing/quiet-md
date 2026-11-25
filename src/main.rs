@@ -92,6 +92,7 @@ mod theme;
 mod transfer;
 mod trash;
 mod tree;
+mod entries;
 mod ui;
 mod update;
 #[cfg(target_family = "wasm")]
