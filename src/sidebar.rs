@@ -324,7 +324,7 @@ impl Workspace {
         let title = crate::settings::label(title);
         let group = SharedString::from(format!("section-{idx}"));
         let folded = self.folded[idx];
-        let trigger = |id: &'static str, name: &'static str| Button::ghost(id).sized(ButtonSize::Xs).icon(name);
+        let trigger = |id: &'static str, name: &'static str| Button::ghost(id).sized(ButtonSize::Xs).on_wash().icon(name);
         let create_open = matches!(self.create_menu, Some((None, _)));
         let row = div().h(px(SECTION_H)).pl(px(4.)).pt(px(SECTION_TOP)).flex().items_center().group(group.clone());
         if let (1, Some(sel)) = (idx, self.batch.as_ref()) {
@@ -527,6 +527,7 @@ impl Workspace {
         let reveal = (key == "doc").then(|| self.folder_drag.reveal(&e.id));
         Button::ghost(SharedString::from(format!("more-{slot}")))
             .sized(ButtonSize::Xs)
+            .on_wash()
             .relative()
             .mr(px(4.))
             .icon("ellipsis")
@@ -559,6 +560,7 @@ impl Workspace {
         let open = self.create_menu.as_ref().is_some_and(|(p, pos)| p.as_deref() == Some(e.id.as_str()) && self.more_bounds.borrow().get(&slot).is_some_and(|b| anchor(*b) == *pos));
         Button::ghost(SharedString::from(format!("add-{key}-{}", e.id)))
             .sized(ButtonSize::Xs)
+            .on_wash()
             .relative()
             .opacity(if open { 1. } else { self.folder_drag.reveal(&e.id) })
             .selected(open)

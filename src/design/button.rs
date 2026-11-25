@@ -67,12 +67,13 @@ pub struct Button {
     label: Option<SharedString>,
     selected: bool,
     disabled: bool,
+    on_wash: bool,
 }
 element!(Button, parent);
 
 impl Button {
     pub fn new(id: impl Into<ElementId>, variant: ButtonVariant) -> Self {
-        Button { base: div().id(id), variant, size: ButtonSize::Default, icon: None, editor: false, icon_end: None, label: None, selected: false, disabled: false }
+        Button { base: div().id(id), variant, size: ButtonSize::Default, icon: None, editor: false, icon_end: None, label: None, selected: false, disabled: false, on_wash: false }
     }
     pub fn primary(id: impl Into<ElementId>) -> Self { Self::new(id, ButtonVariant::Primary) }
     pub fn outline(id: impl Into<ElementId>) -> Self { Self::new(id, ButtonVariant::Outline) }
@@ -95,6 +96,10 @@ impl Button {
     /// Pressed or in use (a toolbar tool with a filter on, a menu's trigger while it is open:
     /// `aria-expanded` / `aria-pressed`): `muted` (one step up on a raised surface in the dark).
     pub fn selected(mut self, on: bool) -> Self { self.selected = on; self }
+    /// A ghost on a sidebar row that has its own hover wash: under the pointer and when on it takes
+    /// `background` instead of `muted`, which on the wash over the glass sidebar reads as no step at
+    /// all (docs/design/SHADCN_AUDIT.md).
+    pub fn on_wash(mut self) -> Self { self.on_wash = true; self }
     /// Not available: the whole button at 50% (`disabled:opacity-50`), no pointer.
     pub fn disabled(mut self, on: bool) -> Self { self.disabled = on; self }
 }
@@ -116,7 +121,7 @@ impl RenderOnce for Button {
         let r = g.button_r.min(if sz == ButtonSize::Xs { 8. } else { 10. });
         let (icon_l, icon_r, label_s, disabled, selected, editor) = (self.icon, self.icon_end, self.label, self.disabled, self.selected, self.editor);
         // a ghost's fills: `muted` (`muted/50` under the pointer in the dark); on a raised surface in the dark, a step up
-        let (ghost_hover, ghost_on) = super::toolbar::ghost_fills(false);
+        let (ghost_hover, ghost_on) = if self.on_wash { (color::background(), color::background()) } else { super::toolbar::ghost_fills(false) };
         under(self.base, |d| {
             let d = d.flex_none().h(px(sz.h())).flex().items_center().justify_center().gap(px(sz.gap())).rounded(px(r))
                 .text_size(px(if sz == ButtonSize::Xs { g.text_xs } else { g.text })).text_color(fg).whitespace_nowrap()

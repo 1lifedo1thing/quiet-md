@@ -32,6 +32,7 @@
 | ghost 悬停 | `hover:bg-muted`，深色 `hover:bg-muted/50` | 同 | 改（原来是 `accent_hover`） |
 | ghost 在用 | `aria-expanded:bg-muted`；按下的 Toggle `aria-pressed:bg-muted` | `selected` → `muted` | 改（原来是 `accent`） |
 | ghost 在深色弹层上 | muted / muted/50（弹层 #171717 上看得见） | 悬停 白 6%（`accent_hover`），在用 `accent` #404040 | 保留 C：我们的深色弹层 #262626 就是 `muted`，muted 画上去看不见；在弹层、对话框、卡片里（`base::raised()`）提一档 |
+| ghost 在侧栏行上 | SidebarMenuAction、SidebarGroupAction `hover:bg-sidebar-accent`，和行的悬停（SidebarMenuButton `hover:bg-sidebar-accent`）同色 | 侧栏行里的「…」「+」、我的文档标题的批量和「+」：悬停和在用都是 `background`（`Button::on_wash`） | 保留 C（2026-11-25）：毛玻璃侧栏上行的悬停是黑 4.5%（浅色约 234），`muted`（245）或 accent 叠上去比行亮一点、又比周围的侧栏底（约 247）暗，看不出层次、显得发灰；`background`（浅色纯白）在行上和侧栏底上都分得开 |
 | destructive | bg destructive/10，悬停 /20；深色 /20、/30；字 destructive | 同 | 一致 |
 | link | `text-primary underline-offset-4 hover:underline` | `ButtonVariant::Link` | 新增 |
 | 尺寸 default | `.cn-button-size-default` h-9 gap-1.5 px-2.5，带图标那侧 pl-2 / pr-2 | 36、6、10，图标侧 8 | 改（图标侧原来也是 10） |
