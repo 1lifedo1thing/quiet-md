@@ -2,8 +2,9 @@
 //! `ScrollHandle`: a trackless `border`-coloured thumb, 7 wide (the bar's `w-2.5` less its `p-px` and
 //! clear `border-l`), 1 in from every edge; it shows while the pointer is over the box, while it
 //! scrolls and while it is dragged, and fades out `HIDE` after (Radix's `scrollHideDelay`). The fade
-//! is ours: shadcn switches it. Inside a rounded surface the thumb keeps one inset all round, as much
-//! as clears the corner (`inset_for`). The pages' own scrollbar (the editor's virtualized list) takes
+//! is ours: shadcn switches it. Inside a rounded surface the bar still runs flush and full length, and
+//! the surface's corners cut the thumb's ends as they pass, the way a browser clips shadcn's bar to its
+//! `rounded` box (`paint_thumb`: GPUI masks only rectangles). The pages' own scrollbar (the editor's virtualized list) takes
 //! the same look from `THUMB`, `PAD`, `thumb_color` and `Fade`.
 
 use super::color;
@@ -24,12 +25,37 @@ pub const HIDE: Duration = Duration::from_millis(600);
 /// Fade in and out.
 pub const FADE: Duration = Duration::from_millis(150);
 
-/// One inset all round that keeps a `THUMB`-wide thumb with round ends inside a surface rounded
-/// `r`: the end's centre sits `r` from the corner's centre less its own radius. 2.5 for 12.
-pub fn inset_for(r: f32) -> f32 {
-    let half = THUMB / 2.;
-    let i = (r - half) * (1. - std::f32::consts::FRAC_1_SQRT_2);
-    ((i * 2.).ceil() / 2.).max(PAD)
+/// Paints a thumb at `thumb` (round-ended, `THUMB` wide) cut to `clip` rounded `r`: where the thumb
+/// passes the surface's corner it takes the corner's arc, as overflow-hidden on a rounded box cuts
+/// shadcn's. A thumb clear of the corners is a plain capsule.
+pub fn paint_thumb(window: &mut Window, thumb: Bounds<Pixels>, clip: Bounds<Pixels>, r: f32, color: Hsla) {
+    let (top, bottom) = (f32::from(thumb.top()), f32::from(thumb.bottom()));
+    let (ctop, cbottom, cright) = (f32::from(clip.top()), f32::from(clip.bottom()), f32::from(clip.right()));
+    let half = f32::from(thumb.size.width) / 2.;
+    if r <= 0. || (top >= ctop + r && bottom <= cbottom - r) {
+        window.paint_quad(fill(thumb, color).corner_radii(px(half)));
+        return;
+    }
+    let (x0, cx) = (f32::from(thumb.left()), f32::from(thumb.left()) + half);
+    // the thumb's and the surface's extent across, at height y
+    let across = |y: f32| -> Option<(f32, f32)> {
+        let cap = if y < top + half { Some(top + half - y) } else if y > bottom - half { Some(y - (bottom - half)) } else { None };
+        let (mut l, mut rt) = match cap { Some(d) if d >= half => return None, Some(d) => { let w = (half * half - d * d).sqrt(); (cx - w, cx + w) } None => (x0, x0 + 2. * half) };
+        let edge = if y < ctop + r { Some(ctop + r - y) } else if y > cbottom - r { Some(y - (cbottom - r)) } else { None };
+        if let Some(d) = edge { if d >= r { return None } rt = rt.min(cright - r + (r * r - d * d).sqrt()); }
+        l = l.min(rt);
+        (rt - l > 0.01).then_some((l, rt))
+    };
+    let (y0, y1) = (top.max(ctop), bottom.min(cbottom));
+    let n = (((y1 - y0) * 4.).ceil() as usize).max(2);
+    let rows: Vec<(f32, f32, f32)> = (0..=n).filter_map(|i| { let y = y0 + (y1 - y0) * i as f32 / n as f32; across(y).map(|(l, rt)| (y, l, rt)) }).collect();
+    if rows.len() < 2 { return; }
+    let mut path = PathBuilder::fill();
+    path.move_to(point(px(rows[0].1), px(rows[0].0)));
+    for &(y, l, _) in &rows[1..] { path.line_to(point(px(l), px(y))); }
+    for &(y, _, rt) in rows.iter().rev() { path.line_to(point(px(rt), px(y))); }
+    path.close();
+    if let Ok(path) = path.build() { window.paint_path(path, color); }
 }
 
 /// The thumb's colour at `alpha` (shadcn `bg-border`).
@@ -91,15 +117,16 @@ pub struct ScrollBar {
     /// (held still so the thumb stays under the pointer as newly measured rows refine the estimate).
     grab: Cell<Option<(Pixels, Pixels, Pixels)>>,
     fade: Fade,
-    /// The inset all round: `PAD`, or `inset_for` the surface's radius.
-    inset: Cell<f32>,
+    /// The radius of the surface the box fills (0: square), whose corners cut the thumb's ends.
+    radius: Cell<f32>,
     /// The pointer was over the box last paint.
     over: Cell<bool>,
 }
 
 impl ScrollBar {
-    /// A scrollbar inside a surface rounded `r` (0 for a square box).
-    pub fn rounded(r: f32) -> Self { let s = Self::default(); s.inset.set(if r > 0. { inset_for(r) } else { PAD }); s }
+    /// A scrollbar in a box that fills a surface rounded `r` (0 for a square box): flush and full length,
+    /// its thumb cut by the corners.
+    pub fn rounded(r: f32) -> Self { let s = Self::default(); s.radius.set(r); s }
 
     pub fn render(self: &std::rc::Rc<Self>, handle: &ScrollHandle) -> impl IntoElement + use<> {
         let (list, list2) = (handle.clone(), handle.clone());
@@ -107,7 +134,7 @@ impl ScrollBar {
         canvas(
             move |_, window, _| {
                 let area = list.bounds();
-                let inset = px(sb.inset.get().max(PAD));
+                let inset = px(PAD);
                 let view = area.size.height;
                 let content = view + list.max_offset().y;
                 if content <= view + px(1.) { return None; }
@@ -129,7 +156,7 @@ impl ScrollBar {
                 let a = sb.fade.step(over || held, f32::from(offset), window, cx);
                 if a > 0. {
                     let thumb = Bounds::new(point(area.right() - inset - px(THUMB), top), size(px(THUMB), h));
-                    window.paint_quad(fill(thumb, thumb_color(a)).corner_radii(px(THUMB / 2.)));
+                    paint_thumb(window, thumb, area, sb.radius.get(), thumb_color(a));
                 }
                 window.on_mouse_event({
                     let (sb, hitbox) = (sb.clone(), hitbox.clone());

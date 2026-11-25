@@ -1117,7 +1117,7 @@ impl Editor {
                     .child(icon("search", 14., color::muted_foreground()))
                     .child(self.lang_field.clone()),
             )
-            .child(list.child(crate::design::scroll::bar("lang-list", &lang_scroll, crate::design::geo().menu_r)));
+            .child(list.child(crate::design::scroll::bar("lang-list", &lang_scroll, 0.)));
         // Under the language button, which sits ~267px left of the block's right
         // edge; above it when the list wouldn't fit below.
         let h = px(2. * PAD + 38. + (langs.len().max(1) as f32 * ROW_H).min(288.));
