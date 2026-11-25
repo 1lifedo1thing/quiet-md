@@ -1127,7 +1127,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("下载后可预览", "Aperçu après téléchargement"),
     ("其他语言和符号（{}）", "Autres écritures et symboles ({})"),
     // 工作区 (docs/design/workspaces.md)
-    ("已在这个文件夹里建了隐藏的 .quiet 文件夹，存放置顶、排序、历史版本和回收站", "Quiet.md conserve les épinglés, l’ordre, l’historique et la Corbeille de ce dossier dans un dossier caché .quiet à l’intérieur"),
     ("这个文件夹已经在侧栏的文件夹里", "Ce dossier se trouve déjà dans un dossier de la barre latérale"),
     ("文件夹名不能为空", "Le nom du dossier ne peut pas être vide"),
     ("没有权限给这个文件夹改名", "Vous n’avez pas l’autorisation de renommer ce dossier"),

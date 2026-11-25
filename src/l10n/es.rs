@@ -1043,7 +1043,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("下载后可预览", "Vista previa tras descargar"),
     ("其他语言和符号（{}）", "Otras escrituras y símbolos ({})"),
     // 工作区 (docs/design/workspaces.md)
-    ("已在这个文件夹里建了隐藏的 .quiet 文件夹，存放置顶、排序、历史版本和回收站", "Quiet.md guarda los fijados, el orden, el historial y la Papelera de esta carpeta en una carpeta oculta .quiet dentro de ella"),
     ("这个文件夹已经在侧栏的文件夹里", "Esta carpeta ya está dentro de una carpeta de la barra lateral"),
     ("文件夹名不能为空", "El nombre de la carpeta no puede estar vacío"),
     ("没有权限给这个文件夹改名", "No tienes permiso para cambiar el nombre de esta carpeta"),

@@ -70,13 +70,8 @@ impl Workspace {
 
     fn add_folders_now(&mut self, dirs: &[PathBuf], window: &mut Window, cx: &mut Context<Self>) {
         for d in dirs {
-            let fresh = !d.join(crate::store::INTERNAL).exists();
             match self.store.add_folder(d) {
-                Ok(key) => {
-                    self.folder_added(&key, window, cx);
-                    // A folder of the user's own gets a hidden .quiet: say so once (W2).
-                    if fresh { self.show_toast(tr("已在这个文件夹里建了隐藏的 .quiet 文件夹，存放置顶、排序、历史版本和回收站", "Quiet.md keeps pins, order, history and the Trash for this folder in a hidden .quiet folder inside it"), cx); }
-                }
+                Ok(key) => self.folder_added(&key, window, cx),
                 Err(e) => self.add_failed(d, e, window, cx),
             }
         }
