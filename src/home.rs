@@ -415,8 +415,9 @@ impl Default for Home {
             list_scroll: Default::default(),
             folder_grid_scroll: Default::default(),
             folder_list_scroll: Default::default(),
-            grid_scrollbar: Default::default(),
-            list_scrollbar: Default::default(),
+            // both run down to the window's bottom corner
+            grid_scrollbar: Rc::new(crate::design::ScrollBar::corners(0., crate::design::scroll::WINDOW_R)),
+            list_scrollbar: Rc::new(crate::design::ScrollBar::corners(0., crate::design::scroll::WINDOW_R)),
             search_scrollbar: Default::default(),
             // Manual: the sidebar's order (`Meta::place`), so both lists read the same.
             sort: HomeSort::Manual,

@@ -980,7 +980,7 @@ impl Workspace {
                 w.theme_menu = None;
                 cx.notify();
             }))
-            .child({ let h = crate::design::scroll::handle("theme-menu-list"); div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().track_scroll(&h).py(px(menu::PAD)).flex().flex_col().children(rows).child(crate::design::scroll::bar("theme-menu-list", &h, crate::design::geo().menu_r)) });
+            .child({ let h = crate::design::scroll::handle("theme-menu-list"); crate::design::scroll::make_room(div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().track_scroll(&h).py(px(menu::PAD)).flex().flex_col(), "theme-menu-list", menu::PAD).children(rows).child(crate::design::scroll::bar("theme-menu-list", &h, crate::design::geo().menu_r)) });
         Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 
@@ -1490,7 +1490,7 @@ impl Workspace {
             // The bar only drags the window; the page title heads the centred column.
             .child(div().h(px(crate::app::HEADER_H)).flex_none().flex().items_center().title_bar()
                 .when(!self.sidebar_open, |d| d.pl(px(theme::TRAFFIC_LIGHTS_W)).child(self.header_navigation(cx))))
-            .child(div().id("settings-content").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.settings_scroll).child(crate::design::scroll::bar("settings-content", &self.settings_scroll, 0.))
+            .child(div().id("settings-content").flex_1().min_h_0().overflow_y_scroll().track_scroll(&self.settings_scroll).child(crate::design::scroll::bar_corners("settings-content", &self.settings_scroll, 0., crate::design::scroll::WINDOW_R))
                 .child(div().w_full().flex().flex_col().items_center().px(px(32.)).pb(px(64.))
                     .child(div().w_full().max_w(px(if page == Page::Shortcuts { 760. } else { COLUMN_W })).flex().flex_col().gap(px(28.))
                         .child(div().flex().items_center().gap(px(16.))
