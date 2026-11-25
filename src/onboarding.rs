@@ -4,7 +4,6 @@
 //! along. ⌘⌥⇧O and Settings › About replay it without touching the library. Nothing is written until 开始使用;
 //! closing the window before that quits without a library.
 
-use fdl_core::vfs::PathExt as _;
 use crate::settings::tr;
 use crate::theme::{self, Theme};
 use crate::ui;
@@ -195,6 +194,7 @@ static GRAIN: std::sync::LazyLock<std::sync::Arc<RenderImage>> = std::sync::Lazy
 /// in iCloud; this also covers Documents with 桌面与文稿 syncing on.
 #[cfg(target_os = "macos")]
 pub(crate) fn ubiquitous(path: &Path) -> bool {
+    use fdl_core::vfs::PathExt as _;
     use objc::runtime::{BOOL, NO, Object};
     use objc::{class, msg_send, sel, sel_impl};
     #[link(name = "Foundation", kind = "framework")]
