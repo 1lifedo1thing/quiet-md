@@ -170,20 +170,26 @@ impl Workspace {
     }
 
     /// 重命名 a top-level folder: its folder on disk takes `name` (2.11). The open
-    /// document is saved first; ids stay, so it stays open. On failure the
-    /// name stays as it was and a toast says why.
+    /// document is saved first; ids stay, so it stays open. That is one rename
+    /// of one folder, made here: nothing inside is rewritten, and the library
+    /// must not be reached at the old path meanwhile. Its rows take the name
+    /// at once (paths inside are as they were); listing it again is left to
+    /// the background. On failure the name stays as it was, a toast says why
+    /// and the row is back in its field with what was typed.
     pub(crate) fn rename_folder_top(&mut self, key: &str, name: &str, window: &mut Window, cx: &mut Context<Self>) {
         let (k, n) = (key.to_string(), name.to_string());
         if !self.save_before(cx, move |w, window, cx| w.rename_folder_top(&k, &n, window, cx)) { return; }
         self.flush_view_state();
+        // Queued moves and renames name pages by id, but are written under the folder's path.
+        self.settle_tree_writes(cx);
+        for peer in Self::other_workspaces(cx) { peer.update(cx, |w, cx| w.settle_tree_writes(cx)); }
         match self.store.rename_folder_top(key, name) {
             Ok(_) => {
-                self.entries.set(self.store.list());
-                self.sort();
-                // Every window lists the top-level folder by its new name.
+                self.top_renamed(key, cx);
+                // Every window shows the top-level folder by its new name.
                 let me = window.window_handle().window_id();
                 for h in cx.windows().into_iter().filter(|w| w.window_id() != me).filter_map(|w| w.downcast::<Workspace>()) {
-                    let _ = h.update(cx, |ws, _, cx| { if !ws.store.file_task_busy() && !ws.store.loading() { ws.entries.set(ws.store.list()); ws.sort(); } cx.notify(); });
+                    let _ = h.update(cx, |ws, _, cx| ws.top_renamed(key, cx));
                 }
             }
             Err(e) => {
@@ -195,8 +201,25 @@ impl Workspace {
                     RenameError::Other(e) => crate::localized_format!("文件夹改名失败：{}", "Could not rename the folder: {}", crate::settings::diagnostic(&e)),
                 };
                 self.show_toast_kind(ToastKind::Error, &msg, cx);
+                let row = crate::shared_store::top_row(key);
+                if self.rename.is_none() && self.entries.iter().any(|e| e.id == row) {
+                    self.start_rename(&row, window, cx);
+                    if let Some(field) = self.rename.as_ref().map(|r| r.field.clone()) { field.update(cx, |f, cx| { f.set_text(name, cx); f.select_all_text(cx); }); }
+                }
             }
         }
+        cx.notify();
+    }
+
+    /// Top-level folder `key` has a new name on disk: its row says so now.
+    fn top_renamed(&mut self, key: &str, cx: &mut Context<Self>) {
+        let row = crate::shared_store::top_row(key);
+        if let Some(name) = self.store.top_folders().into_iter().find(|r| r.0 == key).map(|r| r.1) && let Some(e) = self.entries.edit().iter_mut().find(|e| e.id == row) {
+            e.meta.folder = Some(name.clone());
+            e.title = name;
+        }
+        self.sort();
+        if !self.store.file_task_busy() && !self.store.loading() { self.relist(vec![key.to_string()], cx); }
         cx.notify();
     }
 

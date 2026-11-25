@@ -384,6 +384,10 @@ pub struct Store {
     /// FORMAT 5: the library as `load_meta` last took it in or `save_meta`
     /// last wrote it (`None`: since then not known).
     synced: std::cell::RefCell<Option<Synced>>,
+    /// `save_editor_naming_later` while it saves: whether the title asks for
+    /// another file name, which it leaves to `follow_name` (`None`: every
+    /// other save follows the title itself).
+    name_later: std::cell::Cell<Option<bool>>,
 }
 
 /// What `load_meta` would take in again is already in memory while no device
@@ -1393,7 +1397,7 @@ impl Store {
         let v5 = !flat && Self::format_at(&root) >= 5;
         let v6 = v5 && Self::format_at(&root) >= 6;
         let mut store = Store { file_changes: vec![], top_dir: root, index: HashMap::new(), foreign: DiskIndex::new(), trash, flat, warnings, migrated: None, loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), checked: HashMap::new(), writes: Default::default(), batch: Default::default(), view: Default::default(),
-            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string(), place_by_hand: true, v6, seen_trash: Default::default(), purging: Default::default(), synced: Default::default() };
+            v5, me, clock: Default::default(), seen: Default::default(), merged: Default::default(), key: key.to_string(), place_by_hand: true, v6, seen_trash: Default::default(), purging: Default::default(), synced: Default::default(), name_later: Default::default() };
         if flat {
             store.index = load_json(&base.join("index.json"), "文档索引", &mut store.warnings);
             store.flat_folders()?;
@@ -2499,6 +2503,9 @@ impl Store {
         self.checked.extend(from.checked.drain());
         (self.seen, self.merged, self.synced, self.seen_trash) = (take(&mut from.seen), take(&mut from.merged), take(&mut from.synced), take(&mut from.seen_trash));
         self.clock.set(self.clock.get().max(from.clock.get()));
+        // A writer that began before this one (a listing, another window's move) read an older
+        // library: taking it over afterwards would put the old paths back.
+        self.writes.set(self.writes.get() + 1);
     }
 
     /// What `list` parsed last launch, for the files still where they were.
@@ -2615,6 +2622,45 @@ impl Store {
         self.write_doc_against(id, doc, Some(disk), true)
     }
 
+    /// `save_editor` for the window's thread: the text is written, but a file
+    /// name the new title asks for is left to `follow_name` (true then).
+    /// Renaming the file rewrites every link to it, and under a 正文 moves
+    /// the whole folder: seconds for a big one. Until it has followed, the
+    /// document is where it was, under its old name.
+    pub fn save_editor_naming_later(&mut self, id: &str, doc: &Document) -> Result<(Meta, bool)> {
+        self.name_later.set(Some(false));
+        let r = self.save_editor(id, doc);
+        let due = self.name_later.take().unwrap_or(false);
+        r.map(|m| (m, due))
+    }
+
+    /// What `save_editor_naming_later` left: `id`'s file (under a 正文, its
+    /// folder) takes the name of its title, links following. A document's
+    /// title is read from its file, so a save since is never undone; `title`
+    /// is for a Markdown file or 画板, whose title is only its name.
+    pub fn follow_name(&mut self, id: &str, title: &str) -> Result<()> {
+        let _lock = self.begin_write()?;
+        anyhow::ensure!(self.index.contains_key(id), "文档不存在");
+        let title = if self.named_by_file(id) { title.trim().to_string() } else { self.load(id)?.title.text.trim().to_string() };
+        if title.is_empty() { return Ok(()); }
+        self.follow_title(id, &title, true)
+    }
+
+    /// Whether `follow_title` would move something in the library for this
+    /// title. A 本机文件 is renamed beside itself and the old layout only
+    /// notes the name: neither is worth putting off.
+    fn title_moves(&self, id: &str, title: &str, renamed: bool) -> bool {
+        let Some(m) = self.index.get(id).filter(|m| m.path.is_none() && !self.flat) else { return false };
+        let base = file_name_for(title);
+        // As `follow_title`: a name numbered because it was taken is looked at again only on a rename.
+        let moves = |stem: &str| if layout::name_fits(stem, &base) { renamed && stem != base } else { true };
+        let stem = stem_of(base_name(&m.rel));
+        match self.folder_of_note(id) {
+            Some(f) => moves(base_name(&self.index[&f].rel)) || !layout::name_fits(stem, &base),
+            None => moves(stem),
+        }
+    }
+
     /// `save` for callers that already hold the write lock. A new id becomes a
     /// DocxXML file at the top of the library, named after its title.
     fn save_now(&mut self, id: &str, doc: &Document) -> Result<Meta> { self.save_in(id, doc, None) }
@@ -2691,8 +2737,10 @@ impl Store {
         let changed = if named { title != self.markdown_title(id) } else { true };
         // A document's title is in its file: changed when it differs from the one `list` read.
         let renamed = named || self.parsed.get(id).is_some_and(|p| p.2.title != title);
-        if changed && !(named && title.is_empty()) && let Err(e) = self.follow_title(id, &title, renamed) {
-            self.warnings.push(format!("未能按标题重命名文件：{e}"));
+        if changed && !(named && title.is_empty()) {
+            // The window's save leaves the move to `follow_name`, off its thread.
+            if self.name_later.get().is_some() && self.title_moves(id, &title, renamed) { self.name_later.set(Some(true)); }
+            else if let Err(e) = self.follow_title(id, &title, renamed) { self.warnings.push(format!("未能按标题重命名文件：{e}")); }
         }
         let t = now();
         let m = self.index.get_mut(id).ok_or_else(|| anyhow::anyhow!("文档不存在"))?;
@@ -5151,7 +5199,7 @@ mod tests {
         let index = crate::vfs::read(trash.join("index.json")).unwrap();
         crate::vfs::rename(&trash, lib.0.join(".quiet/trash-away")).unwrap();
         crate::vfs::write(&trash, b"").unwrap();
-        let mut s = Store { file_changes: vec![], top_dir: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), checked: HashMap::new(), writes: Default::default(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0), place_by_hand: true, v6: false, seen_trash: Default::default(), purging: Default::default(), synced: Default::default() };
+        let mut s = Store { file_changes: vec![], top_dir: lib.0.clone(), index: HashMap::new(), foreign: DiskIndex::new(), flat: false, migrated: None, trash: serde_json::from_slice(&index).unwrap(), warnings: vec![], loaded: Default::default(), copied: Default::default(), parsed: HashMap::new(), checked: HashMap::new(), writes: Default::default(), batch: Default::default(), view: Default::default(), v5: false, me: device(), clock: Default::default(), seen: Default::default(), merged: Default::default(), key: library_key(&lib.0), place_by_hand: true, v6: false, seen_trash: Default::default(), purging: Default::default(), synced: Default::default(), name_later: Default::default() };
         assert_eq!(s.list_trash().len(), 1);
         assert_eq!(s.trash.len(), 1);
     }
@@ -5506,6 +5554,161 @@ mod tests {
         s.apply_file_history(&changes, false).unwrap();
         assert!(s.abs("新夹/乙.xml").fs_is_file() && !s.abs("乙.xml").fs_exists());
         assert!(crate::vfs::read_to_string(s.abs("丙.xml")).unwrap().contains("href=\"新夹/乙.xml\""));
+    }
+
+    /// 重命名 made off the window's thread (`src/tree_writes.rs`): a writer renames the folder
+    /// by id while the window's library still holds the old paths. Taken over, the library
+    /// opens and saves what is inside where it now is; not taken over, a save still lands
+    /// there, as every write reads the index again under the lock.
+    #[test]
+    fn a_writers_rename_is_followed_by_id() {
+        let lib = Lib::new("rename-writer");
+        let mut s = lib.open();
+        let f = s.create_folder("项目", None).unwrap();
+        let a = s.create_from_in(&doc_with("甲", "一"), Some(&f)).unwrap();
+        let b = s.create_from_in(&doc_with("乙", "二"), Some(&f)).unwrap();
+        s.list();
+        let mut open = s.load_for_edit(&a, false).unwrap();
+        // Renamed twice before the window hears of either: each writer finds the folder by id.
+        let (n, mut w) = (s.writes(), s.tree_writer());
+        let journal = w.track_file_changes();
+        w.rename(&f, "改过").unwrap();
+        assert_eq!(journal.take().len(), 1);
+        let mut w2 = s.tree_writer();
+        w2.rename(&f, "再改").unwrap();
+        let listed = w2.list();
+        assert!(lib.0.join("再改/甲.xml").is_file() && !lib.0.join("项目").exists() && !lib.0.join("改过").exists());
+        assert_eq!(listed.iter().find(|e| e.id == f).unwrap().title, "再改");
+        // The window's library still has the old path …
+        assert_eq!(s.index[&a].rel, "项目/甲.xml");
+        assert!(s.load(&b).is_err());
+        // … yet a save from it lands in the renamed folder (the index is read again under the lock).
+        open.blocks.push(crate::model::Block::text("改名途中写的"));
+        s.save_editor(&a, &open).unwrap();
+        assert!(crate::vfs::read_to_string(lib.0.join("再改/甲.xml")).unwrap().contains("改名途中写的"));
+        assert!(!lib.0.join("项目").exists());
+        // That save counted as a write: the writer is not taken over (`SharedStore::adopt_written` lists instead).
+        assert_ne!(s.writes(), n);
+        let n = s.writes();
+        // Nothing written here since: the next writer is taken over, and a listing begun before it is not.
+        let (mut early, mut w3) = (s.tree_writer(), s.tree_writer());
+        early.list();
+        w3.rename(&f, "定稿").unwrap();
+        w3.list();
+        assert_eq!(s.writes(), n);
+        s.adopt(w3);
+        assert_ne!(s.writes(), n, "a writer from before the rename could still be taken over");
+        assert_eq!(s.index[&b].rel, "定稿/乙.xml");
+        assert_eq!(s.load(&b).unwrap().title.text, "乙");
+        drop(early);
+    }
+
+    /// A rename that cannot be made (the folder above is read-only) leaves the folder, its
+    /// pages and the index as they were: the window puts the old name back from this.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_rename_changes_nothing() {
+        use std::os::unix::fs::PermissionsExt;
+        let lib = Lib::new("rename-fails");
+        let mut s = lib.open();
+        let outer = s.create_folder("外", None).unwrap();
+        let inner = s.create_folder("内", Some(&outer)).unwrap();
+        let a = s.create_from_in(&doc("甲"), Some(&inner)).unwrap();
+        s.list();
+        let dir = lib.0.join("外");
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let mut w = s.tree_writer();
+        let journal = w.track_file_changes();
+        let r = w.rename(&inner, "新名");
+        let listed = w.list();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(r.is_err());
+        assert!(journal.take().is_empty());
+        assert!(lib.0.join("外/内/甲.xml").is_file() && !lib.0.join("外/新名").exists());
+        assert_eq!(listed.iter().find(|e| e.id == inner).unwrap().title, "内");
+        assert_eq!(w.index[&a].rel, "外/内/甲.xml");
+    }
+
+    /// On Windows a folder holding a file another program has open (no share
+    /// for delete) cannot be renamed: the rename fails and leaves everything as
+    /// it was, as when its folder is read-only.
+    #[cfg(windows)]
+    #[test]
+    fn a_rename_held_up_by_an_open_file_changes_nothing() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let lib = Lib::new("rename-held");
+        let mut s = lib.open();
+        let outer = s.create_folder("外", None).unwrap();
+        let inner = s.create_folder("内", Some(&outer)).unwrap();
+        let a = s.create_from_in(&doc("甲"), Some(&inner)).unwrap();
+        s.list();
+        let held = std::fs::OpenOptions::new().read(true).share_mode(0).open(lib.0.join("外/内/甲.xml")).unwrap();
+        let mut w = s.tree_writer();
+        let journal = w.track_file_changes();
+        let r = w.rename(&inner, "新名");
+        let listed = w.list();
+        drop(held);
+        assert!(r.is_err(), "a folder with a file held open was renamed");
+        assert!(journal.take().is_empty());
+        assert!(lib.0.join("外/内/甲.xml").is_file() && !lib.0.join("外/新名").exists());
+        assert_eq!(listed.iter().find(|e| e.id == inner).unwrap().title, "内");
+        assert_eq!(w.index[&a].rel, "外/内/甲.xml");
+        // Let go, the same rename goes through.
+        let mut w = s.tree_writer();
+        w.rename(&inner, "新名").unwrap();
+        assert!(lib.0.join("外/新名/甲.xml").is_file());
+    }
+
+    /// The window's save writes a new title but leaves the file's name (and the links to it)
+    /// to `follow_name`, which reads the title from the file: a later save is never undone.
+    #[test]
+    fn the_editors_save_names_the_file_later() {
+        let lib = Lib::new("name-later");
+        let mut s = lib.open();
+        let a = s.create_from(&doc("甲")).unwrap();
+        let mut other = doc("乙");
+        other.blocks.push(crate::model::Block::text(""));
+        other.blocks[0].text.push("甲", crate::model::Marks { link: Some("甲.xml".into()), ..Default::default() });
+        let b = s.create_from(&other).unwrap();
+        s.list();
+        let mut d = s.load_for_edit(&a, false).unwrap();
+        // The same title: nothing to follow.
+        d.blocks.push(crate::model::Block::text("正文"));
+        assert!(!s.save_editor_naming_later(&a, &d).unwrap().1);
+        s.list();
+        // A new title: written, the file stays where it is.
+        d.title = crate::model::RichText::plain("新题");
+        assert!(s.save_editor_naming_later(&a, &d).unwrap().1);
+        assert!(lib.0.join("甲.xml").is_file() && !lib.0.join("新题.xml").exists());
+        assert!(crate::vfs::read_to_string(lib.0.join("甲.xml")).unwrap().contains("新题"));
+        // Typed on and saved again before the name followed: the name is the title on disk, not the one queued.
+        d.title = crate::model::RichText::plain("新题二");
+        assert!(s.save_editor_naming_later(&a, &d).unwrap().1);
+        let mut w = s.tree_writer();
+        w.follow_name(&a, "新题").unwrap();
+        assert!(lib.0.join("新题二.xml").is_file() && !lib.0.join("甲.xml").exists() && !lib.0.join("新题.xml").exists());
+        assert_eq!(w.load(&b).unwrap().links(), ["新题二.xml"]);
+        // Followed again (the window made it itself meanwhile): nothing changes.
+        w.follow_name(&a, "新题二").unwrap();
+        assert!(lib.0.join("新题二.xml").is_file());
+        // The window's library saves on at the new name without being told.
+        d.blocks.push(crate::model::Block::text("改名后"));
+        assert!(!s.save_editor_naming_later(&a, &d).unwrap().1);
+        assert!(crate::vfs::read_to_string(lib.0.join("新题二.xml")).unwrap().contains("改名后"));
+        // A Markdown file's title is only its name: the save leaves it, `follow_name` is given it.
+        crate::vfs::write(lib.0.join("笔记.md"), "内容\n").unwrap();
+        s.list();
+        let m = s.index.iter().find(|(_, m)| m.rel == "笔记.md").map(|(k, _)| k.clone()).unwrap();
+        let mut md = s.load_for_edit(&m, false).unwrap();
+        md.title = crate::model::RichText::plain("改名笔记");
+        assert!(s.save_editor_naming_later(&m, &md).unwrap().1);
+        assert!(lib.0.join("笔记.md").is_file());
+        s.follow_name(&m, "改名笔记").unwrap();
+        assert!(lib.0.join("改名笔记.md").is_file() && !lib.0.join("笔记.md").exists());
+        // Any other save follows the title itself, as before.
+        d.title = crate::model::RichText::plain("末题");
+        s.save_editor(&a, &d).unwrap();
+        assert!(lib.0.join("末题.xml").is_file());
     }
 
     /// Plain links to files (#67), in DocxXML and in Markdown, follow a move

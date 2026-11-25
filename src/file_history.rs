@@ -56,6 +56,13 @@ impl Workspace {
         self.push_file_record(changes, entries, label)
     }
 
+    /// 重命名 shown before it is written (`rename_ahead`): the record as the rows have it,
+    /// replaced by what was written once it lands (`confirm_tree_history`).
+    pub(crate) fn remember_title(&mut self, old: Entry, new: Option<Entry>, label: &'static str) -> u64 {
+        let change = FileDelta { id: old.id.clone(), before: Some(FileState::of(&old)), after: new.as_ref().map(FileState::of) };
+        self.push_file_record(vec![change], vec![(Some(old), new)], label)
+    }
+
     fn push_file_record(&mut self, changes: Vec<FileDelta>, entries: Vec<(Option<Entry>, Option<Entry>)>, label: &'static str) -> u64 {
         if changes.is_empty() { return 0; }
         self.file_history.next += 1;

@@ -543,7 +543,10 @@ impl Workspace {
     /// Import files into `parent` (a folder; None: the top of 我的文档); with
     /// `open`, the last one opens (a drop on a list stays on the list).
     pub(crate) fn import_paths(&mut self, paths: &[PathBuf], parent: Option<String>, open: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if self.store.file_task_busy() || self.file_history.busy || self.tree_writes_pending() { return; }
+        if self.store.file_task_busy() || self.file_history.busy { return; }
+        // Behind a rename or move on its way: the folder it goes into may be the one moving.
+        let (later, into) = (paths.to_vec(), parent.clone());
+        if self.after_tree_writes(move |w, window, cx| w.import_paths(&later, into, open, window, cx)) { return; }
         let (again, retry) = (paths.to_vec(), parent.clone());
         if !self.save_before(cx, move |w, window, cx| w.import_paths(&again, retry.clone(), open, window, cx)) {
             return;
@@ -779,7 +782,12 @@ impl Workspace {
     /// iCloud folder, called Documents, comes in under the app's name.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn import_folder_as(&mut self, dir: &Path, name: Option<String>, parent: Option<String>, open: bool, then: Option<AfterImport>, window: &mut Window, cx: &mut Context<Self>) {
-        if self.store.file_task_busy() || self.file_history.busy || self.tree_writes_pending() { return; }
+        if self.store.file_task_busy() || self.file_history.busy { return; }
+        if self.tree_writes_pending() {
+            let (later, named, into) = (dir.to_path_buf(), name.clone(), parent.clone());
+            self.after_tree_writes(move |w, window, cx| w.import_folder_as(&later, named, into, open, then, window, cx));
+            return;
+        }
         let held = std::rc::Rc::new(std::cell::Cell::new(then));
         let (again, named, retry, later) = (dir.to_path_buf(), name.clone(), parent.clone(), held.clone());
         if !self.save_before(cx, move |w, window, cx| w.import_folder_as(&again, named.clone(), retry.clone(), open, later.take(), window, cx)) {
@@ -824,7 +832,9 @@ impl Workspace {
     /// 导入思源笔记: a workspace, notebook or `.sy.zip` into `parent`, off the
     /// window's thread on its own store as `import_folder_then` does.
     pub(crate) fn import_siyuan(&mut self, path: &Path, parent: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
-        if self.store.file_task_busy() || self.file_history.busy || self.tree_writes_pending() { return; }
+        if self.store.file_task_busy() || self.file_history.busy { return; }
+        let (later, into) = (path.to_path_buf(), parent.clone());
+        if self.after_tree_writes(move |w, window, cx| w.import_siyuan(&later, into, window, cx)) { return; }
         if !fdl_core::siyuan::recognizes(path) {
             return self.show_toast_kind(ToastKind::Error, crate::settings::tr("这不是思源笔记的工作空间、笔记本文件夹或 .sy.zip 文件", "This is not a SiYuan workspace, notebook folder or .sy.zip file"), cx);
         }

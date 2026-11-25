@@ -409,6 +409,10 @@ pub struct Workspace {
     /// A breadcrumb's "…" open: the crumbs it folds, where its menu hangs.
     pub crumb_menu: Option<(Vec<crate::folders::Crumb>, Point<Pixels>, Anchor)>,
     pub folder_drag: crate::sidebar_drag::SidebarDrag,
+    /// Moves and renames shown before they are on disk (`tree_writes.rs`).
+    pub(crate) tree_writes: crate::tree_writes::TreeWrites,
+    /// This window, for what comes back from the background and needs it.
+    pub(crate) window: AnyWindowHandle,
     /// The search dialog (command-center style) is open.
     pub search_open: bool,
     /// The document being read off the main thread because it was still
@@ -578,10 +582,11 @@ impl Workspace {
                     // Several windows share one top-level folder in front: the one coming forward
                     // puts its own back (its pasted images, its look).
                     if let Some(id) = this.current.clone().or_else(|| this.folder_current.clone()) && this.store.set_active(&id) { cx.defer(crate::settings::top_switched); }
-                    if !this.store.file_task_busy() && !this.store.loading() { this.entries.set(this.store.list()); this.sort(); this.refresh_external(Some(window.window_handle().window_id()), cx); }
+                    // A write of the tree on its way holds the library's lock, and lists it when it lands.
+                    if !this.store.file_task_busy() && !this.store.loading() && !this.tree_writes_pending() { this.entries.set(this.store.list()); this.sort(); this.refresh_external(Some(window.window_handle().window_id()), cx); }
                     crate::update::check_if_stale(cx); cx.notify();
                 }
-                else if !this.store.file_task_busy() { this.cancel_home_drag(cx); this.end_folder_drag(true, cx); this.cancel_shortcut_recording(cx); this.flush(cx); }
+                else if !this.store.file_task_busy() { this.cancel_home_drag(cx); this.end_folder_drag(true, cx); this.cancel_shortcut_recording(cx); if !this.tree_writes_pending() { this.flush(cx); } }
             }),
             cx.subscribe_in(&search, window, |this, _, ev: &TextFieldEvent, window, cx| {
                 match ev {
@@ -606,6 +611,8 @@ impl Workspace {
             cx.on_app_quit(|this, cx| {
                 crate::quick_note::persist(cx);
                 this.flush_view_state();
+                // A rename or move still on its way is made before the app goes.
+                if !this.store.file_task_busy() { this.settle_tree_writes(cx); }
                 if !this.store.file_task_busy() && !this.flush(cx) && let Some(ed) = &this.editor
                     && let Err(error) = this.store.recover_later(&ed.read(cx).core.doc) {
                     crate::logging::write(&format!("Could not preserve unsaved document: {error:#}"));
@@ -634,7 +641,7 @@ impl Workspace {
                 bg.timer(Duration::from_secs(2)).await;
                 let now = shape(dirs(cx)).await;
                 let Ok(path) = this.update(cx, |w, _| w.current.as_ref()
-                    .filter(|id| !w.store.file_task_busy() && w.store.kind(id) == crate::store::DocKind::Doc)
+                    .filter(|id| !w.store.file_task_busy() && !w.tree_writes_pending() && w.store.kind(id) == crate::store::DocKind::Doc)
                     .and_then(|id| w.store.file_path(id))) else { break };
                 let file = bg.spawn(async move {
                     let path = path?;
@@ -650,7 +657,7 @@ impl Workspace {
                 let changed: Vec<String> = now.iter().filter(|(k, s)| last.iter().any(|(l, t)| l == k && t != s)).map(|(k, _)| k.clone()).collect();
                 let reloaded = this.update(cx, |w, cx| {
                     // Not mid-rename: the row under the field would be rebuilt.
-                    if w.rename.is_some() || w.move_dlg.is_some() || w.store.file_task_busy() || w.store.loading() { return false }
+                    if w.rename.is_some() || w.move_dlg.is_some() || w.store.file_task_busy() || w.store.loading() || w.tree_writes_pending() { return false }
                     w.relist(changed, cx)
                 });
                 match reloaded { Ok(true) => last = now, Ok(false) => {}, Err(_) => break }
@@ -710,6 +717,8 @@ impl Workspace {
             place_menu: None,
             crumb_menu: None,
             folder_drag: Default::default(),
+            tree_writes: Default::default(),
+            window: window.window_handle(),
             search_open: false,
             downloading: None,
             status: SaveStatus::Idle,
@@ -858,7 +867,7 @@ impl Workspace {
 
     /// Most recently modified first.
     pub(crate) fn sort(&mut self) {
-        self.reapply_pending_tree_moves();
+        self.reapply_pending_tree_writes();
         self.entries.edit().sort_by(|a, b| b.meta.modified.cmp(&a.meta.modified).then_with(|| a.id.cmp(&b.id)));
         self.sync_note_rows();
     }
@@ -915,6 +924,9 @@ impl Workspace {
             return true;
         }
         let target = id.to_string();
+        // A rename or move on its way: a page it moves opens once it has landed (its file is
+        // not where the library last saw it), and so does any page while this one has to be saved first.
+        if (self.unsaved || self.awaits_tree_write(id)) && { let later = target.clone(); self.after_tree_writes(move |w, window, cx| w.open(&later, window, cx)) } { return false; }
         if !self.save_before(cx, move |w, window, cx| {
             w.open(&target, window, cx);
         }) {
@@ -1079,7 +1091,9 @@ impl Workspace {
 
     /// Move documents to the trash; if the open one goes, open the next.
     pub fn delete_docs(&mut self, ids: &[String], window: &mut Window, cx: &mut Context<Self>) {
-        if self.store.file_task_busy() || self.file_history.busy || self.tree_writes_pending() { return; }
+        if self.store.file_task_busy() || self.file_history.busy { return; }
+        let later = ids.to_vec();
+        if self.after_tree_writes(move |w, window, cx| w.delete_docs(&later, window, cx)) { return; }
         // A top-level folder's row is never deleted this way: it leaves the sidebar (从侧栏移除).
         let ids: Vec<String> = ids.iter().filter(|id| crate::shared_store::top_of_row(id).is_none()).cloned().collect();
         let ids = &ids[..];
@@ -1318,29 +1332,16 @@ impl Workspace {
             return;
         }
         // A document with children is renamed through its 正文, which renames the folder too.
+        let row = r.id.clone();
         let r = Rename { id: self.note_or(&r.id), ..r };
         if commit && old.is_some_and(|o| o != title) {
             if let Some(peer) = self.document_peers(&r.id, window, cx).first() {
                 peer.update(cx, |e, cx| e.set_title(&title, cx));
             } else {
-                if !self.flush(cx) { return; }
-                let file_before = self.store.track_file_changes();
-                match self.store.rename(&r.id, &title) {
-                    Ok(meta) => {
-                        if let Some(e) = self.entries.edit().iter_mut().find(|e| e.id == r.id) {
-                            e.title = title.clone();
-                            e.meta = meta;
-                        }
-                        // The folder of a 正文 was renamed with it: its path, and those inside, changed.
-                        if self.entries.iter().any(|e| e.note.as_deref() == Some(r.id.as_str())) { self.entries.set(self.store.list()); }
-                        self.sort();
-                        if self.current.as_deref() == Some(r.id.as_str()) && let Some(ed) = &self.editor {
-                            ed.update(cx, |e, cx| e.receive_file_title(&title, cx));
-                        }
-                        self.remember_files(file_before, crate::settings::tr("重命名", "Rename"));
-                    }
-                    Err(e) => self.status = SaveStatus::Failed(crate::localized_format!("重命名失败：{}", "Could not rename document: {}", crate::settings::diagnostic(&e.to_string()))),
-                }
+                // The open document's words are on disk before its file is written with the new title.
+                if self.current.as_deref() == Some(r.id.as_str()) && !self.flush(cx) { return; }
+                // Shown now, written off this thread (`tree_writes.rs`); a failure comes back to this field.
+                self.rename_ahead(&row, &r.id, &title, cx);
             }
         }
         if refocus
@@ -1425,9 +1426,7 @@ impl Workspace {
         }
         self.save_task = Some(cx.spawn_in(window, async move |this, cx| {
             cx.background_executor().timer(delay).await;
-            while this.update(cx, |w, _| w.store.file_task_busy()).unwrap_or(false) {
-                cx.background_executor().timer(Duration::from_millis(50)).await;
-            }
+            Self::tree_writes_landed(&this, cx).await;
             let _ = this.update(cx, |w, cx| w.flush(cx));
         }));
         cx.notify();
@@ -1449,7 +1448,7 @@ impl Workspace {
 
     /// The current window can already be in a GPUI input callback. update
     /// skips windows on the stack, whereas reading their top-level folder would panic.
-    fn other_workspaces(cx: &mut Context<Self>) -> Vec<Entity<Self>> {
+    pub(crate) fn other_workspaces(cx: &mut Context<Self>) -> Vec<Entity<Self>> {
         let me = cx.entity_id();
         cx.windows().into_iter().filter_map(|h| h.update(cx, |root, _, _| root.downcast::<Self>().ok()).ok().flatten())
             .filter(|peer| peer.entity_id() != me).collect()
@@ -1457,7 +1456,7 @@ impl Workspace {
 
     /// `on_stack`: the window being updated, if any (it can't be read now; it is this one).
     fn refresh_external(&mut self, on_stack: Option<gpui::WindowId>, cx: &mut Context<Self>) {
-        if self.preview.is_some() || self.store.file_task_busy() || matches!(self.confirm, Some(Confirm::SaveFailed)) { return }
+        if self.preview.is_some() || self.store.file_task_busy() || self.tree_writes_pending() || matches!(self.confirm, Some(Confirm::SaveFailed)) { return }
         let Some(id) = self.current.clone() else { return };
         if !self.unsaved { self.follow_moved_links(cx); }
         if self.store.kind(&id) != crate::store::DocKind::Doc { return }
@@ -1535,11 +1534,15 @@ impl Workspace {
             self.unsaved = false;
             return true;
         };
+        // A rename or move on its way lands first: this save then goes where the file is.
+        self.settle_tree_writes(cx);
         self.follow_moved_links(cx);
         let doc = &ed.read(cx).core.doc;
         let (title, icon, body, reminders, links) = (doc.title.text.clone(), doc.icon.clone(), doc.plain_text(), doc.reminders(), doc.doc_links());
-        match self.store.with(Some(&id), |s| s.save_editor(&id, doc)) {
-            Ok(meta) => {
+        match self.store.with(Some(&id), |s| s.save_editor_naming_later(&id, doc)) {
+            Ok((meta, name_due)) => {
+                // The file's name follows the new title off this thread (links to it are rewritten, a 正文's folder moves).
+                if name_due { self.queue_tree_write(crate::tree_writes::TreeWrite::Rename(crate::tree_writes::PendingRename { id: id.clone(), title: title.trim().to_string(), gesture: None }), cx); }
                 if let Some(e) = self.entries.edit().iter_mut().find(|e| e.id == id) {
                     e.title = title;
                     e.icon = icon;
