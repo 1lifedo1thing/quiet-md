@@ -1147,4 +1147,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("在这台电脑上找到", "Encontrado en este ordenador"),
     ("从其他应用导入", "Importar desde otra app"),
     ("笔记来自哪个应用？导入的是副本，原来的文件不会被改动。", "¿En qué app están tus notas? Se importan copias; tus archivos no cambian."),
+    ("窗口保持在最前", "Mantener la ventana delante"),
+    ("窗口会一直显示在其他应用的窗口之上", "Se queda por encima de las ventanas de otras apps"),
 ];

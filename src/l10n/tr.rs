@@ -1199,4 +1199,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("在这台电脑上找到", "Bu bilgisayarda bulundu"),
     ("从其他应用导入", "Başka Bir Uygulamadan İçe Aktar"),
     ("笔记来自哪个应用？导入的是副本，原来的文件不会被改动。", "Notlarınız hangi uygulamada? İçe aktarılanlar kopyadır; dosyalarınız olduğu gibi kalır."),
+    ("窗口保持在最前", "Pencereyi önde tut"),
+    ("窗口会一直显示在其他应用的窗口之上", "Diğer uygulamaların pencerelerinin üstünde kalır"),
 ];

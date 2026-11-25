@@ -53,6 +53,7 @@ mod native_header;
 #[path = "native_header_fallback.rs"]
 mod native_header;
 mod mermaid;
+mod on_top;
 mod printing;
 mod search;
 mod siyuan;
