@@ -2499,6 +2499,7 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "货币" => "Currency",
         "超链接" => "URL",
         "超高" => "Extra tall",
+        "适应内容" => "Fit to content",
         "输入名字后回车添加" => "Type a name and press Enter",
         "输入名称后回车新建选项" => "Type a name and press Enter to create an option",
         "过去 30 天内" => "Past 30 days",

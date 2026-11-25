@@ -314,12 +314,14 @@ impl Record {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum RowHeight { #[default] Short, Medium, Tall, ExtraTall }
+/// `Fit`: each row as tall as its content needs at the columns' widths (the grid measures it; `px` is
+/// its one-line height).
+pub enum RowHeight { #[default] Short, Medium, Tall, ExtraTall, Fit }
 
 impl RowHeight {
-    pub const ALL: &'static [RowHeight] = &[RowHeight::Short, RowHeight::Medium, RowHeight::Tall, RowHeight::ExtraTall];
-    pub fn px(self) -> f32 { match self { RowHeight::Short => 36., RowHeight::Medium => 44., RowHeight::Tall => 88., RowHeight::ExtraTall => 128. } }
-    pub fn label(self) -> &'static str { match self { RowHeight::Short => "低", RowHeight::Medium => "中等", RowHeight::Tall => "高", RowHeight::ExtraTall => "超高" } }
+    pub const ALL: &'static [RowHeight] = &[RowHeight::Short, RowHeight::Medium, RowHeight::Tall, RowHeight::ExtraTall, RowHeight::Fit];
+    pub fn px(self) -> f32 { match self { RowHeight::Short => 36., RowHeight::Medium => 44., RowHeight::Tall => 88., RowHeight::ExtraTall => 128., RowHeight::Fit => 36. } }
+    pub fn label(self) -> &'static str { match self { RowHeight::Short => "低", RowHeight::Medium => "中等", RowHeight::Tall => "高", RowHeight::ExtraTall => "超高", RowHeight::Fit => "适应内容" } }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]

@@ -266,7 +266,7 @@ pub struct TableView {
     /// Each shown record's place in `result.records`, and that place's row in `result.rows` (`usize::MAX`: folded away).
     pub(crate) order: Rc<HashMap<RecId, usize>>,
     pub(crate) row_of: Rc<Vec<usize>>,
-    result_key: (u64, TableId, ViewId, i64),
+    result_key: (u64, TableId, ViewId, i64, u64),
     pub(crate) sel: Option<Sel>,
     pub(crate) rows_sel: HashSet<RecId>,
     /// Selected columns (header clicks; ⇧ extends, ⌘ adds or takes away), in the order picked.
@@ -295,6 +295,8 @@ pub struct TableView {
     /// Rows on their way to their places (dragged rows' neighbours making room, the dropped ones going
     /// in), each a spring on its top in the list's coordinates, as the sidebar's rows; and the gap's.
     pub(crate) slide: std::cell::RefCell<SlideFx>,
+    /// 适应内容: each cell's lines as last measured, by its text and its column's width (`grid::fit_heights`).
+    pub(crate) fit_lines: HashMap<CellId, (u64, u32, u8)>,
     _refresh: Task<()>,
     _subs: Vec<Subscription>,
 }
@@ -351,11 +353,11 @@ impl TableView {
         };
         TableView {
             state, focus: cx.focus_handle(), table, view, full, standalone, height: shown.height,
-            result: Default::default(), tops: Default::default(), order: Default::default(), row_of: Default::default(), result_key: (u64::MAX, 0, 0, 0),
+            result: Default::default(), tops: Default::default(), order: Default::default(), row_of: Default::default(), result_key: (u64::MAX, 0, 0, 0, 0),
             sel: None, rows_sel: HashSet::new(), col_sel: vec![], editing: None, input, aux, scroll: point(0., 0.),
             body: Rc::new(Cell::new(Bounds::default())), drag: None, popup: None, dropdown: None, rename: None,
             expanded: None, record: Default::default(), notes: Default::default(), find: None, find_input,
-            grip_hover: None, slide: Default::default(), _refresh: refresh, _subs: subs,
+            grip_hover: None, slide: Default::default(), fit_lines: HashMap::new(), _refresh: refresh, _subs: subs,
         }
     }
 
@@ -393,14 +395,18 @@ impl TableView {
         if t.view(self.view).is_none() { self.view = t.views.first().map_or(0, |v| v.id); }
         let Some(v) = t.view(self.view) else { return };
         let today = field::today();
-        let key = (st.doc.rev, self.table, self.view, today);
+        // 适应内容: the rows are laid out again when a column's width changes too (as saved: not while dragged)
+        let fit = v.opts.row_height == RowHeight::Fit;
+        let widths = if fit { use std::hash::{Hash, Hasher}; let mut h = std::collections::hash_map::DefaultHasher::new(); for f in t.visible_fields(v) { f.id.hash(&mut h); t.width(v, f.id).to_bits().hash(&mut h); } h.finish() | 1 } else { 0 };
+        let key = (st.doc.rev, self.table, self.view, today, widths);
         if key != self.result_key {
             let result = query::run(base, t, v);
             let mut tops = Vec::with_capacity(result.rows.len() + 1);
             let (mut y, h) = (0., row_px(v.opts.row_height));
-            for r in &result.rows {
+            let fitted = fit.then(|| grid::fit_heights(&mut self.fit_lines, base, t, v, &result, cx));
+            for (ri, r) in result.rows.iter().enumerate() {
                 tops.push(y);
-                y += match r { query::Row::Group(_) => group_h(), query::Row::Record(_) => h };
+                y += match r { query::Row::Group(_) => group_h(), query::Row::Record(_) => fitted.as_ref().map_or(h, |f| f[ri]) };
             }
             tops.push(y);
             let order: HashMap<RecId, usize> = result.records.iter().enumerate().map(|(p, i)| (t.records[*i].id, p)).collect();

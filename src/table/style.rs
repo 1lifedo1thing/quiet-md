@@ -43,7 +43,8 @@ pub const GUTTER_W: f32 = 56.;
 /// Field header row (Vega's table head, h-10).
 pub fn header_h() -> f32 { geo().table_head }
 /// A row's height: the view's choice, the two short ones Vega's (36 / 44).
-pub fn row_px(h: RowHeight) -> f32 { match h { RowHeight::Short => geo().row_short, RowHeight::Medium => geo().row_medium, h => h.px() } }
+/// A row's height at `h` (适应内容: its one-line height, each row measured beyond that, `grid::fit_heights`).
+pub fn row_px(h: RowHeight) -> f32 { match h { RowHeight::Short | RowHeight::Fit => geo().row_short, RowHeight::Medium => geo().row_medium, h => h.px() } }
 /// Rows up to this tall hold one line, centred; taller ones wrap from the top.
 pub fn one_line_h() -> f32 { geo().row_medium }
 /// The trailing "+" (新增字段) column.

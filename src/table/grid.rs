@@ -46,6 +46,9 @@ impl TableView {
     /// Room left under the last row: none in a page, where the block is exactly as tall as its rows.
     fn slack(&self) -> f32 { if self.full { 8. } else { 0. } }
 
+    /// Row `ri`'s own height (适应内容 rows differ; a group's line too).
+    pub(crate) fn row_h_at(&self, ri: usize) -> f32 { match (self.tops.get(ri), self.tops.get(ri + 1)) { (Some(a), Some(b)) => b - a, _ => 0. } }
+
     fn content_h(&self, _row_h: f32) -> f32 { self.tops.last().copied().unwrap_or(0.) + add_row_h() }
 
     pub(crate) fn clamp_scroll(&mut self, cols: &Cols, row_h: f32) {
@@ -79,9 +82,9 @@ impl TableView {
         let row_h = row_px(v.opts.row_height);
         let s = self.view_size();
         if let Some(row) = self.order.get(&cell.0).and_then(|p| self.row_of.get(*p)).filter(|r| **r != usize::MAX) {
-            let top = self.tops[*row];
+            let (top, h) = (self.tops[*row], self.row_h_at(*row));
             if top < self.scroll.y { self.scroll.y = top; }
-            if top + row_h > self.scroll.y + s.height { self.scroll.y = top + row_h - s.height; }
+            if top + h > self.scroll.y + s.height { self.scroll.y = top + h - s.height; }
         }
         if let Some(c) = cols.index(cell.1).filter(|c| *c >= cols.frozen) {
             let (l, r) = (cols.x[c], cols.x[c] + cols.w[c]);
@@ -143,7 +146,7 @@ impl TableView {
         if row == usize::MAX { return None; }
         let b = self.body.get();
         let x = if c < cols.frozen { cols.x[c] } else { cols.x[c] - self.scroll.x };
-        Some((point(b.origin.x + px(x), b.origin.y + px(self.tops[row] - self.scroll.y)), cols.w[c], row_px(v.opts.row_height)))
+        Some((point(b.origin.x + px(x), b.origin.y + px(self.tops[row] - self.scroll.y)), cols.w[c], self.row_h_at(row)))
     }
 
     /// The cell under a window position, clamped to the nearest record row and column (dragging past the edges).
@@ -310,8 +313,16 @@ pub(crate) fn mouse_move(v: &mut TableView, ev: &MouseMoveEvent, window: &mut Wi
             if (py_ - *y0).abs() > 4. { *moved = true; }
             // the dragged rows' first top, in rows of the list without them: the nearest place is the gap's
             let first = py_ - f32::from(body.origin.y) + v.scroll.y - *off;
-            let rest = result.records.len() - ids.iter().filter(|r| v.order.contains_key(*r)).count();
-            *to = ((first / row_px(view.opts.row_height)) + 0.5).floor().clamp(0., rest as f32) as usize;
+            // the rows left before the gap: those whose middle is above the dragged rows' first top
+            let (mut y, mut n) = (0f32, 0usize);
+            for (p, i) in result.records.iter().enumerate() {
+                if ids.contains(&t.records[*i].id) { continue }
+                let h = v.row_of.get(p).copied().filter(|r| *r != usize::MAX).map_or(0., |r| v.row_h_at(r));
+                if y + h / 2. > first { break }
+                y += h;
+                n += 1;
+            }
+            *to = n;
         }
     }
     v.drag = Some(drag);
@@ -357,11 +368,11 @@ fn mouse_up_inner(v: &mut TableView, window: &mut Window, cx: &mut Context<Table
             // the dragged rows glide in from where they were let go
             {
                 let first = y - f32::from(v.body.get().origin.y) + v.scroll.y - off;
-                let row_h = { let st = v.state.read(cx); st.doc.base.table(tid).and_then(|t| t.view(v.view)).map_or(row_px(RowHeight::Short), |view| row_px(view.opts.row_height)) };
                 let mut fx = v.slide.borrow_mut();
                 let mut placed: Vec<(usize, RecId)> = ids.iter().filter_map(|r| v.order.get(r).map(|p| (*p, *r))).collect();
                 placed.sort();
-                for (k, (_, r)) in placed.into_iter().enumerate() { fx.rows.insert(r, crate::sidebar_drag::Spring::new([first + k as f32 * row_h])); }
+                let mut y = first;
+                for (p, r) in placed { fx.rows.insert(r, crate::sidebar_drag::Spring::new([y])); y += v.row_of.get(p).copied().filter(|r| *r != usize::MAX).map_or(0., |ri| v.row_h_at(ri)); }
             }
             let target = {
                 let st = v.state.read(cx);
@@ -558,7 +569,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             let set: HashSet<RecId> = ids.iter().copied().collect();
             let mut at: Vec<usize> = ids.iter().filter_map(|r| v.order.get(r).copied()).collect();
             at.sort_unstable();
-            Some((set, at, *to, y - f32::from(v.body.get().origin.y) - off))
+            // the rows' own heights (适应内容 rows differ): the dragged ones stacked, and the rest from the top
+            let h_at = |p: usize| v.row_of.get(p).copied().filter(|r| *r != usize::MAX).map_or(row_h, |r| v.row_h_at(r));
+            let mut lifted_tops = vec![0f32];
+            for p in &at { lifted_tops.push(lifted_tops.last().unwrap() + h_at(*p)); }
+            let mut rest_tops = vec![0f32];
+            for p in 0..v.result.records.len() { if at.binary_search(&p).is_err() { rest_tops.push(rest_tops.last().unwrap() + h_at(p)); } }
+            Some((set, at, *to, y - f32::from(v.body.get().origin.y) - off, lifted_tops, rest_tops))
         }
         _ => None,
     };
@@ -569,13 +586,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
     // the rows to lay out: those in sight, wherever they are going or coming from. Only these get
     // springs, so a long table costs no more than a short one.
     let visit: Vec<usize> = match &lift {
-        Some((set, at, _, ghost)) => {
+        Some((set, at, _, ghost, lifted_tops, _)) => {
             // a row moves by at most the dragged ones' count: the window in sight, widened by that
             let k = at.len();
-            let (lo, hi) = (((sy / row_h).floor() as usize).saturating_sub(k + 1), ((((sy + vs.height) / row_h).ceil() as usize) + k + 1).min(n_rows));
+            let (lo, hi) = (v.tops.partition_point(|y| *y < sy).saturating_sub(k + 1), (v.tops.partition_point(|y| *y < sy + vs.height) + k + 1).min(n_rows));
             let mut r: Vec<usize> = (lo..hi).filter(|ri| !matches!(&v.result.rows[*ri], query::Row::Record(i) if set.contains(&t.records[*i].id))).collect();
             // the dragged ones in sight, riding the pointer
-            r.extend(at.iter().enumerate().filter(|(j, _)| { let y = ghost + *j as f32 * row_h; y > -row_h && y < vs.height }).filter_map(|(_, p)| v.row_of.get(*p).copied().filter(|r| *r != usize::MAX)));
+            r.extend(at.iter().enumerate().filter(|(j, _)| { let y = ghost + lifted_tops[*j]; y + (lifted_tops[*j + 1] - lifted_tops[*j]) > 0. && y < vs.height }).filter_map(|(_, p)| v.row_of.get(*p).copied().filter(|r| *r != usize::MAX)));
             r
         }
         None => {
@@ -586,13 +603,13 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         }
     };
     match &lift {
-        Some((_, at, to, _)) => {
-            let y = *to as f32 * row_h;
+        Some((_, _, to, _, lifted_tops, rest_tops)) => {
+            let y = rest_tops[(*to).min(rest_tops.len() - 1)];
             let gap = fx.gap.get_or_insert_with(|| crate::sidebar_drag::Spring::new([y]));
             gap.target = [y];
             sliding |= gap.step(dt);
             let gap_top = gap.p[0] - sy;
-            body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(at.len() as f32 * row_h)).bg(Theme::fill_hover()).border_b_1().border_color(line()));
+            body = body.child(div().absolute().left_0().w(px((cols.total - sx).max(cols.frozen_w))).top(px(gap_top)).h(px(*lifted_tops.last().unwrap())).bg(Theme::fill_hover()).border_b_1().border_color(line()));
         }
         None => fx.gap = None,
     }
@@ -600,18 +617,18 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         let mut top = v.tops[ri] - sy;
         // the place it shows at, numbered so while rows are dragged
         let mut place = None;
-        if let (Some((set, at, to, ghost)), query::Row::Record(i)) = (&lift, &v.result.rows[ri]) {
+        if let (Some((set, at, to, ghost, lifted_tops, rest_tops)), query::Row::Record(i)) = (&lift, &v.result.rows[ri]) {
             let rid = t.records[*i].id;
             let pos = v.order.get(&rid).copied().unwrap_or(ri);
             if set.contains(&rid) {
                 let j = at.partition_point(|p| *p < pos);
-                top = ghost + j as f32 * row_h;
+                top = ghost + lifted_tops[j];
                 place = Some(to + j);
             } else {
                 // its place among the rows left (those dragged from above it are gone), the gap's rows after it
                 let left = pos - at.partition_point(|p| *p < pos);
                 let shown = left + if left >= *to { at.len() } else { 0 };
-                let target = shown as f32 * row_h;
+                let target = rest_tops[left.min(rest_tops.len() - 1)] + if left >= *to { *lifted_tops.last().unwrap() } else { 0. };
                 let s = match fx.rows.get_mut(&rid) {
                     Some(s) => s,
                     // in sight before or after: on a spring from where it was; else straight to its place
@@ -629,6 +646,7 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             sliding |= s.step(dt);
             top = s.p[0] - sy;
         }
+        let row_h = v.row_h_at(ri);
         if top + row_h < 0. || top > vs.height { continue }
         match &v.result.rows[ri] {
             query::Row::Group(g) => body = body.child(group_row(v, t, g, top, cols.frozen_w, cx)),
@@ -652,8 +670,8 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                             let ids: Vec<RecId> = if v.rows_sel.contains(&rid) { v.rows_sel.iter().copied().collect() } else { vec![rid] };
                             let y = f32::from(ev.position.y);
                             // the rows ride the pointer stacked in their order, this one where it was pressed
-                            let above = ids.iter().filter(|r| v.order.get(r).is_some_and(|p| *p < pos)).count() as f32;
-                            let off = y - f32::from(v.body.get().origin.y) + v.scroll.y - top - v.scroll.y + above * row_h;
+                            let above: f32 = ids.iter().filter_map(|r| v.order.get(r).copied()).filter(|p| *p < pos).map(|p| v.row_of.get(p).copied().filter(|r| *r != usize::MAX).map_or(0., |r| v.row_h_at(r))).sum();
+                            let off = y - f32::from(v.body.get().origin.y) + v.scroll.y - top - v.scroll.y + above;
                             v.drag = Some(Drag::RowMove { ids, to: pos, y0: y, y, off, moved: false });
                         }))))
                     // its number at rest, across the whole start; hovered, the handle, the checkbox and 展开 (a ticked one keeps its box)
@@ -687,7 +705,9 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                         // a range is filled, all of it, and not framed (`cursor_ring`)
                         .when(in_sel && multi, |d| d.bg(range_bg()))
                         .when(editing, |d| d.bg(Theme::bg_body()))
-                        .child(div().w_full().h(px(row_h.min(one_line_h()) - 1.)).flex().items_center().when(row_h > one_line_h(), |d| d.h_full().items_start().py(px(10.))).child(content))
+                        .child(div().w_full().h(px(row_h.min(one_line_h()) - 1.)).flex().items_center().when(row_h > one_line_h(), |d| d.h_full().items_start().py(px(10.)))
+                            // a taller row shows whole lines only, the rest cut at a line's end (not halfway through the next)
+                            .child(div().w_full().when(row_h > one_line_h(), |d| d.max_h(px(((row_h - 20.) / 20.).floor() * 20.)).overflow_hidden()).child(content)))
                         .when(link.is_some(), |d| { use crate::ui::TipExt; d.tip("打开链接", Some(&crate::settings::label("⌘ + 点击"))) })
                         .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
                             if ev.modifiers.platform && let Some(url) = &link { crate::editor::open_link(cx, url); return; }
@@ -763,14 +783,14 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
             .child(body.when(empty, |d| d.child(div().absolute().left_0().right_0().top(px(48.)).flex().justify_center().text_color(Theme::text_placeholder()).child(crate::settings::label("没有符合筛选条件的记录")))))
             // the frame only while the grid has the keys (or a cell, menu or list of its own is open):
             // with the record panel, a note or another pane in front, no cell is about to take them
-            .children(cursor_ring(v, &cols, row_h).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
+            .children(cursor_ring(v, &cols).filter(|_| v.focus.is_focused(window) || v.editing.is_some() || v.popup.is_some() || v.dropdown.is_some()))
             // scrolled sideways: the frozen columns cast a shadow over the ones passing under them
             .when(sx > 0.5, |d| d.child(div().absolute().top_0().bottom_0().left(px(cols.frozen_w)).right_0().overflow_hidden()
                 // cast by a block just inside the edge, only what falls past it shown
                 .child(div().absolute().top_0().bottom_0().left(px(-24.)).w(px(24.)).bg(Theme::bg_body()).shadow(crate::design::shadow::sticky()))))
             .children(col_edge(v, &cols))
             .children(col_grips(v, &cols, &fields, cx))
-            .children(edit_overlay(v, &cols, &fields, row_h))
+            .children(edit_overlay(v, &cols, &fields))
             .children(scrollbars(v, max_x, max_y, vs, cols.frozen_w, inline, cx)))
         .on_scroll(cx.listener(move |v, ev: &ScrollEvent, _, cx| {
             let d = ev.delta.pixel_delta(px(20.));
@@ -844,7 +864,7 @@ fn group_row(v: &TableView, t: &Table, g: &query::Group, top: f32, frozen_w: f32
 /// is more than one cell, the same ring on the active cell, laid where a one-cell selection's would be:
 /// on the range's edge the two are one line, not two of different widths. BoardUI's grid rings only the active cell;
 /// the frame round the range is the spreadsheet convention, in its colour.
-fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
+fn cursor_ring(v: &TableView, cols: &Cols) -> Option<AnyElement> {
     let s = v.sel?;
     let (r0, r1, c0, c1) = v.sel_rect(cols)?;
     let row = |pos: usize| v.row_of.get(pos).copied().filter(|r| *r != usize::MAX);
@@ -859,18 +879,19 @@ fn cursor_ring(v: &TableView, cols: &Cols, row_h: f32) -> Option<AnyElement> {
     // a range is shown by its fill alone; only a cell picked by itself is framed
     if r0 != r1 || c0 != c1 || s.anchor != s.head { return None }
     Some(div().absolute().left(px(cx0)).top(px(cy0)).right_0().bottom_0().overflow_hidden()
-        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + row_h, RING_W)).into_any_element())
+        .child(ring_at(left(c0), left(c1) + cols.w[c1], y(top), y(bottom) + v.row_h_at(bottom), RING_W)).into_any_element())
 }
 
 /// A text cell being edited, in place: the cell itself, its width the column's, grown down over the
 /// rows below as the text needs (to `EDIT_MAX_H`, then scrolling), and back to its row's height once
 /// saved. Framed as the active cell is.
-fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field], row_h: f32) -> Option<AnyElement> {
+fn edit_overlay(v: &TableView, cols: &Cols, fields: &[&Field]) -> Option<AnyElement> {
     let cell = v.editing?;
     let ci = cols.index(cell.1)?;
     if !fields.get(ci).is_some_and(|f| f.ty.textual()) { return None }
     let row = *v.row_of.get(*v.order.get(&cell.0)?)?;
     if row == usize::MAX { return None }
+    let row_h = v.row_h_at(row);
     let scrolled = ci >= cols.frozen;
     let x = cols.x[ci] - if scrolled { v.scroll.x } else { 0. };
     if scrolled && x + cols.w[ci] <= cols.frozen_w { return None }
@@ -918,6 +939,46 @@ fn href(ty: FieldType, s: &str) -> String {
     if ty == FieldType::Email { if s.starts_with("mailto:") { s.to_string() } else { format!("mailto:{s}") } }
     else if s.contains("://") || s.starts_with("mailto:") { s.to_string() } else { format!("https://{s}") }
 }
+
+/// 适应内容: each row's height in `result`'s rows (a group's is left 0), as tall as its tallest text
+/// needs wrapped at its column's width: 20 a line and 10 above and below, at least one line's row,
+/// at most `FIT_LINES` lines. A cell's lines are kept by its text and width (`cache`), so only cells
+/// whose text or column changed are measured again.
+pub(crate) fn fit_heights(cache: &mut HashMap<CellId, (u64, u32, u8)>, base: &Base, t: &Table, view: &View, result: &query::ViewResult, cx: &App) -> Vec<f32> {
+    use std::hash::{Hash, Hasher};
+    let fields: Vec<(&Field, f32)> = t.visible_fields(view).into_iter().filter(|f| f.ty.textual()).map(|f| (f, (t.width(view, f.id) - 2. * cell_pad_x()).max(8.))).collect();
+    let mut wrap = cx.text_system().line_wrapper(font(crate::theme::DOC_UI_FONT), px(text_sm()));
+    let one = row_px(RowHeight::Fit);
+    result.rows.iter().map(|r| {
+        let query::Row::Record(i) = r else { return 0. };
+        let rec = &t.records[*i];
+        let mut lines = 1u8;
+        for (f, w) in &fields {
+            let text = field::display_in(base, f, rec.get(f.id));
+            if text.is_empty() { continue }
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            text.hash(&mut h);
+            let (hash, wb) = (h.finish(), w.to_bits());
+            let n = match cache.get(&(rec.id, f.id)) {
+                Some((th, cw, n)) if *th == hash && *cw == wb => *n,
+                _ => {
+                    let mut n = 0usize;
+                    for para in text.split('\n') {
+                        n += 1 + wrap.wrap_line(&[LineFragment::text(para)], px(*w), IndentAdjustment::NoIndent).count();
+                        if n >= FIT_LINES { break }
+                    }
+                    let n = n.min(FIT_LINES) as u8;
+                    cache.insert((rec.id, f.id), (hash, wb, n));
+                    n
+                }
+            };
+            lines = lines.max(n);
+        }
+        if lines <= 1 { one } else { (lines as f32 * 20. + 20.).max(one) }
+    }).collect()
+}
+/// 适应内容's tallest row, in lines (the rest of a longer text is in its cell's editor and the record).
+const FIT_LINES: usize = 8;
 
 /// `cols` with column `d` moved to place `n`, the lefts laid out again.
 fn relaid(cols: &Cols, d: usize, n: usize) -> Cols {
