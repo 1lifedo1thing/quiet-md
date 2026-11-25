@@ -80,7 +80,7 @@ pub fn kind_icon(k: &BlockKind) -> &'static str {
             4 => "heading-4",
             5 => "heading-5",
             6 => "heading-6",
-            _ => "heading",
+            _ => "heading-6",
         },
         BlockKind::Bullet => "list",
         BlockKind::Ordered { .. } => "list-ordered",
@@ -95,8 +95,8 @@ pub fn kind_icon(k: &BlockKind) -> &'static str {
         BlockKind::Raw { .. } => "file-text",
         BlockKind::SubPageList => "list-tree",
         BlockKind::Countdown(_) => "timer",
-        BlockKind::Board(_) => "palette",
-        BlockKind::DataTable(_) => "table",
+        BlockKind::Board(_) => "board",
+        BlockKind::DataTable(_) => "doc-table",
         BlockKind::File(_) => "paperclip",
     }
 }
