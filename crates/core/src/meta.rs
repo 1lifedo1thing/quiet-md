@@ -101,8 +101,11 @@ pub(super) struct Won { pub v: Value, pub ts: u64, pub dev: String }
 /// nothing changed (`refresh`). `read`: which read this is, a number no
 /// other read had, so the store can tell it has taken in what this one found.
 /// `last`: each file's device and latest stamp, by its name in `.quiet/meta/`.
+/// `held`: the (item, field)s another device than the winner's still holds
+/// an older value for, in its files: the winner, a `null` above all, keeps
+/// it down until that device drops it (`clean`).
 #[derive(Clone, Debug, Default)]
-pub(super) struct Merged { pub items: BTreeMap<String, BTreeMap<String, Won>>, pub max: u64, files: Option<Files>, pub read: u64, last: BTreeMap<String, (String, u64)> }
+pub(super) struct Merged { pub items: BTreeMap<String, BTreeMap<String, Won>>, pub max: u64, files: Option<Files>, pub read: u64, last: BTreeMap<String, (String, u64)>, held: BTreeSet<(String, String)> }
 
 static READS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -263,6 +266,7 @@ pub(super) fn refresh(root: &Path, me: &str, merged: &mut Merged, warnings: &mut
     match merged.files.as_ref().and_then(|was| changed_shards(root, was, &now)) {
         Some(shards) => {
             merged.items.retain(|id, _| !shards.contains(&shard_of(id)));
+            merged.held.retain(|(id, _)| !shards.contains(&shard_of(id)));
             merged.last.retain(|rel, _| !matches!(kind_of(rel), Kind::Shard(Some(n)) if shards.contains(&n)));
             for (rel, ..) in &now {
                 if let Kind::Shard(Some(n)) = kind_of(rel) && shards.contains(&n) { read_shard(root, me, rel, merged, warnings); }
@@ -303,10 +307,13 @@ impl Merged {
     fn put(&mut self, item: &str, field: &str, w: Won) {
         self.max = self.max.max(w.ts);
         let slot = self.items.entry(item.to_string()).or_default();
-        match slot.get(field) {
-            Some(o) if (o.ts, &o.dev) >= (w.ts, &w.dev) => {}
-            _ => { slot.insert(field.to_string(), w); }
-        }
+        let (wins, loser) = match slot.get(field) {
+            Some(o) if (o.ts, &o.dev) >= (w.ts, &w.dev) => (false, (o.dev != w.dev && !w.v.is_null()).then_some(())),
+            Some(o) => (true, (o.dev != w.dev && !o.v.is_null()).then_some(())),
+            None => (true, None),
+        };
+        if loser.is_some() { self.held.insert((item.to_string(), field.to_string())); }
+        if wins { slot.insert(field.to_string(), w); }
     }
 
     pub fn get(&self, item: &str, field: &str) -> Option<&Value> { self.items.get(item)?.get(field).map(|w| &w.v).filter(|v| !v.is_null()) }
@@ -739,7 +746,8 @@ fn clean(root: &Path, me: &str, merged: &mut Merged, shards: &BTreeSet<u8>) {
     let (old, active) = (now.saturating_sub(PURGED_KEPT_MS), now.saturating_sub(ACTIVE_MS));
     let last = merged.last_by_device();
     let seen_by_all = |t: &Won| t.ts < old && last.iter().all(|(d, l)| d == me || *d == t.dev || *l < active || *l > t.ts);
-    for (id, fields) in merged.items.iter_mut() {
+    let Merged { items, held, .. } = merged;
+    for (id, fields) in items.iter_mut() {
         if id == FOLDER_ITEM || !fields.values().any(|w| w.dev == me) || !shards.contains(&shard_of(id)) { continue }
         let values: BTreeMap<String, Value> = fields.iter().map(|(k, w)| (k.clone(), w.v.clone())).collect();
         let drop = match tomb(fields) {
@@ -747,9 +755,14 @@ fn clean(root: &Path, me: &str, merged: &mut Merged, shards: &BTreeSet<u8>) {
             None if !has_user_data(&values) => fields.values().max_by(|a, b| (a.ts, &a.dev).cmp(&(b.ts, &b.dev))).is_some_and(seen_by_all),
             None => fields.values().all(|w| w.ts < old) && fields.get("trashed").is_none_or(|w| w.v.is_null()) && !here(root, fields.get("path")),
         };
-        if drop { fields.retain(|_, w| w.dev != me); }
+        // Not while another device's files still hold an older value under
+        // one of these: dropping it here would bring that value back. Having
+        // written since (`seen_by_all`) does not say it has dropped it: a
+        // device drops what it lost only when it writes that shard again.
+        let holds_down = fields.iter().any(|(k, w)| w.dev == me && held.contains(&(id.clone(), k.clone())));
+        if drop && !holds_down { fields.retain(|_, w| w.dev != me); }
     }
-    merged.items.retain(|_, f| !f.is_empty());
+    items.retain(|_, f| !f.is_empty());
 }
 
 /// Whether the file at `path` is here, or on its way (an iCloud placeholder).

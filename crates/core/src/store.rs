@@ -5270,6 +5270,34 @@ mod tests {
     }
 
     #[test]
+    fn a_null_stays_while_another_device_still_holds_the_old_value() {
+        let lib = Lib::new("clean-held");
+        drop(Store::open_as(lib.0.clone(), &library_key(&lib.0), dev("aaaa")).unwrap());
+        let t = crate::time::now_ms();
+        let write = |days: u64, by: &str, item: &str, field: &str, v: serde_json::Value| {
+            meta::CLOCK.with(|c| c.set(Some(t - days * meta::DAY_MS)));
+            meta::commit(&lib.0, &dev(by), &Default::default(), vec![(item.to_string(), field.to_string(), v)], &mut vec![]).unwrap();
+        };
+        // bbbb pinned x; aaaa unpinned it later; bbbb has written since, but
+        // to another shard, so its `pinned: true` for x is still in its files.
+        write(40, "bbbb", "x", "pinned", true.into());
+        write(35, "aaaa", "x", "pinned", serde_json::Value::Null);
+        let other = (0..).map(|n| format!("别片-{n}")).find(|z| meta::shard_of(z) != meta::shard_of("x")).unwrap();
+        write(1, "bbbb", &other, "starred", 1.into());
+        meta::CLOCK.with(|c| c.set(None));
+        meta::clean_all(&lib.0, &dev("aaaa"), &mut vec![]).unwrap();
+        assert!(lib.dev_items("aaaa")["items"]["x"]["pinned"].is_array(), "the null keeps bbbb's true down");
+        let mut warnings = vec![];
+        assert!(meta::load(&lib.0, "aaaa", &mut warnings).get("x", "pinned").is_none(), "x stays unpinned");
+        // Once bbbb writes x's shard again it drops the value it lost, and the null can go.
+        meta::clean_all(&lib.0, &dev("bbbb"), &mut vec![]).unwrap();
+        assert!(lib.dev_items("bbbb")["items"].get("x").is_none_or(|f| f.get("pinned").is_none()));
+        meta::clean_all(&lib.0, &dev("aaaa"), &mut vec![]).unwrap();
+        assert!(lib.dev_items("aaaa")["items"].get("x").is_none(), "{}", lib.dev_items("aaaa"));
+        assert!(meta::load(&lib.0, "aaaa", &mut warnings).get("x", "pinned").is_none());
+    }
+
+    #[test]
     fn tombstones_go_after_thirty_days() {
         let lib = Lib::new("tombstones");
         let mut s = Store::open_as(lib.0.clone(), &library_key(&lib.0), dev("aaaa")).unwrap();
@@ -6064,6 +6092,36 @@ mod tests {
         assert_eq!(s.index[&b].rel, "定稿/乙.xml");
         assert_eq!(s.load(&b).unwrap().title.text, "乙");
         drop(early);
+    }
+
+    /// The background queue's moves and renames (`tree_writer`, taken over
+    /// with `adopt`) land in this device's shards: read afresh from the disk,
+    /// the library has them, and no whole device file comes back.
+    #[test]
+    fn a_writers_moves_and_renames_land_in_the_shards() {
+        let lib = Lib::new("writer-shards");
+        let mut s = lib.open();
+        let f = s.create_folder("项目", None).unwrap();
+        let g = s.create_folder("归档", None).unwrap();
+        let a = s.create_from_in(&doc_with("甲", "一"), Some(&f)).unwrap();
+        s.list();
+        let mut w = s.tree_writer();
+        w.rename(&f, "改过").unwrap();
+        w.move_in_tree(&a, Some(&g), None).unwrap();
+        w.list();
+        s.adopt(w);
+        assert_eq!(s.index[&a].rel, "归档/甲.xml");
+        let d = lib.0.join(".quiet/meta");
+        let me = s.me.id.clone();
+        assert!(d.join(&me).fs_is_dir() && !d.join(format!("{me}.json")).fs_exists());
+        let mut warnings = vec![];
+        let m = meta::load(&lib.0, &me, &mut warnings);
+        assert_eq!(m.get(&a, "path").and_then(|v| v.as_str()), Some("归档/甲.xml"));
+        assert_eq!(m.get(&f, "path").and_then(|v| v.as_str()), Some("改过/"));
+        let mut fresh = lib.open();
+        let listed = fresh.list();
+        assert_eq!(listed.iter().find(|e| e.id == f).unwrap().title, "改过");
+        assert_eq!(listed.iter().find(|e| e.id == a).unwrap().meta.parent.as_deref(), Some(g.as_str()));
     }
 
     /// A rename that cannot be made (the folder above is read-only) leaves the folder, its
