@@ -639,6 +639,9 @@ impl Workspace {
             let mut last_file = None;
             loop {
                 bg.timer(Duration::from_secs(2)).await;
+                // A top-level folder gone from the disk leaves the sidebar (and nothing is written
+                // there any more); one that is back returns.
+                if this.update(cx, |w, cx| w.check_folders(cx)).is_err() { break }
                 let now = shape(dirs(cx)).await;
                 let Ok(path) = this.update(cx, |w, _| w.current.as_ref()
                     .filter(|id| !w.store.file_task_busy() && !w.tree_writes_pending() && w.store.kind(id) == crate::store::DocKind::Doc)
@@ -830,6 +833,32 @@ impl Workspace {
         self.load_cover = matches!(self.view, View::Home | View::Folder);
         if std::mem::take(&mut self.start_later) && self.current.is_none() && self.view == View::Home { self.open_start(window, cx); }
         self.show_warnings(cx);
+        cx.notify();
+    }
+
+    /// Each top-level folder against the disk (`SharedStore::check_presence`): what was open in a
+    /// folder that is gone closes unsaved-but-nothing-lost (it can't be written where it was), and
+    /// the window shows the folders still there; a folder that came back is listed again.
+    pub(crate) fn check_folders(&mut self, cx: &mut Context<Self>) {
+        if self.store.file_task_busy() || self.store.loading() { return }
+        let (lost, back) = self.store.check_presence();
+        if lost.is_empty() && back.is_empty() { return }
+        let in_lost = |w: &Self, id: &Option<String>| id.as_deref().and_then(|id| w.store.top_of(id)).is_some_and(|k| lost.contains(&k));
+        if !lost.is_empty() {
+            if in_lost(self, &self.current) { self.current = None; self.editor = None; self.editor_sub = None; if self.view == View::Doc { self.view = View::Home; } }
+            if in_lost(self, &self.folder_current) || self.folder_current.as_deref().and_then(crate::shared_store::top_of_row).is_some_and(|k| lost.iter().any(|l| l == k)) {
+                self.folder_current = None;
+                if self.view == View::Folder { self.view = View::Home; }
+            }
+            self.entries.set(self.store.listed_rows());
+            self.sort();
+            cx.defer(crate::settings::top_switched);
+        }
+        // back: listed as a folder just opened is (here when quick, else in the background)
+        for k in &back {
+            if let Some(entries) = crate::loading::begin_added(&mut self.store, k, cx) { self.entries.set(entries); self.sort(); }
+        }
+        if !back.is_empty() { cx.defer(crate::settings::top_switched); }
         cx.notify();
     }
 

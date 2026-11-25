@@ -124,7 +124,7 @@ impl Workspace {
 
     /// The first top-level folder's page, shown as the window first opens (after 开始使用).
     pub(crate) fn show_first_folder(&mut self, cx: &mut Context<Self>) {
-        let Some(key) = self.store.top_folders().first().map(|r| r.0.clone()) else { return };
+        let Some(key) = self.store.shown_tops().first().map(|r| r.0.clone()) else { return };
         let row = crate::shared_store::top_row(&key);
         self.folder_current = Some(row.clone());
         self.view = View::Folder;

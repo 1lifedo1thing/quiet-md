@@ -539,8 +539,10 @@ mod native {
     /// Places scripted windows almost entirely past a screen edge that has no
     /// neighbouring display, so they neither cover the user's windows nor get
     /// covered (fully occluded windows stop rendering). Returns the candidate
-    /// origins, best first; the caller tries them until one stays visible
-    /// (a sliver behind the Dock counts as occluded).
+    /// origins, best first: the rightmost spot first, so with several displays
+    /// the sliver sits on the outer edge of the rightmost one rather than under
+    /// the windows on the main display. The caller tries them until one stays
+    /// visible (a sliver behind the Dock counts as occluded).
     pub fn park_candidates(ns_view: usize) -> Vec<CGPoint> {
         use core_graphics::geometry::CGSize;
         const SLIVER: f64 = 24.;
@@ -582,6 +584,7 @@ mod native {
                     }
                 }
             }
+            out.sort_by(|a, b| b.x.total_cmp(&a.x));
             out
         }
     }
