@@ -2772,13 +2772,18 @@ impl Store {
         Ok(doc)
     }
 
-    /// Accept an external revision (another program, the `quiet` CLI) only
-    /// when the caller has a clean editor. Documents only: boards and 数据表
-    /// follow their files their own way.
+    /// Accept an external revision (another program, the `quiet` CLI, an
+    /// agent writing a 画板) only when the caller has a clean editor. Documents
+    /// and 画板; a 数据表 follows its file its own way. An error (a file
+    /// caught half written, a 画板 emptied before it is written again) keeps
+    /// the baseline: the caller keeps what it shows and tries again later.
     pub fn refresh_external(&self, id: &str) -> Result<Option<Document>> {
-        if self.kind(id) != DocKind::Doc { return Ok(None) }
+        let kind = self.kind(id);
+        if kind == DocKind::Table { return Ok(None) }
         let disk = self.read_doc_text(id)?;
         if self.loaded.borrow().get(id).is_none_or(|base| base == &disk) { return Ok(None) }
+        // An empty `.excalidraw` reads as an empty board: here it is a writer between truncating and writing.
+        anyhow::ensure!(kind != DocKind::Board || !disk.trim().is_empty(), "画板文件是空的，可能正在写入");
         let doc = self.parse_doc(id, &disk)?;
         self.loaded.borrow_mut().insert(id.into(), disk);
         Ok(Some(doc))
@@ -2798,6 +2803,8 @@ impl Store {
     /// for the editor to follow before it saves. Mentions only compare by
     /// title: their paths were rewritten too, the editor holds ids.
     pub fn follow_moved_links(&self, id: &str) -> Option<HashMap<String, String>> {
+        // A 画板 has no links, and its file's canvas settings aren't in what is compared below.
+        if self.kind(id) != DocKind::Doc { return None }
         let before = self.loaded.borrow().get(id)?.clone();
         let disk = self.read_doc_text(id).ok().filter(|d| *d != before)?;
         let (mut was, mut now) = (self.parse_doc(id, &before).ok()?, self.parse_doc(id, &disk).ok()?);
@@ -4026,6 +4033,41 @@ mod tests {
         let changes = journal.take();
         local.apply_file_history(&changes, false).unwrap();
         assert_eq!(local.index[&page].parent.as_ref(), Some(&a));
+    }
+
+    #[test]
+    fn a_board_written_outside_is_taken_in() {
+        let lib = Lib::new("board-outside");
+        let mut s = lib.open();
+        let b = crate::whiteboard::Board::from_file(include_str!("../tests/fixtures/board/all-elements.excalidraw")).unwrap();
+        let id = s.create_board_in("草图", &b, None).unwrap();
+        let file = lib.0.join("草图.excalidraw");
+        let d = s.load_for_edit(&id, false).unwrap();
+        // Its own save is not an outside change.
+        s.save(&id, &d).unwrap();
+        assert!(s.refresh_external(&id).unwrap().is_none());
+        // An agent adds a shape: the open editor takes the new board in.
+        let mut more = crate::whiteboard::board_of(&d).unwrap().clone();
+        let mut shape = more.elements[0].clone();
+        shape.id = "from-agent".into();
+        more.elements.push(shape);
+        let written = more.file_json();
+        // Caught half written, or emptied before being written again: an error, the baseline kept.
+        crate::vfs::write(&file, &written[..written.len() / 2]).unwrap();
+        assert!(s.refresh_external(&id).is_err());
+        crate::vfs::write(&file, "").unwrap();
+        assert!(s.refresh_external(&id).is_err());
+        crate::vfs::write(&file, &written).unwrap();
+        let got = s.refresh_external(&id).unwrap().expect("taken in");
+        assert!(crate::whiteboard::board_of(&got).unwrap().elements.iter().any(|e| e.id == "from-agent"));
+        assert!(s.refresh_external(&id).unwrap().is_none(), "taken in once");
+        // Edited here meanwhile and changed outside again: the save refuses to write over it, as a document's does.
+        crate::vfs::write(&file, b.file_json()).unwrap();
+        let mut mine = got.clone();
+        let crate::model::BlockKind::Board(bd) = &mut mine.blocks[0].kind else { panic!("not a board") };
+        std::sync::Arc::make_mut(bd).elements.clear();
+        assert!(s.save_editor(&id, &mine).is_err());
+        assert_eq!(crate::vfs::read_to_string(&file).unwrap(), b.file_json(), "the outside version is left as it was");
     }
 
     #[test]

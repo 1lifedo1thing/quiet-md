@@ -30,6 +30,7 @@
 //!   goes to `<file>.cursor` for compositing those in afterwards.
 
 mod priority;
+mod board_reload;
 
 use gpui::*;
 use std::sync::Mutex;
@@ -413,6 +414,11 @@ pub fn start(window: &mut Window, cx: &mut App) {
             if cmd == "check-priority" {
                 let ws = handle.downcast::<crate::app::Workspace>().unwrap();
                 ws.update(cx, |ws, window, cx| priority::step(rest, ws, window, cx)).unwrap();
+                continue;
+            }
+            if cmd == "check-board-reload" {
+                let ws = handle.downcast::<crate::app::Workspace>().unwrap();
+                ws.update(cx, |ws, window, cx| board_reload::step(rest, ws, window, cx)).unwrap();
                 continue;
             }
             if cmd == "check-save-safety" {

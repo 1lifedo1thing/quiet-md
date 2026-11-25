@@ -629,8 +629,9 @@ impl Workspace {
         // A file written into the library from outside (a model writing a
         // note, say) joins it without going away and back: each top-level folder's
         // shape is compared every couple of seconds, and those that changed are
-        // listed again off the main thread (`relist`). So is the open document: a
-        // clean editor takes in what another program (the `quiet` CLI, say) wrote to it.
+        // listed again off the main thread (`relist`). So is the open document or
+        // 画板: a clean editor takes in what another program (the `quiet` CLI, an
+        // agent drawing) wrote to it; a file caught half written is read again next time.
         cx.spawn(async move |this, cx| {
             let bg = cx.background_executor().clone();
             let shape = |dirs: Vec<(String, std::path::PathBuf)>| bg.spawn(async move { dirs.into_iter().map(|(k, d)| (k, crate::store::Store::shape_at(&d))).collect::<Vec<_>>() });
@@ -644,7 +645,7 @@ impl Workspace {
                 if this.update(cx, |w, cx| w.check_folders(cx)).is_err() { break }
                 let now = shape(dirs(cx)).await;
                 let Ok(path) = this.update(cx, |w, _| w.current.as_ref()
-                    .filter(|id| !w.store.file_task_busy() && !w.tree_writes_pending() && w.store.kind(id) == crate::store::DocKind::Doc)
+                    .filter(|id| !w.store.file_task_busy() && !w.tree_writes_pending() && w.store.kind(id) != crate::store::DocKind::Table)
                     .and_then(|id| w.store.file_path(id))) else { break };
                 let file = bg.spawn(async move {
                     let path = path?;
@@ -652,8 +653,8 @@ impl Workspace {
                     Some((path, meta.modified().ok()?, meta.len()))
                 }).await;
                 if file != last_file {
-                    let _ = this.update(cx, |w, cx| w.refresh_external(None, cx));
-                    last_file = file;
+                    let Ok(settled) = this.update(cx, |w, cx| w.refresh_external(None, cx)) else { break };
+                    last_file = if settled { file } else { None };
                 }
                 if now == last { continue }
                 // Only what changed; a top-level folder just added is listed as it is added.
@@ -1498,21 +1499,29 @@ impl Workspace {
     }
 
     /// `on_stack`: the window being updated, if any (it can't be read now; it is this one).
-    fn refresh_external(&mut self, on_stack: Option<gpui::WindowId>, cx: &mut Context<Self>) {
-        if self.preview.is_some() || self.store.file_task_busy() || self.tree_writes_pending() || matches!(self.confirm, Some(Confirm::SaveFailed)) { return }
-        let Some(id) = self.current.clone() else { return };
+    /// False when the file wasn't settled (unreadable or half written, a 画板
+    /// mid-gesture): the 2 s poll looks again even if the file stays as it is.
+    /// Edits here go first, as a save: one that finds the file changed refuses
+    /// to write over it (保存失败: 重试, 另存副本, 重新载入), a document and a 画板 alike.
+    fn refresh_external(&mut self, on_stack: Option<gpui::WindowId>, cx: &mut Context<Self>) -> bool {
+        if self.preview.is_some() || self.store.file_task_busy() || self.tree_writes_pending() || matches!(self.confirm, Some(Confirm::SaveFailed)) { return false }
+        let Some(id) = self.current.clone() else { return true };
         if !self.unsaved { self.follow_moved_links(cx); }
-        if self.store.kind(&id) != crate::store::DocKind::Doc { return }
+        if self.store.kind(&id) == crate::store::DocKind::Table { return true }
         if self.unsaved {
             self.flush(cx);
-            return
+            return true
         }
+        // A 画板 in the middle of a drag or a text: its file is looked at again once it ends.
+        if self.editor.as_ref().is_some_and(|e| e.read(cx).board_busy(cx)) { return false }
         // A newly opened sibling can be clean while its source view still has a pending edit.
         if cx.windows().into_iter().filter(|h| Some(h.window_id()) != on_stack).filter_map(|h| h.downcast::<Workspace>()?.entity(cx).ok())
             .filter(|p| p.entity_id() != cx.entity_id())
-            .any(|p| { let w = p.read(cx); w.current.as_ref() == Some(&id) && w.unsaved }) { return }
-        if let Ok(Some(doc)) = self.store.with(Some(&id), |s| s.refresh_external(&id)) {
-            self.adopt_external(&id, doc, cx);
+            .any(|p| { let w = p.read(cx); w.current.as_ref() == Some(&id) && w.unsaved }) { return true }
+        match self.store.with(Some(&id), |s| s.refresh_external(&id)) {
+            Ok(Some(doc)) => { self.adopt_external(&id, doc, cx); true }
+            Ok(None) => true,
+            Err(_) => false,
         }
     }
 
