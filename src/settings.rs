@@ -479,7 +479,7 @@ impl Page {
             Page::General => "view-settings",
             Page::Appearance => "palette",
             Page::Shortcuts => "keyboard",
-            Page::Library => "storage",
+            Page::Library => "folder",
             Page::About => "info",
         }
     }
