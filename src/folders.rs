@@ -175,9 +175,9 @@ impl Workspace {
         let row = |id: &'static str, kind: &'static str, label: &'static str| crate::design::MenuItem::new(id).leading(img(format!("illus/kinds/{kind}.svg")).flex_none().size(px(18.))).label(label);
         let (doc_parent, md_parent, board_parent, table_parent) = (parent.clone(), parent.clone(), parent.clone(), parent.clone());
         // A top-level folder's own "+" (its row, or the sidebar heading when it is the only top-level folder) also brings
-        // things into it; 主页 and a folder's page have 导入 beside their "+".
-        let sidebar_heading = parent.is_none() && self.store.top_folders().len() == 1 && self.home.anchor("create-sidebar").is_some_and(|b| crate::design::hang(b, crate::design::Align::Start, None).0 == pos);
-        let import = (sidebar_heading || parent.as_deref().is_some_and(|p| crate::shared_store::top_of_row(p).is_some())).then(|| self.import_items(parent.clone(), cx));
+        // things into it; 主页 and a folder's page have 导入 beside their "+". Settled when the menu opened
+        // (`create_menu_import`), so a refresh behind it doesn't take the rows away under the pointer.
+        let import = self.create_menu_import.then(|| self.import_items(parent.clone(), cx));
         Some(deferred(anchored().anchor(Anchor::TopLeft).position(pos).snap_to_window_with_margin(px(8.)).child(
             crate::design::Popover::new("create-items").menu().min_w(px(180.))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.create_menu = None; cx.notify(); }))
@@ -233,7 +233,7 @@ impl Workspace {
                 .selected(self.create_menu.as_ref().is_some_and(|(_, pos)| self.home.anchor("create-folder").is_some_and(|b| crate::design::hang(b, crate::design::Align::Start, None).0 == *pos)))
                 .tip(tr("新建", "New"), Some(crate::shortcuts::hint("workspace::NewDoc", "⌘ + N")))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-folder") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; let p = Some(doc.clone()); w.create_menu = if w.create_menu.is_some() { None } else { Some((p, pos)) }; cx.notify(); })))
+                .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-folder") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; let p = Some(doc.clone()); w.create_menu_import = false; w.create_menu = if w.create_menu.is_some() { None } else { Some((p, pos)) }; cx.notify(); })))
             .child(div().id("folder-view-switch").no_drag().ml(px(12.)).child(self.view_switch(cx)));
         let children = self.level_entries(Some(&id));
         let body = if children.is_empty() {

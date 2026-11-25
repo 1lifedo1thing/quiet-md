@@ -360,7 +360,7 @@ impl Workspace {
                 )
                 .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })));
+                    .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu_import = w.store.top_folders().len() == 1; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })));
         }
         // 我的文档 (#421) does not fold: the heading is a row of its own, like a folder's, that
         // opens 主页 on its 我的文档 tab, which lists every top-level folder (主页 is 我的文档).
@@ -384,7 +384,7 @@ impl Workspace {
                         })))
                     .child(trigger("section-add", "plus").ml(px(2.)).mr(px(4.)).child(self.home.track("create-sidebar")).selected(create_open).tip(crate::settings::tr("新建", "New"), None)
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                        .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { cx.stop_propagation(); let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
+                        .on_click(cx.listener(|w, _: &ClickEvent, _, cx| { cx.stop_propagation(); let Some(b) = w.home.anchor("create-sidebar") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; w.create_menu_import = w.store.top_folders().len() == 1; w.create_menu = if w.create_menu.is_some() { None } else { Some((None, pos)) }; cx.notify(); })))
                     .on_click(cx.listener(|w, _, _, cx| { w.home.tab = crate::home::HomeTab::Recent; w.home.sort_menu = false; w.show_view(View::Home, cx); })),
             );
         }
@@ -574,6 +574,7 @@ impl Workspace {
                 cx.stop_propagation();
                 w.row_menu = None;
                 let Some(pos) = lookup.borrow().get(&slot).copied().map(anchor) else { return };
+                w.create_menu_import = crate::shared_store::top_of_row(&id).is_some();
                 w.create_menu = if open { None } else { Some((Some(id.clone()), pos)) };
                 cx.notify();
             }))
