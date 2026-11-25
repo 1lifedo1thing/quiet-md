@@ -439,22 +439,24 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
         div().id(("tb-hdr", fid)).group("tb-hdr").relative().flex_none().w(px(w)).h_full().flex().items_center().gap(px(4.)).px(px(cell_pad_x()))
             .border_r_1().border_color(line())
             .when(on, |d| d.bg(sel_header()))
-            // the type's icon is a button: the field's settings (its type, options, format)
-            .child(div().id(("tb-hdr-type", fid)).flex_none().size(px(22.)).ml(px(-3.)).rounded(px(crate::design::geo().tool_r)).flex().items_center().justify_center().cursor_pointer()
-                .hover(|s| s.bg(Theme::fill_hover_strong())).child(icon(field_glyph(f.ty), 16., Theme::text_placeholder()))
-                .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
-                    cx.stop_propagation();
-                    window.focus(&v.focus, cx);
-                    v.col_sel = vec![fid];
-                    v.sel = None;
-                    menus::edit_field(v, fid, point(ev.position.x - px(12.), ev.position.y + px(16.)), window, cx);
-                })))
-            // shadcn's table head: `foreground` names by a `muted-foreground` glyph; renaming, the name's box in its place
-            // renaming: edited in place as a cell is, the name's own text the box, the head framed as an edited cell
+            // as Supabase's head: the name, then its type in muted words (a button: the field's settings,
+            // its type, options, format); renaming, the name edited in place as a cell is, the head framed
             .child(if renaming {
                 div().flex_1().min_w_0().child(v.aux.clone()).on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).into_any_element()
             } else {
-                div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_color(header_text()).child(ui_text(f.name.clone())).into_any_element()
+                div().flex_1().min_w_0().flex().items_center().gap(px(6.))
+                    .child(div().flex_shrink_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(header_text()).child(ui_text(f.name.clone())))
+                    .child(div().id(("tb-hdr-type", fid)).flex_none().px(px(4.)).mx(px(-4.)).rounded(px(crate::design::geo().tool_r)).cursor_pointer()
+                        .text_size(px(text_xs())).text_color(Theme::text_placeholder()).hover(|s| s.bg(Theme::fill_hover_strong()).text_color(Theme::text_caption()))
+                        .whitespace_nowrap().child(crate::settings::label(f.ty.label()))
+                        .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            window.focus(&v.focus, cx);
+                            v.col_sel = vec![fid];
+                            v.sel = None;
+                            menus::edit_field(v, fid, point(ev.position.x - px(12.), ev.position.y + px(16.)), window, cx);
+                        })))
+                    .into_any_element()
             })
             .when_some(sorted, |d, desc| d.child(icon(if desc { "caret-down" } else { "caret-up" }, 12., Theme::primary())))
             .child(div().id(("tb-hdr-menu", fid)).flex_none().flex().items_center().justify_center().size(px(18.)).rounded(px(4.)).cursor_pointer()

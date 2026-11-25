@@ -36,9 +36,9 @@ db.close()
 # where things are in a 1300×850 window (light theme, Chinese)
 TABLE_ROW = "62 166"            # 书单 in the sidebar: the first row, its notes under it once it has some
 ADD_FIELD = "828 111"            # 「+」: a 文本 column at once, its name ready to type
-NEW_TYPE = "779 119"            # the new column's type icon: its settings
-TYPE_BOX = "953 265"
-TYPE_NOTE = "848 567"           # 笔记, the type list scrolled to its end
+NEW_TYPE = "845 111"            # the new column's type, after its name: its settings
+TYPE_BOX = "1002 257"
+TYPE_NOTE = "897 559"           # 笔记, the type list scrolled to its end
 NOTE_1, NOTE_2 = "845 149", "845 185"   # the 笔记 cells of rows 1 and 2
 PANEL_CLOSE = "1265 124"
 NOTE_BODY, NOTE_TITLE = "885 581", "830 223"
@@ -57,10 +57,10 @@ click {NEW_TYPE}
 wait 500
 click {TYPE_BOX}
 wait 300
-move 953 420
-wheel 953 420 600
+move 1002 412
+wheel 1002 412 600
 wait 100
-wheel 953 420 600
+wheel 1002 412 600
 wait 300
 shot types
 click {TYPE_NOTE}
