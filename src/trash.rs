@@ -126,14 +126,20 @@ impl Workspace {
             let (id, id2) = (t.id.clone(), t.id.clone());
             let menu_open = self.trash_menu.as_ref().is_some_and(|(m, _, _)| *m == t.id);
             let title = display_title(&t.title);
-            let more = Button::ghost(SharedString::from(format!("trash-more-{}", t.id)))
+            let slot = format!("trash-more-{}", t.id);
+            let (record, lookup, slot2) = (self.more_bounds.clone(), self.more_bounds.clone(), slot.clone());
+            let more = Button::ghost(SharedString::from(slot.clone()))
                 .sized(ButtonSize::Xs)
                 .icon("ellipsis")
                 .selected(menu_open)
-                .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
+                .relative()
+                .child(canvas(move |b, _, _| { record.borrow_mut().insert(slot.clone(), b); }, |_, _, _, _| {}).absolute().inset_0())
+                .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
                     cx.stop_propagation();
-                    let p = ev.position();
-                    w.trash_menu = Some((id.clone(), point(p.x + px(12.), p.y + px(14.)), Anchor::TopRight));
+                    // hung from the measured button, never the pointer
+                    let Some(b) = lookup.borrow().get(&slot2).copied() else { return };
+                    let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+                    w.trash_menu = Some((id.clone(), pos, corner));
                     cx.notify();
                 }));
             list = list.child(

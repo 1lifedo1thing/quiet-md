@@ -19,6 +19,27 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 /// A menu's padding (p-1), all round.
+/// shadcn's `sideOffset`: a button's menu hangs this far below the button.
+pub const SIDE_OFFSET: f32 = 4.;
+/// The window margin a menu keeps (`snap_to_window_with_margin`), GPUI Kit's `WINDOW_MARGIN`.
+pub const EDGE: f32 = 8.;
+
+/// How a button's menu lines up with it: its left edge on the button's, or its right edge.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Align { Start, End }
+
+/// Where the menu of the button measured at `b` goes, as GPUI Kit's `Popup` and shadcn's DropdownMenu
+/// place it: `SIDE_OFFSET` under the button, lined up by `align`; the point, and the corner of the menu
+/// `anchored` puts on it. Only the button's bounds count, never the pointer, so a click anywhere on the
+/// button opens the menu in one place and the menu never covers it. With `flip` (the menu's height and
+/// the window's), a menu that would pass the bottom margin sits as far above the button instead.
+pub fn hang(b: Bounds<Pixels>, align: Align, flip: Option<(f32, Pixels)>) -> (Point<Pixels>, Anchor) {
+    let x = if align == Align::Start { b.left() } else { b.right() };
+    let up = flip.is_some_and(|(h, vh)| f32::from(b.bottom()) + SIDE_OFFSET + h > f32::from(vh) - EDGE && f32::from(b.top()) - SIDE_OFFSET - h >= EDGE);
+    let corner = match (up, align) { (false, Align::Start) => Anchor::TopLeft, (false, Align::End) => Anchor::TopRight, (true, Align::Start) => Anchor::BottomLeft, (true, Align::End) => Anchor::BottomRight };
+    (point(x, if up { b.top() - px(SIDE_OFFSET) } else { b.bottom() + px(SIDE_OFFSET) }), corner)
+}
+
 pub const PAD: f32 = G.menu_pad;
 /// A row's height.
 pub const ROW_H: f32 = G.menu_row_h;

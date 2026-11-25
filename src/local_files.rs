@@ -159,9 +159,9 @@ impl Workspace {
     pub(crate) fn local_row_menu(&self, m: RowMenu, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (import, rename, reveal, forget) = (m.id.clone(), m.id.clone(), m.id.clone(), m.id.clone());
         let row = |id: &'static str, glyph: &'static str, label: &'static str| crate::design::MenuItem::new(id).icon(glyph).label(label);
-        let pos = if m.pos.x < px(0.) { point(-m.pos.x, m.pos.y + px(22.)) } else { m.pos };
+        let pos = m.pos;
         let shown = crate::local_folders::show_in_files();
-        vec![deferred(anchored().position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("local-row-menu").menu().min_w(px(200.))
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("local-row-menu").menu().min_w(px(200.))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
             .child(row("lr-import", "folder-input", tr("导入到文档库", "Import into library")).on_click(cx.listener(move |w, _, window, cx| w.import_local(&import, window, cx))))
             .child(row("lr-rename", "square-pen", tr("重命名", "Rename")).on_click(cx.listener(move |w, _, window, cx| w.start_rename(&rename, window, cx))))

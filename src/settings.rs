@@ -967,7 +967,7 @@ impl Workspace {
                 cx.notify();
             }))
             .child(div().id("theme-menu-list").w(px(220.)).max_h(px(302.)).overflow_y_scroll().py(px(menu::PAD)).flex().flex_col().children(rows));
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 
     /// A choice as a dropdown button, like 界面语言's: the picked label, a menu of the rest.
@@ -1005,7 +1005,7 @@ impl Workspace {
                 cx.notify();
             }))
             .children(rows);
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 
     fn pick_pref(&mut self, i: usize, cx: &mut Context<Self>) {
@@ -1152,7 +1152,7 @@ impl Workspace {
                         .child(crate::design::icon("search", 14., crate::design::color::muted_foreground()))
                         .child(div().flex_1().min_w_0().child(menu.field.clone()))))
                 .child(div().pb(px(menu::PAD)).child(list)));
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(popup)).with_priority(2).into_any_element())
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(popup)).with_priority(2).into_any_element())
     }
 
     /// A row picked (its key): saved, and kept in 最近使用.
@@ -1285,7 +1285,7 @@ impl Workspace {
                 cx.notify();
             }))
             .children(rows);
-        Some(deferred(anchored().anchor(Anchor::TopRight).position(point(b.right(), b.bottom() + px(4.))).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
+        Some(deferred({ let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None); anchored().anchor(corner).position(pos) }.snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element())
     }
 
     /// Keys while the language dropdown is open; true when used.

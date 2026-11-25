@@ -173,7 +173,7 @@ impl Workspace {
     /// The "…" menu of a top-level folder's row (two or more top-level folders).
     pub(crate) fn top_row_menu(&self, key: &str, m: RowMenu, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let row = |id: &'static str, glyph: &'static str, label: &'static str| crate::design::MenuItem::new(id).icon(glyph).label(label);
-        let pos = if m.pos.x < px(0.) { point(-m.pos.x, m.pos.y + px(22.)) } else { m.pos };
+        let pos = m.pos;
         let open = self.store.top_folders().into_iter().find(|r| r.0 == key);
         let (name, path, missing) = open.map(|r| (r.1, r.2, r.3.is_some())).unwrap_or_default();
         let (doc, folder, rename, k1, k2) = (m.id.clone(), m.id.clone(), m.id.clone(), key.to_string(), key.to_string());
@@ -199,7 +199,7 @@ impl Workspace {
             w.confirm = Some(crate::app::Confirm::RemoveFolder(k2.clone(), name.clone()));
             cx.notify();
         })));
-        vec![deferred(anchored().position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element()]
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu)).with_priority(2).into_any_element()]
     }
 
     /// The sidebar with no top-level folder open: a way to open or make one.

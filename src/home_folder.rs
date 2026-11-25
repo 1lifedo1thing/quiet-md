@@ -408,7 +408,7 @@ impl Workspace {
             .when(self.batch.is_none(), |d| d
                 .on_click(cx.listener(move |w, _, window, cx| { w.try_open(&open_id, window, cx); }))
                 .on_mouse_down(MouseButton::Right, cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
-                    w.row_menu = Some(RowMenu { id: menu_id.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false });
+                    w.row_menu = Some(RowMenu { id: menu_id.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false, from: None });
                     cx.notify();
                 })))
             .child(back).children(title).child(front_glass).child(label)

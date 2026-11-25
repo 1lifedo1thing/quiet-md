@@ -663,8 +663,11 @@ impl Workspace {
             .selected(open)
             .when(!open, |d| d.tip(crate::settings::tr("更多", "More"), None))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
-                w.place_menu = if w.place_menu.is_some() { None } else { Some((folder.clone(), ev.position() + point(px(18.), px(20.)))) };
+            .relative().child(self.home.track(id))
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
+                // hung from the measured button, never the pointer; not yet measured: not yet
+                let Some(b) = w.home.anchor(id) else { return };
+                w.place_menu = if w.place_menu.is_some() { None } else { Some((folder.clone(), crate::design::hang(b, crate::design::Align::End, None).0)) };
                 cx.notify();
             }))
     }
@@ -676,8 +679,11 @@ impl Workspace {
             .selected(open)
             .tip(crate::settings::tr("导入", "Import"), None)
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| {
-                w.import_menu = if w.import_menu.is_some() { None } else { Some((parent.clone(), ev.position() + point(px(18.), px(20.)))) };
+            .relative().child(self.home.track(id))
+            .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| {
+                // hung from the measured button, never the pointer; not yet measured: not yet
+                let Some(b) = w.home.anchor(id) else { return };
+                w.import_menu = if w.import_menu.is_some() { None } else { Some((parent.clone(), crate::design::hang(b, crate::design::Align::End, None).0)) };
                 cx.notify();
             }))
     }

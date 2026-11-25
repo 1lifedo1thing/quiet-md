@@ -725,14 +725,15 @@ impl Workspace {
     fn open_row_menu(&mut self, id: &str, key: &str, cx: &mut Context<Self>) {
         let b = self.more_bounds.borrow().get(key).copied();
         let Some(b) = b else { return };
-        self.row_menu = Some(RowMenu { id: id.to_string(), pos: point(b.right(), b.bottom() + px(2.)), corner: Anchor::TopRight, sub: false, batch: false });
+        let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+        self.row_menu = Some(RowMenu { id: id.to_string(), pos, corner, sub: false, batch: false, from: Some(key.to_string()) });
         cx.notify();
     }
 
     pub(crate) fn home_more(&self, e: &Entry, key: String, cx: &mut Context<Self>) -> crate::design::Button {
         let id = e.id.clone();
         let (rec, k2) = (self.more_bounds.clone(), key.clone());
-        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.pos.x > px(0.) && m.corner == Anchor::TopRight);
+        let open = self.row_menu.as_ref().is_some_and(|m| m.id == e.id && m.from.as_deref() == Some(key.as_str()));
         crate::design::Button::ghost(SharedString::from(key.clone()))
             .sized(crate::design::ButtonSize::Xs)
             .relative()
@@ -949,7 +950,7 @@ impl Workspace {
                 .when(check.is_none(), |d| d.on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
-                        w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false });
+                        w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false, from: None });
                         cx.notify();
                     }),
                 ))
@@ -1091,7 +1092,7 @@ impl Workspace {
                     .when(check.is_none(), |d| d.on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
-                            w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false });
+                            w.row_menu = Some(RowMenu { id: id2.clone(), pos: ev.position, corner: Anchor::TopLeft, sub: false, batch: false, from: None });
                             cx.notify();
                         }),
                     ))
@@ -1149,7 +1150,8 @@ impl Workspace {
                 menu = menu.child(MenuSeparator::new()).child(MenuItem::new("home-folders-first").label(crate::settings::tr("文件夹优先", "Folders first")).checked(self.home.folders_first && self.home.sort != HomeSort::Manual)
                     .when(self.home.sort == HomeSort::Manual, |d| d.opacity(0.4))
                     .on_click(cx.listener(|w, _, _, cx| { if w.home.sort == HomeSort::Manual { return; } w.home.folders_first = !w.home.folders_first; w.save_home(); w.home.sort_menu = false; cx.notify(); })));
-                out.push(place(point(b.right(), b.bottom() + px(4.)), Anchor::TopRight, menu));
+                let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+                out.push(place(pos, corner, menu));
             }
         out
     }

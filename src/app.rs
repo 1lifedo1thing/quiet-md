@@ -286,6 +286,8 @@ pub struct RowMenu {
     pub sub: bool,
     /// The 批量操作 menu for the checked rows.
     pub batch: bool,
+    /// The "…" button it hangs from (`design::hang`), by its bounds' slot; None: a right-click, at the pointer.
+    pub from: Option<String>,
 }
 
 /// What the main pane shows: the open document, 主页 or 回收站.

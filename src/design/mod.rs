@@ -39,7 +39,7 @@ pub use dialog::{Dialog, DialogFocus, scrim};
 #[allow(unused_imports)]
 pub use field::{Field, FieldSize, Label, Textarea};
 #[allow(unused_imports)]
-pub use menu::{MenuItem, MenuLabel, MenuSeparator, Popover};
+pub use menu::{Align, MenuItem, MenuLabel, MenuSeparator, Popover, hang};
 pub use toolbar::{ButtonGroup, ButtonGroupSeparator, Toggle, ToggleSize, Toolbar};
 
 use crate::theme::{dark, rgbaf};

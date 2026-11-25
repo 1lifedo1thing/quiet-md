@@ -176,7 +176,7 @@ impl Workspace {
         let (doc_parent, md_parent, board_parent, table_parent) = (parent.clone(), parent.clone(), parent.clone(), parent.clone());
         // A top-level folder's own "+" (its row, or the sidebar heading when it is the only top-level folder) also brings
         // things into it; 主页 and a folder's page have 导入 beside their "+".
-        let sidebar_heading = parent.is_none() && self.store.top_folders().len() == 1 && self.home.anchor("create-sidebar").is_some_and(|b| point(b.left(), b.bottom() + px(4.)) == pos);
+        let sidebar_heading = parent.is_none() && self.store.top_folders().len() == 1 && self.home.anchor("create-sidebar").is_some_and(|b| crate::design::hang(b, crate::design::Align::Start, None).0 == pos);
         let import = (sidebar_heading || parent.as_deref().is_some_and(|p| crate::shared_store::top_of_row(p).is_some())).then(|| self.import_items(parent.clone(), cx));
         Some(deferred(anchored().anchor(Anchor::TopLeft).position(pos).snap_to_window_with_margin(px(8.)).child(
             crate::design::Popover::new("create-items").menu().min_w(px(180.))
@@ -230,10 +230,10 @@ impl Workspace {
             .child(self.import_button("folder-import", Some(id.clone()), cx))
             .child(crate::ui::header_icon("folder-new", "plus")
                 .child(self.home.track("create-folder"))
-                .selected(self.create_menu.as_ref().is_some_and(|(_, pos)| self.home.anchor("create-folder").is_some_and(|b| point(b.left(), b.bottom() + px(4.)) == *pos)))
+                .selected(self.create_menu.as_ref().is_some_and(|(_, pos)| self.home.anchor("create-folder").is_some_and(|b| crate::design::hang(b, crate::design::Align::Start, None).0 == *pos)))
                 .tip(tr("新建", "New"), Some(crate::shortcuts::hint("workspace::NewDoc", "⌘ + N")))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |w, ev: &ClickEvent, _, cx| { let pos = w.home.anchor("create-folder").map_or(ev.position(), |b| point(b.left(), b.bottom() + px(4.))); let p = Some(doc.clone()); w.create_menu = if w.create_menu.is_some() { None } else { Some((p, pos)) }; cx.notify(); })))
+                .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-folder") else { return }; let pos = crate::design::hang(b, crate::design::Align::Start, None).0; let p = Some(doc.clone()); w.create_menu = if w.create_menu.is_some() { None } else { Some((p, pos)) }; cx.notify(); })))
             .child(div().id("folder-view-switch").no_drag().ml(px(12.)).child(self.view_switch(cx)));
         let children = self.level_entries(Some(&id));
         let body = if children.is_empty() {
@@ -249,11 +249,11 @@ impl Workspace {
     pub(crate) fn folder_row_menu(&self, m: crate::app::RowMenu, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (doc, folder, rename, mv, del) = (m.id.clone(), m.id.clone(), m.id.clone(), m.id.clone(), m.id.clone());
         let row = |id: &'static str, glyph: &'static str, label: &'static str| crate::design::MenuItem::new(id).icon(glyph).label(label);
-        let pos = if m.pos.x < px(0.) { point(-m.pos.x, m.pos.y + px(22.)) } else { m.pos };
+        let pos = m.pos;
         // The row's "…" only manages the folder (新建 is the "+" beside it); a
         // right-click still creates straight from the menu.
-        let create = !(m.pos.x < px(0.));
-        vec![deferred(anchored().position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().min_w(px(190.))
+        let create = m.from.is_none();
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().min_w(px(190.))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
             .when(create, |d| d
                 .child(row("fr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_child(&doc, window, cx); })))
