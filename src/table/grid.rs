@@ -959,7 +959,8 @@ impl TableView {
 }
 
 /// The column edge being dragged (or under the pointer, ready to drag): lit from the header to the last row,
-/// not past it (the add-record line and the blank under it have no columns).
+/// not past it (the add-record line and the blank under it have no columns). On the picked cell's frame's
+/// own lines (over the grid line and one point out), so where both show the edge covers the frame exactly.
 fn col_edge(v: &TableView, cols: &Cols) -> Option<AnyElement> {
     let fid = match v.drag { Some(Drag::ColWidth { field, .. }) => field, Some(_) => return None, None => v.grip_hover? };
     let ci = cols.index(fid)?;
@@ -967,5 +968,5 @@ fn col_edge(v: &TableView, cols: &Cols) -> Option<AnyElement> {
     let edge = cols.x[ci] + cols.w[ci] - if scrolled { v.scroll.x } else { 0. };
     if scrolled && edge < cols.frozen_w { return None }
     let end = header_h() + v.tops.last().copied().unwrap_or(0.) - v.scroll.y;
-    Some(div().absolute().top_0().h(px(end.max(header_h()))).left(px(edge - 1.5)).w(px(2.)).bg(Theme::primary()).into_any_element())
+    Some(div().absolute().top_0().h(px(end.max(header_h()))).left(px(edge - 1.)).w(px(RING_W)).bg(Theme::primary()).into_any_element())
 }
