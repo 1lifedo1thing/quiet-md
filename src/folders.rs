@@ -195,7 +195,7 @@ impl Workspace {
         let id = self.folder_current.clone().unwrap_or_default();
         let title = self.entries.iter().find(|e| e.id == id).map(|e| display_title(&e.title)).unwrap_or_else(|| tr("文件夹", "Folder").to_string());
         // 我的文档 › … › parent › this folder; a long path folds its middle into "…".
-        let sep = || div().mx(px(4.)).flex_none().child(icon("chevron-right", 12., Theme::text_caption()));
+        let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., Theme::text_caption()));
         let link = |key: String, label: String, target: Option<String>| {
             div().id(SharedString::from(format!("folder-crumb-{key}"))).no_drag().flex_none().max_w(px(220.)).px(px(4.)).rounded(px(6.))
                 .overflow_hidden().whitespace_nowrap().text_ellipsis().cursor_pointer()
@@ -210,7 +210,7 @@ impl Workspace {
         let first = link("home".into(), self.folder_name(&root), None).into_any_element();
         // A top-level folder's own page is the top-level folder: its name is the page's title, not a crumb before it.
         let own = crate::shared_store::top_of_row(&id).is_some();
-        let mut crumbs = div().min_w_0().flex().items_center().text_size(px(17.)).line_height(px(24.)).when(!own, |d| d.child(first));
+        let mut crumbs = div().min_w_0().flex().items_center().text_size(px(crate::ui::CRUMB_SIZE)).line_height(px(20.)).when(!own, |d| d.child(first));
         for (i, e) in path.iter().enumerate() {
             if path.len() > 2 && i > 0 && i < path.len() - 1 {
                 if i == 1 {
@@ -224,7 +224,8 @@ impl Workspace {
         crumbs = crumbs.when(!own, |d| d.child(sep())).child(div().min_w_0().px(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
             .text_color(Theme::text_caption()).child(ui_text(title)));
         let doc = id.clone();
-        let header = crate::trash::page_header_with(self, crumbs, 26., cx)
+        // Inset as a document's header (`top_bar`), so the path does not move between the two.
+        let header = crate::trash::page_header_with(self, crumbs, 18., cx)
             .child(self.place_button("folder-more", Some(id.clone()), cx))
             .child(self.import_button("folder-import", Some(id.clone()), cx))
             .child(crate::ui::header_icon("folder-new", "plus")

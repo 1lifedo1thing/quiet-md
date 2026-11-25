@@ -1934,14 +1934,14 @@ impl Workspace {
                             .overflow_hidden()
                             .flex()
                             .items_center()
-                            .text_size(px(13.))
+                            .text_size(px(crate::ui::CRUMB_SIZE))
                             .line_height(px(20.))
                             .children(crumbs)
                             .child(
                                 div()
                                     .id("top-title")
                                     .min_w_0()
-                                    .text_size(px(14.))
+                                    .text_size(px(crate::ui::CRUMB_SIZE))
                                     .line_height(px(20.))
                                     // the current page reads like the crumbs before it (the user's call, 2026-11-25;
                                     // shadcn's BreadcrumbPage is `foreground`): one colour and weight along the path

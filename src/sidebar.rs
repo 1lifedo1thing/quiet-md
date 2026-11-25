@@ -44,6 +44,8 @@ pub(crate) const ROW_ICON: f32 = 18.;
 pub(crate) const GROUP_GAP: f32 = 16.;
 pub(crate) const SECTION_H: f32 = 34.;
 pub(crate) const SECTION_TOP: f32 = 6.;
+/// 我的文档's heading is a row like 主页's: a `ROW_H` wash, `ROW_GAP` above the first row.
+pub(crate) const LIBRARY_H: f32 = SECTION_TOP + ROW_H + ROW_GAP;
 
 /// 批量操作 caps at 50 pages.
 pub(crate) const BATCH_LIMIT: usize = 50;
@@ -326,7 +328,7 @@ impl Workspace {
         let folded = self.folded[idx];
         let trigger = |id: &'static str, name: &'static str| Button::ghost(id).sized(ButtonSize::Xs).on_wash().icon(name);
         let create_open = matches!(self.create_menu, Some((None, _)));
-        let row = div().h(px(SECTION_H)).pl(px(4.)).pt(px(SECTION_TOP)).flex().items_center().group(group.clone());
+        let row = div().h(px(if idx == 1 { LIBRARY_H } else { SECTION_H })).pl(px(4.)).pt(px(SECTION_TOP)).flex().items_center().group(group.clone());
         if let (1, Some(sel)) = (idx, self.batch.as_ref()) {
             let n = sel.len();
             let all = n > 0 && n >= self.entries.len().min(BATCH_LIMIT);
@@ -368,8 +370,8 @@ impl Workspace {
         // 批量操作 and "+" keep their clicks to themselves. Its wash stops `ROW_GAP` above the
         // first row, as rows do.
         if idx == 1 {
-            return div().h(px(SECTION_H)).pt(px(SECTION_TOP)).flex().child(
-                div().id("section-library").flex_1().h(px(SECTION_H - SECTION_TOP - ROW_GAP)).pl(px(8.)).flex().items_center().rounded(px(ROW_R)).cursor_pointer()
+            return div().h(px(LIBRARY_H)).pt(px(SECTION_TOP)).flex().child(
+                div().id("section-library").flex_1().h(px(ROW_H)).pl(px(8.)).flex().items_center().rounded(px(ROW_R)).cursor_pointer()
                     .relative().children(crate::devtools::row_probe(title.clone()))
                     .hover(|s| s.bg(Theme::sidebar_hover())).when(self.sidebar_drop_top(), |d| d.bg(Theme::sidebar_selected()))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().text_size(px(theme::ui_font())).line_height(px(theme::ui_font() + 7.))
