@@ -930,7 +930,7 @@ impl Workspace {
                     .flex_col()
                     .items_center()
                     .justify_center()
-                    .child(img("illus/blank-doc.svg").size(px(64.)))
+                    .child(img(crate::trash::illus_for("illus/blank-doc.svg")).size(px(64.)))
                     .child(div().mt(px(4.)).text_size(px(14.)).line_height(px(22.)).text_color(Theme::text_placeholder()).child(crate::settings::text("空白文档")))
             } else {
                 let mut p = div().size_full().p(px(pad)).overflow_hidden().flex().flex_col();
