@@ -26,9 +26,26 @@ pub(crate) struct NoteInfo {
     pub empty: bool,
 }
 
-/// Where the table is: its library's key and folder, and its own path from there.
+/// Where the table is: its library's folder on disk and key, its own path from there, the folder it
+/// is in (`table_parent`), and where its notes go: `notes`, a folder's path, and `parent`, that folder
+/// once it is there (`ensure_folder`). A table's notes are kept beside it in a plain folder
+/// 「<表名> · 笔记」, made when the first one is; a table still in a folder of its own name (as
+/// older builds kept it, its 正文) keeps its notes there.
 #[derive(Clone)]
-pub(crate) struct Place { top: PathBuf, rel: String, parent: Option<String> }
+pub(crate) struct Place { top: PathBuf, key: String, rel: String, table_parent: Option<String>, notes: String, parent: Option<String> }
+
+/// The folder beside table `rel` its notes go in: 「书单 · 笔记」 for `书单.sqlite`; the table's own
+/// folder when it is the 正文 of one named as it is (`书单/书单.sqlite`, an older build's way).
+/// The word a notes folder's name ends with (「书单 · 笔记」, "Books · Notes").
+fn notes_word() -> &'static str { crate::settings::tr("笔记", "Notes") }
+
+fn notes_dir(rel: &str) -> String {
+    let (dir, file) = rel.rsplit_once('/').unwrap_or(("", rel));
+    let stem = file.rsplit_once('.').map_or(file, |(s, _)| s);
+    if dir.rsplit('/').next() == Some(stem) { return dir.to_string() }
+    let name = format!("{stem} · {}", notes_word());
+    if dir.is_empty() { name } else { format!("{dir}/{name}") }
+}
 
 /// The note open in 记录详情.
 pub(crate) struct OpenNote {
@@ -83,34 +100,40 @@ fn place(v: &TableView, cx: &App) -> Option<Place> {
     let st = v.state.read(cx);
     if st.read_only { return None; }
     let store = store(cx)?;
-    let top = store.top_path(&store.folder_of_path(&st.path)?)?;
+    let key = store.folder_of_path(&st.path)?;
+    let top = store.top_path(&key)?;
     let rel = slashed(st.path.strip_prefix(&top).ok()?);
     if rel.split('/').any(|p| p.starts_with('.')) { return None; }
-    let parent = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == rel && e.meta.folder.is_none()).and_then(|e| e.meta.parent.clone()));
-    Some(Place { top, rel, parent })
+    let table_parent = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == rel && e.meta.folder.is_none()).and_then(|e| e.meta.parent.clone()));
+    // the notes folder as it is now: where the table's notes are already (a table renamed keeps
+    // using the folder its notes are in), else beside it by its name
+    let suffix = format!(" · {}", notes_word());
+    let own_dir = |n: &str| n.rsplit_once('/').map(|(d, _)| d.to_string()).filter(|d| d.ends_with(&suffix));
+    let in_cells = || st.doc.base.table(v.table).and_then(|t| t.fields.iter().filter(|f| f.ty == FieldType::Note)
+        .find_map(|f| t.records.iter().find_map(|r| match r.get(f.id) { Value::Text(href) => field::note_rel(&rel, href).and_then(|n| own_dir(&n)), _ => None })));
+    let notes = v.notes.mine.values().find_map(|n| own_dir(n)).or_else(in_cells).unwrap_or_else(|| notes_dir(&rel));
+    let parent = store.listed(|tops| tops.iter().filter(|r| r.0 == key).flat_map(|r| &r.1).find(|e| e.meta.folder.is_some() && e.meta.rel == notes).map(|e| e.id.clone()));
+    Some(Place { top, key, rel, table_parent, notes, parent })
 }
 
-/// The table in a folder of its own name, where its notes are kept
-/// (`Store::table_folder`): moved there when it isn't yet, the folder taking
-/// its place in the library. Returns where the table is now.
+/// Where a new note goes: the table's notes folder (`Place::notes`), made now beside the table when it
+/// isn't there yet. The table itself stays where it is.
 pub(crate) fn ensure_folder(v: &mut TableView, cx: &mut Context<TableView>) -> Option<Place> {
-    let h = place(v, cx)?;
-    let store = store(cx)?;
-    let id = store.listed(|tops| tops.iter().flat_map(|r| &r.1).find(|e| e.meta.rel == h.rel && e.meta.folder.is_none()).map(|e| e.id.clone()))?;
-    if let Ok(Some(folder)) = store.with(Some(&id), |s| Ok(s.folder_of_note(&id))) { return Some(Place { parent: Some(folder), ..h }); }
-    // what the table holds goes to its file before the file moves
-    v.state.update(cx, |s, _| s.write());
-    let moved = store.with(Some(&id), |s| s.table_folder(&id)).and_then(|folder| Ok((folder, store.file_path(&id).ok_or_else(|| anyhow::anyhow!("no file"))?)));
-    let (folder, path) = match moved {
-        Ok(m) => m,
-        Err(e) => { log::error!("数据表没能搬进自己的文件夹: {e:#}"); return Some(h); }
-    };
-    // the paths in its 笔记 cells were rewritten for where it is now: read again from there
-    v.state.update(cx, |s, cx| { s.moved(&path, cx); s.refresh(cx); });
-    let rel = slashed(path.strip_prefix(&h.top).ok()?);
-    v.notes.ids.clear();
-    cx.emit(TableEvent::LibraryChanged);
-    let h = Place { top: h.top, rel, parent: Some(folder) };
+    let mut h = place(v, cx)?;
+    if h.parent.is_some() { return Some(h) }
+    let mut store = store(cx)?;
+    let name = h.notes.rsplit('/').next().unwrap_or(&h.notes).to_string();
+    // at the top of its top-level folder, the folder goes in that one's row
+    let parent = h.table_parent.clone().unwrap_or_else(|| crate::shared_store::top_row(&h.key));
+    match store.create_folder(&name, Some(&parent)) {
+        Ok(id) => {
+            h.parent = Some(id.clone());
+            // the name it got (a taken one is numbered): where the notes are written from now
+            if let Some(path) = store.file_path(&id) && let Ok(rel) = path.strip_prefix(&h.top) { h.notes = slashed(rel); }
+            cx.emit(TableEvent::LibraryChanged);
+        }
+        Err(e) => { log::error!("笔记文件夹没能建立: {e:#}"); return None; }
+    }
     v.notes.place = Some(h.clone());
     Some(h)
 }
@@ -451,10 +474,10 @@ pub(crate) fn pane(v: &TableView, rec: RecId, cx: &Context<TableView>) -> Option
 
 // ---- deleting ----
 
-/// The notes that are the table's own (in its folder) among these records' or fields' cells.
+/// The notes that are the table's own (in its notes folder) among these records' or fields' cells.
 fn owned(v: &TableView, records: &[RecId], fields: &[FieldId], cx: &App) -> Vec<(String, String)> {
     let Some(h) = v.notes.place.as_ref() else { return vec![] };
-    let dir = h.rel.rsplit_once('/').map_or("", |(d, _)| d);
+    let dir = h.notes.as_str();
     let st = v.state.read(cx);
     let Some(t) = st.doc.base.table(v.table) else { return vec![] };
     let mut out: Vec<(String, String)> = vec![];

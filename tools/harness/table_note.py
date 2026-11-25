@@ -1,7 +1,7 @@
 """数据表's 笔记 column, end to end, in a scratch library.
 
 A table file of its own gets a 笔记 column; an empty cell makes a note
-(titled as its record) and opens it in 记录详情, where it is written in and
+(titled as its record, in 「书单 · 笔记」 beside the table, which stays where it is) and opens it in 记录详情, where it is written in and
 saved; undo and redo take the note to the 回收站 and back; deleting the
 record asks about its note and undo restores both; a cell is pointed at a
 note there already is; a new title renames the note's file and the cell
@@ -104,7 +104,7 @@ def run(name, commands, library):
 
 
 def cells(lib):
-    with sqlite3.connect(lib / "书单" / "书单.sqlite") as c:
+    with sqlite3.connect(lib / "书单.sqlite") as c:
         return c.execute('select "书名", "读书笔记" from "书单" order by _order').fetchall()
 
 
@@ -118,16 +118,16 @@ def trashed(lib):
     return sorted(p.read_text().split("</title>")[0].removeprefix("<title>") for p in (lib / ".quiet" / "trash").rglob("*.xml"))
 
 
-# 1. a column (the table moves into a folder of its name), a note made there for an empty cell, written in, saved
+# 1. a column, a note made for an empty cell in 「书单 · 笔记」 beside the table, written in, saved
 lib = run("write", OPEN + ADD_COLUMN + WRITE, source)
-assert cells(lib) == [("三体", "三体.xml"), ("球状闪电", None), (None, None)], cells(lib)
-assert notes(lib) == ["书单/三体.xml", "已有的笔记.xml"], notes(lib)
-assert (lib / "书单" / "三体.xml").read_text() == "<title>三体</title>\n<p>黑暗森林法则</p>\n<p>第二段 </p>\n", (lib / "书单" / "三体.xml").read_text()
-with sqlite3.connect(lib / "书单" / "书单.sqlite") as c:
+assert cells(lib) == [("三体", "书单 · 笔记/三体.xml"), ("球状闪电", None), (None, None)], cells(lib)
+assert notes(lib) == ["书单 · 笔记/三体.xml", "已有的笔记.xml"], notes(lib)
+assert (lib / "书单 · 笔记" / "三体.xml").read_text() == "<title>三体</title>\n<p>黑暗森林法则</p>\n<p>第二段 </p>\n", (lib / "书单 · 笔记" / "三体.xml").read_text()
+with sqlite3.connect(lib / "书单.sqlite") as c:
     assert c.execute("select type from _fields where name = '读书笔记'").fetchall() == [("note",)]
 
 # 2. reopened: the cell shows the note, the search finds its words
-again = run("reopen", "click 62 166\nwait 300\nmove 1200 800\nshot reopened-at-once\n" + OPEN + """move 1200 800
+again = run("reopen", "click 62 200\nwait 300\nmove 1200 800\nshot reopened-at-once\n" + "click 62 200\nwait 1200\n" + """move 1200 800
 shot reopened
 click 1240 24
 wait 600
@@ -151,7 +151,7 @@ wait 900
 key cmd-shift-z
 wait 1000
 """, source)
-assert cells(redone)[0] == ("三体", "三体.xml") and notes(redone) == ["书单/三体.xml", "已有的笔记.xml"] and trashed(redone) == [], (cells(redone), notes(redone), trashed(redone))
+assert cells(redone)[0] == ("三体", "书单 · 笔记/三体.xml") and notes(redone) == ["书单 · 笔记/三体.xml", "已有的笔记.xml"] and trashed(redone) == [], (cells(redone), notes(redone), trashed(redone))
 
 # 4. deleting the record asks about its note; both go, and undo restores both
 DELETE = f"""click 400 500
@@ -171,7 +171,7 @@ assert notes(gone) == ["已有的笔记.xml"] and trashed(gone) == ["三体"], (
 back = run("undelete", OPEN + ADD_COLUMN + WRITE + DELETE + """key cmd-z
 wait 1200
 """, source)
-assert cells(back)[0] == ("三体", "三体.xml") and notes(back) == ["书单/三体.xml", "已有的笔记.xml"] and trashed(back) == [], (cells(back), notes(back), trashed(back))
+assert cells(back)[0] == ("三体", "书单 · 笔记/三体.xml") and notes(back) == ["书单 · 笔记/三体.xml", "已有的笔记.xml"] and trashed(back) == [], (cells(back), notes(back), trashed(back))
 
 # 5. a cell pointed at a note there already is; a new title renames the file and the cell follows; 整页打开
 more = run("point", OPEN + ADD_COLUMN + WRITE + f"""click {NOTE_2}
@@ -199,20 +199,20 @@ wait 1200
 move 1200 800
 shot full-page
 """, source)
-assert cells(more) == [("三体", "三体 II.xml"), ("球状闪电", "../已有的笔记.xml"), (None, None)], cells(more)
-assert notes(more) == ["书单/三体 II.xml", "已有的笔记.xml"], notes(more)
-assert (more / "书单" / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
+assert cells(more) == [("三体", "书单 · 笔记/三体 II.xml"), ("球状闪电", "已有的笔记.xml"), (None, None)], cells(more)
+assert notes(more) == ["书单 · 笔记/三体 II.xml", "已有的笔记.xml"], notes(more)
+assert (more / "书单 · 笔记" / "三体 II.xml").read_text().startswith("<title>三体 II</title>\n<p>黑暗森林法则</p>")
 assert (more / "已有的笔记.xml").read_text() == "<title>已有的笔记</title>\n<p>一段正文</p>\n"
 
 # 6. the note renamed in the sidebar while the table is open: the cell follows, and the undo of another
 #    edit (the table's own ↶), then of the cell following, leaves the note where it is
-kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""move 30 166
+kept = run("rename", OPEN + ADD_COLUMN + WRITE + f"""move 48 169
 wait 400
-click 30 166
+click 48 169
 wait 600
-rclick 100 198
+rclick 100 200
 wait 500
-click 157 482
+click 157 484
 wait 500
 key cmd-a
 type 黑暗森林
@@ -232,9 +232,9 @@ shot undone-once
 click {UNDO}
 wait 2800
 """, source)
-assert notes(kept) == ["书单/黑暗森林.xml", "已有的笔记.xml"] and trashed(kept) == [], (notes(kept), trashed(kept))
-assert cells(kept)[0] == ("三体", "黑暗森林.xml"), cells(kept)
-with sqlite3.connect(kept / "书单" / "书单.sqlite") as c:
+assert notes(kept) == ["书单 · 笔记/黑暗森林.xml", "已有的笔记.xml"] and trashed(kept) == [], (notes(kept), trashed(kept))
+assert cells(kept)[0] == ("三体", "书单 · 笔记/黑暗森林.xml"), cells(kept)
+with sqlite3.connect(kept / "书单.sqlite") as c:
     assert c.execute('select "作者" from "书单" order by _order').fetchall()[1] == ("刘慈欣",)
 
 shots = os.environ.get("TABLE_NOTE_SHOTS")
