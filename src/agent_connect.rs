@@ -92,26 +92,26 @@ pub(crate) fn page(cx: &mut Context<Workspace>) -> AnyElement {
     let ask = part(tr("让 Agent 帮你安装", "Let your agent set it up"), None, tr("或者把这句话发给你的 Agent。", "Or copy this to your agent."), vec![
         prose("copy-prompt", prompt(), cx).into_any_element(),
     ]);
-    // Elsewhere the platform's line is pushed straight after.
-    #[cfg_attr(not(target_os = "macos"), allow(clippy::vec_init_then_push))]
-    let mut cli_body: Vec<AnyElement> = vec![];
+    // The platform's line: macOS installs the link from here.
     #[cfg(target_os = "macos")]
-    {
+    let platform = {
         let done = linked();
-        cli_body.push(div().flex().items_center().gap(px(10.))
+        Some(div().flex().items_center().gap(px(10.))
             .child(Button::outline("install-cli").sized(ButtonSize::Sm).label(if done { tr("已安装", "Installed") } else { tr("安装命令行工具", "Install Command") }).disabled(done || bundled_cli().is_none())
                 .on_click(cx.listener(|w, _, _, cx| match install_link() {
                     Ok(_) => { w.show_toast_kind(ToastKind::Success, tr("已安装到 ~/.local/bin", "Installed in ~/.local/bin"), cx); cx.notify(); }
                     Err(e) => w.show_toast_kind(ToastKind::Error, &crate::localized_format!("没有装上：{}", "Could not install: {}", e), cx),
                 })))
             .child(small(tr("装到 ~/.local/bin，不需要管理员密码", "Goes in ~/.local/bin, no password needed")))
-            .into_any_element());
-    }
+            .into_any_element())
+    };
     #[cfg(target_os = "windows")]
-    cli_body.push(small(tr("安装程序已把 quiet 加入 PATH，新开的终端里就能用。", "The installer puts quiet on your PATH; open a new terminal to use it.")).into_any_element());
+    let platform = Some(small(tr("安装程序已把 quiet 加入 PATH，新开的终端里就能用。", "The installer puts quiet on your PATH; open a new terminal to use it.")).into_any_element());
     #[cfg(target_os = "linux")]
-    cli_body.push(small(tr("quiet 在安装包的 bin 文件夹里，和 Quiet.md 放在一起。", "quiet is in the package's bin folder, beside Quiet.md.")).into_any_element());
-    cli_body.push(code("copy-cli", tr("quiet ls\nquiet read 文件夹/文档\nquiet help", "quiet ls\nquiet read Folder/Note\nquiet help").into(), cx).into_any_element());
+    let platform = Some(small(tr("quiet 在安装包的 bin 文件夹里，和 Quiet.md 放在一起。", "quiet is in the package's bin folder, beside Quiet.md.")).into_any_element());
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    let platform: Option<AnyElement> = None;
+    let cli_body = platform.into_iter().chain([code("copy-cli", tr("quiet ls\nquiet read 文件夹/文档\nquiet help", "quiet ls\nquiet read Folder/Note\nquiet help").into(), cx).into_any_element()]).collect();
     let cli = part("CLI", None, tr("Skill 配套的命令行工具：在终端里用 quiet 命令列出、读写、搜索文档和数据表。", "The command the skill uses: list, read, write and search documents and data tables with quiet."), cli_body);
     let card = |id: &'static str, part: AnyElement| crate::design::Card::new(id).w_full().overflow_hidden().child(part).into_any_element();
     div().w_full().flex().flex_col().gap(px(geo().section_gap))
