@@ -23,6 +23,9 @@ use std::cell::RefCell;
 use std::collections::{HashMap};
 use std::rc::Rc;
 
+/// A card's title steps this far right in 批量管理, past its checkbox (`geo.checkbox` and a gap).
+const CHECK_ROOM: f32 = 24.;
+
 /// The optional list columns (标题 is always shown).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Col {
@@ -898,10 +901,11 @@ impl Workspace {
     /// in a folder that show one (`home_folder.rs`). `pad`: its margin.
     pub(crate) fn thumb_page(&self, e: &Entry, pad: f32) -> Div {
         let thumb = self.thumb(e);
-        self.thumb_page_with(e, &thumb, pad)
+        self.thumb_page_with(e, &thumb, pad, 0.)
     }
 
-    fn thumb_page_with(&self, e: &Entry, thumb: &Thumb, pad: f32) -> Div {
+    /// `indent`: room before the title for 批量管理's checkbox.
+    fn thumb_page_with(&self, e: &Entry, thumb: &Thumb, pad: f32, indent: f32) -> Div {
         if thumb.blocks.is_empty() && e.title.trim().is_empty() {
                 div()
                     .size_full()
@@ -913,7 +917,7 @@ impl Workspace {
                     .child(div().mt(px(4.)).text_size(px(14.)).line_height(px(22.)).text_color(Theme::text_placeholder()).child(crate::settings::text("空白文档")))
             } else {
                 let mut p = div().size_full().p(px(pad)).overflow_hidden().flex().flex_col();
-                p = p.child(div().flex_none().flex().items_start().gap(px(6.)).mb(px(8.))
+                p = p.child(div().flex_none().flex().items_start().gap(px(6.)).mb(px(8.)).pl(px(indent))
                     .when_some(e.icon.as_ref(), |d, emoji| d.child(div().flex_none().text_size(px(14.)).line_height(px(20.)).child(emoji.clone())))
                     .child(div().min_w_0().text_size(px(14.)).line_height(px(20.)).font_weight(FontWeight::BOLD).child(e.title.clone())));
                 // A 画板: its board, drawn to fit the rest of the card.
@@ -935,10 +939,11 @@ impl Workspace {
             let id = e.id.clone();
             let id2 = e.id.clone();
             let thumb = self.thumb(e);
-            let page = self.thumb_page_with(e, &thumb, 18.);
             let radius = 32.;
             let menu_on = self.row_menu.as_ref().is_some_and(|m| m.id == e.id);
             let check = self.home_check(e);
+            // 批量管理: the title steps aside for the checkbox, which sits on its first line.
+            let page = self.thumb_page_with(e, &thumb, 18., if check.is_some() { CHECK_ROOM } else { 0. });
             let arm = e.id.clone();
             // Carried away as a paper: its place stays as an empty slot of the
             // card's shape (no page, no cover), so nothing half-shows through.
@@ -973,7 +978,7 @@ impl Workspace {
                     .child(div().absolute().left(px(-RING)).right(px(-RING)).top(px(-RING)).bottom(px(-RING))
                         .when(!menu_on, |d| d.opacity(0.).group_hover("home-card", |s| s.opacity(1.)))
                         .child(crate::ui::squircle_outline(radius + RING, RING, Theme::ring_sheet())))
-                    .when_some(check, |d, c| d.child(div().absolute().top(px(12.)).left(px(12.)).child(c)))
+                    .when_some(check, |d, c| d.child(div().absolute().top(px(18.)).left(px(18.)).h(px(20.)).flex().items_center().child(c)))
                     .when(self.batch.is_none(), |d| d.child(
                         div().absolute().top(px(8.)).right(px(8.))
                             .when(!menu_on, |d| d.opacity(0.).group_hover("home-card", |s| s.opacity(1.)))
