@@ -237,7 +237,12 @@ pub trait TipExt: Sized {
     fn tip(self, text: &str, keys: Option<&str>) -> Self {
         let text = crate::settings::label(text);
         let label = match keys {
-            Some(k) => format!("{text}（{k}）"),
+            // the language's own brackets: full-width in Chinese and Japanese, close in Korean, spaced elsewhere
+            Some(k) => match crate::settings::lang() {
+                crate::settings::Lang::Zh | crate::settings::Lang::ZhTw | crate::settings::Lang::Ja => format!("{text}（{k}）"),
+                crate::settings::Lang::Ko => format!("{text}({k})"),
+                _ => format!("{text} ({k})"),
+            },
             None => text.to_string(),
         };
         self.tip_label(label, TipSide::Below)

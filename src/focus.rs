@@ -105,10 +105,10 @@ fn lights(window: &Window, alpha: f32) {
     let _ = (window, alpha);
 }
 
-/// 退出 ✕: the button the strip shows at the right, on the header row's line (a ghost, as the
+/// ✕ 退出: the button the strip shows at the right, on the header row's line (a ghost, as the
 /// header's buttons).
 pub fn exit_button(id: impl Into<ElementId>) -> crate::design::Button {
-    crate::design::Button::ghost(id).sized(crate::design::ButtonSize::Sm).optical().label(crate::settings::text("退出")).icon_end("x")
+    crate::design::Button::ghost(id).sized(crate::design::ButtonSize::Sm).optical().icon("x").label(crate::settings::text("退出"))
 }
 
 impl Workspace {
