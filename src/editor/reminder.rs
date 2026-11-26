@@ -143,11 +143,13 @@ pub fn status(expire: i64, now: i64) -> Status {
 
 /// Text and clock colours of a reminder due at `expire`.
 pub fn colors(expire: i64, now: i64) -> (Hsla, Hsla) {
-    match status(expire, now) {
+    // in the dark the vivid hues sit just under 4.5:1 on the page (red 4.4): lift them to read
+    let (text, clock) = match status(expire, now) {
         Status::Expired => (c(craft::R400), c(craft::R400)),
         Status::Soon => (c(craft::O400), c(craft::old::O500)),
         Status::Later => (c(craft::B600), Theme::primary()),
-    }
+    };
+    (crate::theme::lift(text, 4.5), crate::theme::lift(clock, 3.))
 }
 
 /// "HH:MM" of a time of day.
