@@ -533,8 +533,9 @@ impl Workspace {
                 div().w_full().px(px(16.)).py(px(10.)).flex().items_center().gap(px(12.))
                     .child(div().flex_1().min_w_0().text_size(px(13.)).line_height(px(20.)).child(tr("快速新建笔记", "Quick note")))
                     .when(on && global != GLOBAL_DEFAULT && !global_rec, |d| d.child(crate::settings::link_button("global-reset", tr("恢复默认", "Reset")).on_click(cx.listener(|w, _, _, cx| w.reset_shortcut("global", cx)))))
-                    .when(on, |d| d.child(crate::settings::keycap("global-key", &if global_rec { self.shortcut_strokes.join(" ") } else { global.clone() }, global_rec).on_click(cx.listener(|w, _, window, cx| w.start_recording("global", window, cx)))))
+                    // the switch before its keys, so every row's keys end on the same right edge
                     .child(crate::settings::switch("pref-hotkey", on).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.quick_hotkey = !p.quick_hotkey, cx))))
+                    .when(on, |d| d.child(crate::settings::keycap("global-key", &if global_rec { self.shortcut_strokes.join(" ") } else { global.clone() }, global_rec).on_click(cx.listener(|w, _, window, cx| w.start_recording("global", window, cx)))))
                     .into_any_element(),
                 // Off with the switch above, like 快速新建笔记; 移除 turns just this one off.
                 div().group("shortcut-row").w_full().px(px(16.)).py(px(10.)).flex().items_center().gap(px(12.))
