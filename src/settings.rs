@@ -1391,6 +1391,8 @@ impl Workspace {
             self.show_toast_kind(ui::ToastKind::Error, &format!("{}: {e}", tr("设置保存失败", "Could not save settings")), cx);
             return;
         }
+        // 匿名使用统计 off: forget the app's id and waiting days.
+        if old.usage_stats.unwrap_or(old.auto_update) && !p.usage_stats.unwrap_or(p.auto_update) { crate::usage::forget(); }
         if p.quick_hotkey != old.quick_hotkey {
             if p.quick_hotkey { crate::quick_note::register(cx); } else { crate::quick_note::suspend_hotkey(); }
         }
@@ -1590,7 +1592,7 @@ impl Workspace {
                     switch("pref-remote", p.remote_images).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.remote_images = !p.remote_images, cx)))).into_any_element(),
                 row(tr("自动检查更新", "Check for updates automatically"), desc(tr("只读取一份版本信息，不发送任何数据；新版本由你决定何时下载安装。", "Reads a version file and sends nothing about you; you decide when to download and install.")),
                     switch("pref-update", p.auto_update).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.auto_update = !p.auto_update, cx)))).into_any_element(),
-                row(tr("匿名使用统计", "Anonymous usage statistics"), desc(tr("命令行工具 quiet 每天发一次各命令的使用次数，不含文档内容和参数。在终端运行 quiet telemetry status 可以查看发送的内容。", "The quiet command line tool sends a daily count of the commands it ran, never your documents or arguments. Run quiet telemetry status to see what it sends.")),
+                row(tr("匿名使用统计", "Anonymous usage statistics"), desc(tr("Quiet.md 和命令行工具 quiet 每天发送一次匿名的使用次数，例如应用打开了几次、各命令运行了几次。只有计数，不含任何个人信息、文档内容或文件名。", "Quiet.md and the quiet command line tool send anonymous usage counts once a day, such as how often the app was opened and each command ran. Only counts: no personal information, documents or file names.")),
                     switch("pref-usage-stats", p.usage_stats.unwrap_or(p.auto_update)).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.usage_stats = Some(!p.usage_stats.unwrap_or(p.auto_update)), cx)))).into_any_element(),
             ]))
             .into_any_element()

@@ -596,7 +596,7 @@ impl Workspace {
                     if !this.store.file_task_busy() && !this.store.loading() && !this.tree_writes_pending() { this.entries.set(this.store.list()); this.sort(); this.refresh_external(Some(window.window_handle().window_id()), cx); }
                     // An attachment another program wrote meanwhile: its card says so.
                     if let Some(ed) = this.editor.clone() { ed.update(cx, |e, cx| e.files_changed(cx)); }
-                    crate::update::check_if_stale(cx); cx.notify();
+                    crate::update::check_if_stale(cx); crate::usage::opened(); cx.notify();
                 }
                 else if !this.store.file_task_busy() { this.cancel_home_drag(cx); this.end_folder_drag(true, cx); this.cancel_shortcut_recording(cx); if !this.tree_writes_pending() { this.flush(cx); } }
             }),

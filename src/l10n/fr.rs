@@ -1521,5 +1521,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("链接与搜索", "Liens et recherche"),
     ("网络与隐私", "Réseau et confidentialité"),
     ("匿名使用统计", "Statistiques d’utilisation anonymes"),
-    ("命令行工具 quiet 每天发一次各命令的使用次数，不含文档内容和参数。在终端运行 quiet telemetry status 可以查看发送的内容。", "L’outil en ligne de commande quiet envoie chaque jour le nombre d’utilisations de ses commandes, jamais vos documents ni vos arguments. Lancez quiet telemetry status pour voir ce qui est envoyé."),
+    ("Quiet.md 和命令行工具 quiet 每天发送一次匿名的使用次数，例如应用打开了几次、各命令运行了几次。只有计数，不含任何个人信息、文档内容或文件名。", "Quiet.md et l’outil en ligne de commande quiet envoient une fois par jour des comptes d’utilisation anonymes, comme le nombre d’ouvertures de l’app et d’exécutions de chaque commande. Seulement des comptes : aucune information personnelle, aucun document ni nom de fichier."),
 ];
