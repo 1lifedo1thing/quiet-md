@@ -270,8 +270,13 @@ impl Workspace {
         // right-click still creates straight from the menu. The folder page's header "…"
         // is this same menu, its "+" the same 新建 menu.
         let create = m.from.is_none();
+        // the page header's "…" leads with 批量管理 over the page (the header has no button of its own), as a
+        // top-level folder's "…" does
+        let page = m.from.as_deref() == Some(crate::home::header::TB_MORE);
         vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().fit(crate::design::room(pos, m.corner)).w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
+            .when(page, |d| d.child(row("fr-batch", "batch", crate::settings::text("批量管理"))
+                .on_click(cx.listener(|w, _, _, cx| { w.row_menu = None; w.batch = Some(vec![]); w.batch_top = None; w.home.view_menu = false; cx.notify(); }))))
             .when(create, |d| d
                 .child(row("fr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_child(&doc, window, cx); })))
                 .child(row("fr-new-folder", "folder", tr("新建文件夹", "New folder")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_folder(Some(folder.clone()), window, cx); }))))

@@ -200,6 +200,8 @@ impl Workspace {
         let open = self.store.top_folders().into_iter().find(|r| r.0 == key);
         let (name, path, missing) = open.map(|r| (r.1, r.2, r.3.is_some())).unwrap_or_default();
         let (doc, folder, rename, k1, k2, k3, top_row) = (m.id.clone(), m.id.clone(), m.id.clone(), key.to_string(), key.to_string(), key.to_string(), m.id.clone());
+        // from its page's header "…": 批量管理 over that page, as its header's own button did
+        let page = m.from.as_deref() == Some(crate::home::header::TB_MORE);
         let mut menu = crate::design::Popover::new("top-row-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }));
         if missing {
@@ -221,8 +223,8 @@ impl Workspace {
                 .child(row("rr-batch", "batch", crate::settings::text("批量管理")).on_click(cx.listener(move |w, _, _, cx| {
                     w.row_menu = None;
                     w.batch = Some(vec![]);
-                    w.batch_top = Some(k3.clone());
-                    w.expanded.insert(top_row.clone());
+                    w.home.view_menu = false;
+                    if page { w.batch_top = None } else { w.batch_top = Some(k3.clone()); w.expanded.insert(top_row.clone()); }
                     cx.notify();
                 })))
                 .when(self.store.can_rename_folder_top(key), |m| m.child(row("rr-rename", "square-pen", tr("重命名", "Rename")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.start_rename(&rename.clone(), window, cx); }))))
