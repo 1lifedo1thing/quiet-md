@@ -31,7 +31,7 @@ impl Workspace {
             .on_click(cx.listener(|w, _, window, cx| w.open_search(window, cx)));
         let batch = icon_btn("tb-batch", "batch").relative().child(self.home.track("tb-batch")).tip(crate::settings::text("批量管理"), None)
             .on_click(cx.listener(|w, _, _, cx| { w.batch = Some(vec![]); w.batch_top = None; w.row_menu = None; w.home.view_menu = false; cx.notify(); }));
-        let display = icon_btn("home-view", "view-options").relative().selected(view_open).child(self.home.track("home-view"))
+        let display = icon_btn("home-view", if self.home.grid { "view-grid" } else { "view-list" }).relative().selected(view_open).child(self.home.track("home-view"))
             .when(!view_open, |d| d.tip(tr("显示", "View"), None))
             .on_mouse_down(MouseButton::Left, cx.listener(move |w, _, _, cx| { cx.stop_propagation(); w.home.view_menu = !view_open; cx.notify(); }));
         // the folder's "…": its sidebar row's menu (`folder_row_menu`)
