@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="Quiet.md on a pixel-art meadow: the sidebar lists folders, and Home shows each folder as a stack of note cards with pictures.">
+  <img src="docs/images/readme-home.webp" width="100%" alt="Quiet.md on a pixel-art meadow: the sidebar lists folders, and the top-level folder's page shows each folder as a stack of note cards with pictures.">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@ Home shows each folder as a stack of its pages. Hold a note over a folder and it
 ### Bring your notes
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="The first-launch screen of Quiet.md, offering to import an Obsidian vault it found.">
+  <img src="docs/images/readme-import.webp" width="100%" alt="The first-launch screen of Quiet.md, offering to open an Obsidian vault it found, where it is.">
 </p>
 
 On first launch, Quiet.md looks for your Obsidian, Logseq, iA Writer and Typora libraries and copies them in, leaving the originals alone. Obsidian `[[wikilinks]]` keep working: click one to open the note it points to. Later, drag Markdown files and folders onto Home or straight into a sidebar folder. Notes go out again as Markdown or PDF, or straight to the printer.

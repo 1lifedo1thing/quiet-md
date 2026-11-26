@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="Quiet.md sur une prairie en pixel art : la barre latérale liste les dossiers, et l'accueil montre chaque dossier comme une pile de cartes de notes illustrées.">
+  <img src="docs/images/readme-home.webp" width="100%" alt="Quiet.md sur une prairie en pixel art : la barre latérale liste les dossiers, et la page du dossier principal montre chaque dossier comme une pile de cartes de notes illustrées.">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@ L'accueil montre chaque dossier comme une pile de ses pages. Maintenez une note 
 ### Apporter vos notes
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="L'écran du premier lancement de Quiet.md, qui propose d'importer un coffre Obsidian trouvé sur l'ordinateur.">
+  <img src="docs/images/readme-import.webp" width="100%" alt="L'écran du premier lancement de Quiet.md, qui propose d'ouvrir sur place un coffre Obsidian trouvé sur l'ordinateur.">
 </p>
 
 Au premier lancement, Quiet.md cherche vos bibliothèques Obsidian, Logseq, iA Writer et Typora et les copie, sans toucher aux originaux. Les `[[liens wiki]]` d'Obsidian continuent de fonctionner : cliquez sur l'un d'eux pour ouvrir la note visée. Ensuite, glissez des fichiers et dossiers Markdown sur l'accueil ou directement dans un dossier de la barre latérale. Les notes repartent en Markdown ou en PDF, ou directement vers l'imprimante.

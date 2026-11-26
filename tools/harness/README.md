@@ -85,6 +85,7 @@ Write one command per line. Lines beginning with `#` are comments. See the top o
 ### Environment variables
 
 - `FDL_SHOTS` sets the screenshot directory (set by `run.py`).
+- `FDL_LIB_NAME` names `run.py`'s copy of the library (default `lib`). A library's folder name is its top-level folder's name in the sidebar and the path, so screenshots set it (`Quiet Notes`).
 - `FDL_TRACE` enables event tracing.
 - `FDL_NOPARK` keeps the window on screen. Without it the window is parked past the outer edge of the rightmost display, one sliver showing, so it neither covers the user's windows nor stops rendering.
 - `FDL_KEEP_OPEN` keeps the app running when the script ends. Without it a script that ends without `quit` quits anyway.

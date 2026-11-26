@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="像素風草坡背景上的 Quiet.md：左側側邊欄列出資料夾，首頁將每個資料夾顯示成一疊附圖的筆記卡片。">
+  <img src="docs/images/readme-home.webp" width="100%" alt="像素風草坡背景上的 Quiet.md：左側側邊欄列出資料夾，頂層資料夾頁將每個資料夾顯示成一疊附圖的筆記卡片。">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@
 ### 帶上舊筆記
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md 首次啟動的畫面，提示匯入它找到的 Obsidian 筆記庫。">
+  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md 首次啟動的畫面，提示原地開啟它找到的 Obsidian 筆記庫。">
 </p>
 
 第一次開啟時，Quiet.md 會找到你的 Obsidian、Logseq、iA Writer 與 Typora 筆記庫並複製進來，原始檔案不會被更動。Obsidian 的 `[[雙向連結]]` 照樣能用，點一下就會開啟它指向的筆記。之後也可以把 Markdown 檔案和資料夾拖到首頁，或直接拖進側邊欄的某個資料夾。筆記也能匯出為 Markdown 或 PDF，或直接列印。

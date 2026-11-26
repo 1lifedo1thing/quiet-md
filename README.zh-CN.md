@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="像素风草坡背景上的 Quiet.md：左侧侧栏列出文件夹，主页把每个文件夹显示成一叠带配图的笔记卡片。">
+  <img src="docs/images/readme-home.webp" width="100%" alt="像素风草坡背景上的 Quiet.md：左侧侧栏列出文件夹，顶层文件夹页把每个文件夹显示成一叠带配图的笔记卡片。">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@
 ### 带上旧笔记
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md 首次启动的画面，提示导入它找到的 Obsidian 库。">
+  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md 首次启动的画面，提示原地打开它找到的 Obsidian 库。">
 </p>
 
 第一次打开时，Quiet.md 会找到你的 Obsidian、Logseq、iA Writer 和 Typora 笔记库并复制进来，原文件不会被改动。Obsidian 的 `[[双链]]` 照样能用，点一下就打开它指向的笔记。之后也可以把 Markdown 文件和文件夹拖到主页，或者直接拖进侧栏的某个文件夹。笔记也能导出成 Markdown 或 PDF，或者直接打印。

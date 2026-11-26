@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="픽셀 아트 초원을 배경으로 한 Quiet.md. 왼쪽 사이드바에 폴더가 있고, 홈에서는 각 폴더가 그림이 든 노트 카드 묶음으로 보입니다.">
+  <img src="docs/images/readme-home.webp" width="100%" alt="픽셀 아트 초원을 배경으로 한 Quiet.md. 왼쪽 사이드바에 폴더가 있고, 최상위 폴더 페이지에서는 각 폴더가 그림이 든 노트 카드 묶음으로 보입니다.">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@
 ### 노트 가져오기
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md의 첫 실행 화면. 찾아낸 Obsidian 보관소를 가져오겠냐고 묻고 있습니다.">
+  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md의 첫 실행 화면. 찾아낸 Obsidian 보관소를 그 자리에서 열겠냐고 묻고 있습니다.">
 </p>
 
 처음 실행하면 Quiet.md가 Obsidian, Logseq, iA Writer, Typora 라이브러리를 찾아 복사해 옵니다. 원본은 건드리지 않습니다. Obsidian의 `[[위키링크]]`도 그대로 동작해서, 클릭하면 가리키는 노트가 열립니다. 나중에도 Markdown 파일과 폴더를 홈이나 사이드바의 폴더로 바로 끌어다 놓을 수 있습니다. 노트는 Markdown이나 PDF로 내보내거나 바로 인쇄할 수 있습니다.

@@ -35,7 +35,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-home.webp" width="100%" alt="ドット絵の草原を背景にした Quiet.md。左のサイドバーにフォルダが並び、ホームでは各フォルダが画像入りのノートカードの束として表示されています。">
+  <img src="docs/images/readme-home.webp" width="100%" alt="ドット絵の草原を背景にした Quiet.md。左のサイドバーにフォルダが並び、最上位フォルダのページでは各フォルダが画像入りのノートカードの束として表示されています。">
 </p>
 
 > [!NOTE]
@@ -74,7 +74,7 @@
 ### ノートを連れてくる
 
 <p align="center">
-  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md の初回起動画面。見つかった Obsidian の保管庫の読み込みを提案しています。">
+  <img src="docs/images/readme-import.webp" width="100%" alt="Quiet.md の初回起動画面。見つかった Obsidian の保管庫をその場で開くよう提案しています。">
 </p>
 
 初回起動時に、Quiet.md は Obsidian、Logseq、iA Writer、Typora のライブラリを探してコピーします。元のファイルには手を触れません。Obsidian の `[[ウィキリンク]]` もそのまま使え、クリックするとリンク先のノートが開きます。あとからでも、Markdown ファイルやフォルダをホームに、あるいはサイドバーのフォルダに直接ドラッグできます。ノートは Markdown や PDF に書き出すことも、そのまま印刷することもできます。
