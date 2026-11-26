@@ -556,7 +556,8 @@ impl Workspace {
                 let a = self.folder_drag.rename_in(&e.id);
                 let r = ROW_R - 2.;
                 div()
-                    .ml(px(2.))
+                    // a heading's name starts 8 in, with no icon before it
+                    .ml(px(if heading { -4. } else { 2. }))
                     .mr(px(4.))
                     .flex_1()
                     .min_w_0()
@@ -642,7 +643,7 @@ impl Workspace {
                         .child(checkbox(if checked { Check::On } else { Check::Off }, blocked)),
                 )
             })
-            .when(!heading || renaming, |d| d.child({
+            .when(!heading, |d| d.child({
                 // A folder with something in it folds from its icon, the way Notion's
                 // pages do: hovering the row turns the icon into a chevron (pointing
                 // down when open), and a press on it folds instead of opening the page.
@@ -656,9 +657,6 @@ impl Workspace {
                             w.folder_drag.icon_alt = ev.modifiers.alt;
                         })))
                     .map(|d| match &e.icon {
-                    // a group heading's chevron: the large one (Nucleo's ChevronDown / Right at 16, as an
-                    // icon button's), so it reads apart from the folders' small disclosure
-                    _ if heading => d.child(icon(if open { "chevron-down" } else { "chevron-right" }, 16., Theme::icon())),
                     _ if folder => {
                         let s = if key == "doc" { self.folder_drag.pop(&e.id) } else { 1. };
                         d.child(div().absolute().inset_0().flex().items_center().justify_center().opacity(1. - chevron)

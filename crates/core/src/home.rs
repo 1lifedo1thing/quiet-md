@@ -281,7 +281,10 @@ impl Home {
             _ => RenameError::Other(e.to_string()),
         })?;
         store.moved_to(to.clone());
+        // The default folder (the library's location): launches and new libraries follow it.
+        let was_default = follows_default(&r.path, &Store::legacy_dir());
         r.path = to.clone();
+        if was_default && std::env::var_os("QUIET_MD_HOME").is_none() { let _ = Store::remember_dir(to.clone()); }
         let _ = self.save();
         Ok(to)
     }
@@ -299,6 +302,10 @@ impl Home {
     }
 
     pub fn folder(&self, key: &str) -> Option<&TopFolder> { self.folders.iter().find(|r| r.key == key) }
+
+    /// Why top-level folder `key` keeps its name, for the menu: a test run's or preview's one
+    /// folder (`QUIET_MD_HOME`), or a folder the system names. None: it may be renamed (or is not open).
+    pub fn keeps_name(&self, key: &str) -> bool { self.folder(key).is_some_and(|r| r.store.is_some()) && !self.can_rename(key) }
 
     /// The first top-level folder that opened: where things go when nothing says otherwise.
     pub fn first(&self) -> Option<&TopFolder> { self.folders.iter().find(|r| r.store.is_some()) }
@@ -356,6 +363,9 @@ impl Home {
 }
 
 fn new_key() -> String { uuid::Uuid::new_v4().to_string() }
+
+/// Whether folder `path` is the library's location `legacy`, the default folder.
+fn follows_default(path: &Path, legacy: &Path) -> bool { path == legacy || canonical(path) == canonical(legacy) }
 
 #[cfg(test)]
 mod tests {
@@ -464,6 +474,15 @@ mod tests {
         ws.folders[1].store = None;
         assert_eq!(at(&ws, &kb), None, "none open: the empty state");
         assert!(Home::default().quick_note_folder("").is_none());
+    }
+
+    #[test]
+    fn renaming_the_default_folder_moves_the_default() {
+        let d = dir("follows-default");
+        let lib = d.join("Quiet.md");
+        crate::vfs::create_dir_all(&lib).unwrap();
+        assert!(follows_default(&lib, &lib) && follows_default(&lib.join("."), &lib), "the same folder, however written");
+        assert!(!follows_default(&d.join("Other"), &lib));
     }
 
     #[test]

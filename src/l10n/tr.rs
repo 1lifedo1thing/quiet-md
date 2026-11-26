@@ -1486,4 +1486,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("添加…", "Ekle…"),
     ("无法添加文件夹：{}", "Klasör eklenemedi: {}"),
     ("电脑上的文件夹原位使用，显示在侧栏里；要新的文件夹，在选择窗口里新建。", "Bilgisayarınızdaki klasör yerinde kullanılır ve kenar çubuğunda görünür; yenisi için seçim penceresinde oluşturun."),
+    ("这个文件夹保持原名", "Bu klasör adını korur"),
 ];

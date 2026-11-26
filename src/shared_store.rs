@@ -114,6 +114,7 @@ impl SharedStore {
         r
     }
     pub fn can_rename_folder_top(&self, key: &str) -> bool { self.0.borrow().ws.can_rename(key) }
+    pub fn folder_top_keeps_name(&self, key: &str) -> bool { self.0.borrow().ws.keeps_name(key) }
     /// Where a 快速笔记 goes: the top-level folder picked in Settings while it is open, else the first open one.
     pub fn quick_note_folder(&self) -> Option<String> { self.0.borrow().ws.quick_note_folder(&crate::settings::prefs().quick_note_folder).map(|r| r.key.clone()) }
     pub fn top_path(&self, key: &str) -> Option<PathBuf> { self.0.borrow().ws.folder(key).map(|r| r.path.clone()) }

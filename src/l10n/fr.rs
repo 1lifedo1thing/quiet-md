@@ -1486,4 +1486,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("添加…", "Ajouter…"),
     ("无法添加文件夹：{}", "Impossible d’ajouter le dossier : {}"),
     ("电脑上的文件夹原位使用，显示在侧栏里；要新的文件夹，在选择窗口里新建。", "Un dossier de votre ordinateur est utilisé sur place et apparaît dans la barre latérale ; pour un nouveau, créez-le dans la fenêtre de sélection."),
+    ("这个文件夹保持原名", "Ce dossier garde son nom"),
 ];
