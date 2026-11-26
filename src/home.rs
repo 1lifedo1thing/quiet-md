@@ -772,9 +772,10 @@ impl Workspace {
             self.home.list_hover.as_ref().is_some_and(|h| *h == format!("home-row-{}", e.id))
                 || self.row_menu.as_ref().is_some_and(|m| m.id == e.id)
         });
+        // its top where the grid's first row starts, 64pt down the window
         let mut header = div()
             .h(px(33.))
-            .mt(px(10.))
+            .mt(px(8.))
             .flex_none()
             .flex()
             .items_center()
@@ -881,10 +882,10 @@ impl Workspace {
         // rise above the first row without being cut off — and that clip line is
         // where a row scrolling out of sight stops. It used to sit 4pt higher,
         // the list lifted into the tab row above it, so a scrolling row drew over
-        // 我的文档 / 收藏 and the buttons beside them (#238). 28 under that lift is
-        // 24 without it, and 8 more for the band the folder page had under its header
-        // (the list starts at the header now, so rows scroll right up to it).
-        .flex_1().min_h_0().pt(px(32.)).pb(px(32.)).track_scroll(grid_scroll);
+        // 我的文档 / 收藏 and the buttons beside them (#238). 16 under the header (the
+        // maintainer, 2026-11-26): the first row's top 64pt down the window, the list
+        // view's header where it starts; rows scroll right up to the header.
+        .flex_1().min_h_0().pt(px(16.)).pb(px(32.)).track_scroll(grid_scroll);
         let scroll = grid_scroll.0.borrow().base_handle.clone();
         div().relative().flex_1().min_h_0().flex().flex_col()
             .on_mouse_move(cx.listener(|w, ev: &MouseMoveEvent, _, cx| w.track_home_press(ev, cx)))

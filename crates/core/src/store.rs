@@ -943,6 +943,10 @@ impl Store {
             .unwrap_or_else(|| Self::chosen(crate::vfs::read(Self::location_file()).ok().and_then(|b| serde_json::from_slice::<Location>(&b).ok()).map(|l| l.path), Self::default_dir))
     }
 
+    /// Whether `root` is where every build, earlier ones too, finds the library without
+    /// `library.json`: `Quiet.md` in `docs`.
+    fn needs_no_pointer(root: &Path, docs: &Path) -> bool { root == docs.join(OLD_DEFAULT_NAME) }
+
     /// The library `library.json` names (`remembered`) when it names one, else the default.
     fn chosen(remembered: Option<PathBuf>, default: impl FnOnce() -> PathBuf) -> PathBuf {
         remembered.filter(|p| p.fs_is_absolute()).unwrap_or_else(default)
@@ -951,8 +955,11 @@ impl Store {
     pub fn default_dir() -> PathBuf {
         // The web build's library lives in memory (vfs).
         if cfg!(target_family = "wasm") { return PathBuf::from("/").join(DEFAULT_NAME) }
-        Self::default_in(&dirs::document_dir().or_else(|| dirs::home_dir().map(|h| h.join("Documents"))).unwrap_or_else(|| PathBuf::from(".")))
+        Self::default_in(&Self::documents())
     }
+
+    /// The user's Documents, where the default library lives.
+    fn documents() -> PathBuf { dirs::document_dir().or_else(|| dirs::home_dir().map(|h| h.join("Documents"))).unwrap_or_else(|| PathBuf::from(".")) }
 
     /// The default library in `docs` (the user's Documents): `Quiet Notes` for someone new
     /// ("Quiet.md" read like a Markdown file in Finder, 2026-11-26), the `Quiet.md` builds
@@ -1243,12 +1250,15 @@ impl Store {
     }
 
     /// Use `root` for the rest of this run, and from now on unless
-    /// `QUIET_MD_HOME` says otherwise. The default location needs no pointer.
+    /// `QUIET_MD_HOME` says otherwise. Only `~/Documents/Quiet.md` needs no pointer: every
+    /// build looks there without one, and every other place is written down, `Quiet Notes`
+    /// too, so an installed earlier build (which reads only this file) follows a rename
+    /// rather than starting an empty library where the old one was.
     pub fn remember_dir(root: PathBuf) -> Result<()> {
         let file = Self::location_file();
         // Test runs (`QUIET_MD_HOME`) never move the real library.
         if std::env::var_os("QUIET_MD_HOME").is_some() {}
-        else if root == Self::default_dir() { let _ = crate::vfs::remove_file(&file); }
+        else if Self::needs_no_pointer(&root, &Self::documents()) { let _ = crate::vfs::remove_file(&file); }
         else {
             crate::vfs::create_dir_all(file.parent().unwrap())?;
             write_atomic(&file, &serde_json::to_vec_pretty(&Location { path: root.clone() })?)?;
@@ -3841,6 +3851,9 @@ mod tests {
         let elsewhere = docs.join("Elsewhere");
         assert_eq!(Store::chosen(Some(elsewhere.clone()), || Store::default_in(&docs)), elsewhere, "library.json's place, whatever is in Documents");
         assert_eq!(Store::chosen(Some("relative".into()), || Store::default_in(&docs)), docs.join("Quiet.md"), "a pointer that isn't a place: the default");
+        // Earlier builds read only library.json and look in Quiet.md without it: anywhere else is written down.
+        assert!(Store::needs_no_pointer(&docs.join("Quiet.md"), &docs));
+        assert!(!Store::needs_no_pointer(&docs.join("Quiet Notes"), &docs) && !Store::needs_no_pointer(&elsewhere, &docs));
         let _ = crate::vfs::remove_dir_all(&docs);
     }
 

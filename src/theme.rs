@@ -453,7 +453,6 @@ impl Theme {
     pub fn block_bg_area() -> Hsla { ca(craft::N1000, 0.03) }
     /// Done to-do text: faded to alpha 0.5.
     pub fn todo_done() -> Hsla { ca(craft::N900, 0.5) }
-    pub fn scrollbar_thumb() -> Hsla { ca(craft::N1000, 0.22) }
     pub fn shadow() -> Hsla { ca(craft::N1000, 0.08) }
     /// Ring of a code block / callout whose handle menu is open.
     pub fn code_hover_ring() -> Hsla { ca(craft::B500, 0.35) }

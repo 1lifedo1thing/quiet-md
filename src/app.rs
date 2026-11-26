@@ -166,7 +166,13 @@ fn menu_bar(markdown: bool) -> Vec<Menu> {
                 use crate::settings::Lang as L;
                 match crate::settings::lang() { L::Zh => "显示", L::ZhTw => "顯示", L::En => "View", L::Ja => "表示", L::Ko => "보기", L::Fr => "Présentation", L::Es => "Visualización", L::Ar => "عرض", L::Tr => "Görüntü" }.into()
             },
-            items: vec![MenuItem::action(tr("切换深色 / 浅色", "Toggle Dark Mode"), ToggleDarkMode)],
+            items: vec![
+                MenuItem::action(tr("放大", "Zoom In"), crate::zoom::ZoomInText),
+                MenuItem::action(tr("缩小", "Zoom Out"), crate::zoom::ZoomOutText),
+                MenuItem::action(tr("实际大小", "Actual Size"), crate::zoom::ResetTextZoom),
+                MenuItem::separator(),
+                MenuItem::action(tr("切换深色 / 浅色", "Toggle Dark Mode"), ToggleDarkMode),
+            ],
             disabled: false,
         },
         Menu {
@@ -250,6 +256,7 @@ pub fn bind_keys(cx: &mut App) {
     }));
     crate::modes::bind_keys(cx);
     crate::typewriter::bind_keys(cx);
+    crate::zoom::bind_keys(cx);
     crate::focus::bind_keys(cx);
 }
 
@@ -2001,7 +2008,8 @@ impl Workspace {
             )
             .child(div().flex_1().min_w(px(16.)))
             .child(
-                div().gap(px(4.))
+                // the folder page's gap: "+" and 搜索 stay put from page to page
+                div().gap(px(HEADER_ACTIONS_GAP))
                     .h(px(HEADER_ACTIONS_H)).flex_none()
                     .flex()
                     .items_center()
@@ -2243,6 +2251,9 @@ impl Render for Workspace {
             .on_action(cx.listener(|w, _: &crate::modes::EditMode, window, cx| w.set_mode(false, window, cx)))
             .on_action(cx.listener(|w, _: &crate::modes::ReadMode, window, cx| w.set_mode(true, window, cx)))
             .on_action(cx.listener(|w, _: &crate::typewriter::ToggleTypewriter, _, cx| w.set_typewriter(!crate::settings::typewriter(), true, cx)))
+            .on_action(cx.listener(|w, _: &crate::zoom::ZoomInText, _, cx| w.zoom_text(Some(true), cx)))
+            .on_action(cx.listener(|w, _: &crate::zoom::ZoomOutText, _, cx| w.zoom_text(Some(false), cx)))
+            .on_action(cx.listener(|w, _: &crate::zoom::ResetTextZoom, _, cx| w.zoom_text(None, cx)))
             .on_action(cx.listener(|w, _: &crate::modes::ToggleShortcuts, _, cx| {
                 w.shortcuts = !w.shortcuts;
                 cx.notify();

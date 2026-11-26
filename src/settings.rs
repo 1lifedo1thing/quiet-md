@@ -1674,7 +1674,7 @@ impl Workspace {
                     self.font_row(FontTarget::Doc, tr("文档字体", "Document font"),
                         tr("正文和标题用这个字体，代码块仍用主题的等宽字体。", "Body text and headings use it; code keeps the theme's monospace face."), cx).into_any_element(),
                     // 正文字号: the note's text, headings and code together (themes::doc_len).
-                    // Presets and 自定义: a custom size (12–24pt) steps by 1 under the presets; a size that
+                    // Presets and 自定义: a custom size (12–28pt) steps by 1 under the presets; a size that
                     // is a preset's lights that preset unless 自定义 was picked this time.
                     row(tr("正文字号", "Text size"), None, {
                         let body = themes::active().num("page.size");
@@ -1929,7 +1929,6 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "取消收藏" => "Remove from favorites",
         "取消置顶" => "Unpin",
         "文档信息" => "Document information",
-        "字数统计" => "Word count",
         "快捷键" => "Keyboard shortcuts",
         "最近浏览" => "Recently viewed",
         "所有文档" => "All documents",

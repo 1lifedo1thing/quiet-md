@@ -184,7 +184,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("添加到收藏", "Ajouter aux favoris"),
     ("取消收藏", "Retirer des favoris"),
     ("取消置顶", "Désépingler"),
-    ("字数统计", "Nombre de mots"),
     ("所有文档", "Tous les documents"),
     ("按名称", "Par nom"),
     ("上次浏览", "Dernière consultation"),
@@ -800,7 +799,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("无法在 {} 准备更新，请确认目录可写：{}", "Impossible de préparer la mise à jour dans {}. Vérifiez que le dossier est accessible en écriture : {}"),
     ("下周{w}", "{w} prochain"),
     ("本周{w}", "Ce {w}"),
-    ("{n} 字", "{n|one:# mot|other:# mots}"),
     // 画板界面外壳
     ("上移一层", "Avancer"),
     ("下移一层", "Reculer"),
@@ -1507,4 +1505,8 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("或者把这句话发给你的 Agent。", "Ou copiez ceci pour votre agent."),
     ("按照 {} 安装 Quiet.md 的 skill 和 CLI。", "Installe le skill et la CLI de Quiet.md en suivant {}"),
     ("首次启动引导", "Prise en main"),
+    ("实际大小", "Taille réelle"),
+    ("放大正文", "Agrandir le texte"),
+    ("缩小正文", "Réduire le texte"),
+    ("正文实际大小", "Texte à taille réelle"),
 ];

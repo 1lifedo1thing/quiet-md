@@ -223,7 +223,6 @@
 | 块手柄 | `ButtonGroup` + `Button variant="outline" size="icon-xs"`（24 方形，圆角 min(md, 8)，图标 size-3） | 一个 outline 按钮（维护者 2026-11-24：不画两段之间的接缝）：1px 边、`background` 底、shadow-xs、圆角 8、图标 12；悬停 outline 的悬停色；菜单开着 `muted` | 改（原来 1px `line_border`、圆角 6、悬停和开着都是 `handle_active`、图标 14） |
 | 块手柄尺寸 | 24 × 48（两个 icon-xs） | 26 高，42 宽（24 + 18），空行 + 28 宽 | 保留 C：编辑器按这些固定尺寸摆手柄（和首行垂直居中、表格手柄在列选择条那一行） |
 | 块手柄悬停 | 每个按钮各自悬停 | 两半一起亮 | 我们的：整块是一个控件（按下就是拖动或开菜单），不分左右 |
-| 字数小块 | 无 | outline xs 按钮的外观（1px `border`、shadow-xs、8、text-xs muted、`background` 底） | 我们的；改（原来 `button_border`、`shadow_button`） |
 
 ## 滚动条（`src/design/scroll.rs`：应用里每一处滚动条同一个样子）
 

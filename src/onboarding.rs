@@ -575,7 +575,10 @@ impl Onboarding {
         });
         // Top to bottom: the app's icon, its name, one line, then the settings.
         let over = self.film.is_some();
-        div().size_full().flex().flex_col().items_center().justify_center().px(px(48.)).pb(px(40.))
+        // Centred while it fits (48 above, 88 below: where `pb(40)` alone put it); taller, it starts at the
+        // top and scrolls, as the import page does.
+        div().id("onb-setup-scroll").size_full().overflow_y_scroll().track_scroll(&crate::design::scroll::handle("onb-setup-scroll")).flex().flex_col().items_center().px(px(48.)).pt(px(48.)).pb(px(88.))
+            .child(div().my_auto().flex_none().w_full().flex().flex_col().items_center()
             .child(div().flex().flex_col().items_center().gap(px(12.))
                 .child(div().size(px(64.)).rounded(px(15.)).overflow_hidden().shadow(theme::shadow_card()).child(img(crate::settings::about_icon()).size_full()))
                 .child(lifted(over, 56., 64., true, false, "Quiet.md"))
@@ -585,8 +588,10 @@ impl Onboarding {
                 .child(open_card)
                 .child(lib)
                 .children(hotkey)
-                .children(self.error.clone().map(|e| note_owned(e, true))))
+                .children(self.error.clone().map(|e| note_owned(e, true)))))
             .children(self.lang_menu(cx))
+            // the shared scrollbar, clear of the window's corners at both ends (48 of room beside the column)
+            .child({ crate::design::scroll::solid("onb-setup-scroll"); crate::design::scroll::bar_corners("onb-setup-scroll", &crate::design::scroll::handle("onb-setup-scroll"), crate::design::scroll::WINDOW_R, crate::design::scroll::WINDOW_R) })
             .into_any_element()
     }
 
@@ -666,7 +671,7 @@ impl Onboarding {
                 .children(found.map(|(head, rows)| sheet("onb-found-sheet", Some(head.into_any_element()), rows)))
                 .children(self.error.clone().map(|e| note_owned(e, true))))
             // the shared scrollbar, clear of the window's corners at both ends (48 of room beside the column)
-            .child(crate::design::scroll::bar_corners("onb-scroll", &crate::design::scroll::handle("onb-scroll"), crate::design::scroll::WINDOW_R, crate::design::scroll::WINDOW_R))
+            .child({ crate::design::scroll::solid("onb-scroll"); crate::design::scroll::bar_corners("onb-scroll", &crate::design::scroll::handle("onb-scroll"), crate::design::scroll::WINDOW_R, crate::design::scroll::WINDOW_R) })
             .into_any_element()
     }
 

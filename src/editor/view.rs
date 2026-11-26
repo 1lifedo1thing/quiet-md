@@ -227,6 +227,8 @@ pub struct Editor {
     pub(super) glide: Option<(web_time::Instant, Pixels, u8)>,
     /// The space below the last block this frame (`below_height`).
     pub(super) below_h: f32,
+    /// 放大 / 缩小's percentage and when it was shown (`zoom_badge_el`).
+    pub(super) zoom_badge: Option<(u32, web_time::Instant)>,
     /// Last applied (text color, background) from the color panel.
     pub last_color: (Option<ColorName>, Option<ColorName>),
     pub last_lang: String,
@@ -278,8 +280,6 @@ pub struct Editor {
     pub(super) drag_fx: RefCell<super::drag::DragFx>,
     /// The first and last top-level blocks the page drew rows of this frame.
     pub(super) rendered_top: Cell<Option<(usize, usize)>>,
-    /// The selected blocks' word count, for the document version and selection.
-    pub(super) sel_words: Cell<Option<((u64, super::core::BlockSel), usize)>>,
     /// Blocks just dropped, flashing since.
     pub(super) drop_flash: Option<(Vec<BlockId>, web_time::Instant)>,
     /// The fold arrow turning after a click: block → start.
@@ -491,6 +491,7 @@ impl Editor {
             autoscroll: false,
             glide: None,
             below_h: 200.,
+            zoom_badge: None,
             last_color: (None, Some(ColorName("light-yellow".into()))),
             last_lang: "Plain Text".into(),
             link_field,
@@ -528,7 +529,6 @@ impl Editor {
             block_drag: None,
             drag_fx: Default::default(),
             rendered_top: Cell::new(None),
-            sel_words: Cell::new(None),
             drop_flash: None,
             fold_anim: None,
             col_anim: HashMap::default(),
