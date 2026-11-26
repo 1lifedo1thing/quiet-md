@@ -41,7 +41,7 @@ pub use dialog::{Dialog, DialogFocus, scrim};
 pub use field::{Field, FieldSize, Label, Textarea};
 #[allow(unused_imports)]
 pub use scroll::ScrollBar;
-pub use menu::{Align, MenuItem, MenuLabel, MenuSeparator, Popover, hang, room};
+pub use menu::{Align, MenuItem, MenuLabel, MenuSeparator, Popover, hang, room, sub_hover, sub_move, submenu_area};
 pub use toolbar::{ButtonGroup, ButtonGroupSeparator, Toggle, ToggleSize, Toolbar};
 
 use crate::theme::{dark, rgbaf};

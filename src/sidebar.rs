@@ -733,12 +733,12 @@ impl Workspace {
         }
         // Hovering 下载 opens its submenu; hovering any other item closes it.
         let set_sub = |open: bool| {
-            cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
+            crate::design::sub_hover(cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
                 if let Some(m) = w.row_menu.as_mut().filter(|m| *hovered && m.sub != open) {
                     m.sub = open;
                     cx.notify();
                 }
-            })
+            }))
         };
         let (dup, mv, path, pin, star, dl, ren, del) = (doc.clone(), m.id.clone(), doc.clone(), doc.clone(), doc.clone(), doc.clone(), m.id.clone(), m.id.clone());
         let pdf = doc.clone();
@@ -853,6 +853,7 @@ impl Workspace {
                     anchored().anchor(Anchor::TopLeft).position(point(x, px(top))).snap_to_window_with_margin(px(8.)).child(
                         Popover::new("rm-download-menu")
                             .menu()
+                            .submenu()
                             .w(px(crate::design::menu_w::SM))
                             .child(canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().inset_0())
                             .when(crate::printing::SUPPORTED, |d| d.child(crate::docmenu::sub_item("rm-pdf", "PDF").on_click(cx.listener(move |w, _, window, cx| w.export_pdf(&pdf, window, cx)))))

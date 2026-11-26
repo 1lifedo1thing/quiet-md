@@ -58,7 +58,7 @@ fn field_select(g: &Gallery, k: K, w: f32, cx: &mut Cx) -> Div {
 }
 /// Shuts the gallery's submenu when the pointer reaches a sibling row (Radix).
 fn shut(cx: &mut Cx) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
-    cx.listener(|g: &mut Gallery, on: &bool, _, cx| if *on && g.is(("sub", 0)) { g.on.remove(&("sub", 0)); cx.notify(); })
+    crate::design::sub_hover(cx.listener(|g: &mut Gallery, on: &bool, _, cx| if *on && g.is(("sub", 0)) { g.on.remove(&("sub", 0)); cx.notify(); }))
 }
 fn two(live: Div, still: Div) -> Div { div().flex().flex_col().gap(px(32.)).child(group("可操作", live)).child(group("状态对照", still)) }
 
@@ -270,13 +270,13 @@ pub fn menus(g: &mut Gallery, w: &mut Window, cx: &mut Cx) -> Div {
     // a submenu, as Radix: open on its row, shut when the pointer reaches a sibling; its row lit while it is open
     let sub_k = ("sub", 0);
     let sub_open = g.is(sub_k);
-    let mut sub = Popover::new("s-sub").menu().w(px(160.));
+    let mut sub = Popover::new("s-sub").menu().submenu().w(px(160.));
     for (i, s) in ["标准", "较宽", "全宽"].into_iter().enumerate() {
         sub = sub.child(MenuItem::new(("sw", i)).label(s).checked(g.at(("width", 0)) == i).on_click(tap(cx, move |g, _, cx| { g.pick.insert(("width", 0), i); g.on.remove(&("sub", 0)); g.say(format!("页面宽度：{s}"), cx); })));
     }
     let doc_live = Popover::new("s-doc").menu().w(px(220.))
         .child(MenuItem::new("sd1").icon("page-width").label("页面宽度").submenu(true).open(sub_open)
-            .on_hover(cx.listener(move |g, on: &bool, _, cx| if *on && !g.is(sub_k) { g.on.insert(sub_k); cx.notify(); }))
+            .on_hover(crate::design::sub_hover(cx.listener(move |g, on: &bool, _, cx| if *on && !g.is(sub_k) { g.on.insert(sub_k); cx.notify(); })))
             .on_click(tap(cx, move |g, _, _| g.flip(sub_k)))
             .when(sub_open, |d| d.child(div().absolute().left_full().top(px(-crate::design::menu::PAD)).child(deferred(anchored().snap_to_window_with_margin(px(8.)).child(div().pl(px(4.)).child(sub))).with_priority(1)))))
         .child(MenuItem::new("sd2").icon("search").label("查找和替换").shortcut("⌘F").on_hover(shut(cx)).on_click(says(cx, "查找和替换")))

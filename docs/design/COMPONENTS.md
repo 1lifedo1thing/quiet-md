@@ -116,6 +116,7 @@ shadcn 没有 Toolbar，这里按它已有的零件拼（2026-11-23，维护者�
 - 悬停和 `selected`（键盘当前行）谁后变谁说了算：指针移到一行上、在一行上移动、或离开所有行，指针说了算；`selected` 换了一行，键盘说了算。**指针离开所有行时一行都不亮**（Radix 的规则；键盘再动一下，键盘行才重新亮）。
 - 亮的行文字、图标、快捷键、说明都换成 `accent-foreground`。行在排版时读上一帧定下的亮行；定下的亮行变了，就再画一帧。
 - 子菜单开着的那一行用 `.open(true)`：不管指针在哪都亮着（shadcn 的 `data-open:bg-accent`）。照 Radix，指针移到同一菜单的兄弟行时，调用方把子菜单关上。
+- 指针斜着往子菜单走时有缓冲（Radix 的 pointer grace）：离开开着子菜单的行（`.submenu(true).open(true)`）时，离开点和子菜单靠近一侧的两个角围成一块区域，指针在里面朝子菜单那一侧移动，路过的兄弟行不亮、不接手；离开区域、掉头，或离开那一行 300ms（`menu::GRACE_MS`）后，指针所在的行照常接手。点击和按键立刻结束缓冲，键盘不受影响。左右两侧都适用。调用方要做两件事：打开 / 关闭子菜单的悬停处理包一层 `design::sub_hover`（`on_hover`）或 `sub_move`（`on_mouse_move`）；子菜单用 `Popover::submenu()` 标出位置，不是 `Popover` 的子面板加一个 `design::submenu_area()`。
 - 指针在不可用的行上时谁都不亮。不在任何 `Popover` 里的 `MenuItem`（对话框里嵌的列表）照旧：悬停、`selected` 或 `open` 就亮。
 - 2026-11-23 起，表示「子菜单开着」的调用点从 `.selected` 改成了 `.open`：`docmenu.rs` 的 `menu_item`、`sidebar.rs` 的「下载」、`editor/overlays.rs` 的 `row`（块菜单的缩进、颜色、在下方添加）和斜杠菜单里带子面板的行（`.open(sub && n == selected)`）、组件面板的子菜单演示。
 

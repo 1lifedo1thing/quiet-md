@@ -179,12 +179,12 @@ impl Workspace {
         let focus = self.focus_mode.switch();
         let sub = self.doc_sub;
         let hover_sub = |s: Option<DocSub>| {
-            cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
+            crate::design::sub_hover(cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
                 if *hovered && w.doc_sub != s {
                     w.doc_sub = s;
                     cx.notify();
                 }
-            })
+            }))
         };
         let sub_bounds = self.doc_sub_bounds.clone();
         let (pin_id, star_id, mv_id, del_id, dup_id, print_id) = (id.clone(), id.clone(), id.clone(), id.clone(), id.clone(), id.clone());
@@ -310,7 +310,7 @@ impl Workspace {
         };
         let sub_el = match sub {
             // each levels its first item with its row, where the row was last painted
-            Some(DocSub::Width) => row_top("dm-width").map(|top| (top - PAD, self.width_panel(width, cx).child(recorder()).into_any_element())),
+            Some(DocSub::Width) => row_top("dm-width").map(|top| (top - PAD, self.width_panel(width, cx).submenu().child(recorder()).into_any_element())),
             // Level the submenu's first item with 下载为.
             Some(DocSub::Download) => row_top("dm-download").map(|top| (
                 top - PAD,
@@ -318,6 +318,7 @@ impl Workspace {
                     let pdf = id.clone();
                     Popover::new("dm-download-menu")
                         .menu()
+                        .submenu()
                         .w(px(crate::design::menu_w::SM))
                         .child(recorder())
                         .when(crate::printing::SUPPORTED, |d| d.child(sub_item("dm-pdf", "PDF").on_click(cx.listener(move |w, _, window, cx| w.export_pdf(&pdf, window, cx)))))
