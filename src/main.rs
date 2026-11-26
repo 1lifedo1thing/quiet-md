@@ -152,7 +152,7 @@ pub(crate) fn main_window_options(scripted: bool, at: Option<Bounds<Pixels>>, cx
         titlebar: Some(TitlebarOptions {
             title: Some("Quiet.md".into()),
             appears_transparent: cfg!(any(target_os = "macos", target_os = "windows")),
-            traffic_light_position: Some(point(px(20.), px(app::HEADER_H / 2. - 7.))),
+            traffic_light_position: Some(crate::focus::lights_at()),
         }),
         window_min_size: Some(size(px(app::DOC_MIN_W), px(480.))),
         // AppKit does not drag from the transparent title bar: the app marks its

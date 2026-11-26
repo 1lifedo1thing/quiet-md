@@ -1,7 +1,7 @@
 //! 专注模式: the open document alone in its window. The sidebar folds away and the header's
 //! crumbs and buttons go; on macOS the traffic lights go too (Windows: the caption buttons).
-//! A strip along the window's top brings them back while the pointer is on it, with 退出专注模式
-//! beside them. That button, ⌘. (Ctrl+Shift+Enter on Windows) or Esc leave it, and the
+//! A strip along the window's top brings them back while the pointer is on it, with 退出 where
+//! the header's buttons were. That button, ⌘. (Ctrl+Shift+Enter on Windows) or Esc leave it, and the
 //! sidebar comes back as it was. Page width, size and 阅读模式 are the document's, untouched.
 //! Not remembered, like 窗口保持在最前 and iA Writer's or Typora's own: a reopened window shows
 //! everything. See docs/design/FOCUS_MODE.md.
@@ -71,8 +71,12 @@ impl Focus {
     }
 }
 
+/// Where the traffic lights sit: the middle of the header row (`HEADER_H`), 20pt in.
+pub fn lights_at() -> Point<Pixels> { point(px(20.), px(HEADER_H / 2. - 7.)) }
+
 /// Give the traffic lights `alpha` (macOS; elsewhere the app draws its own controls). At 0
-/// they are hidden as well, so an unseen 关闭 takes no click.
+/// they are hidden as well, so an unseen 关闭 takes no click. Showing or hiding them has AppKit
+/// lay out its title bar again, at its own height: they are put back on the header's middle.
 fn lights(window: &Window, alpha: f32) {
     #[cfg(target_os = "macos")]
     unsafe {
@@ -89,14 +93,16 @@ fn lights(window: &Window, alpha: f32) {
             let _: () = msg_send![b, setHidden: if alpha <= 0. { YES } else { NO }];
             let _: () = msg_send![b, setAlphaValue: alpha as f64];
         }
+        window.set_traffic_light_position(lights_at());
     }
     #[cfg(not(target_os = "macos"))]
     let _ = (window, alpha);
 }
 
-/// 退出专注模式: the button the strip shows beside the traffic lights.
+/// 退出 ✕: the button the strip shows at the right, on the header row's line (a ghost, as the
+/// header's buttons).
 pub fn exit_button(id: impl Into<ElementId>) -> crate::design::Button {
-    crate::design::Button::ghost(id).sized(crate::design::ButtonSize::Sm).icon(ICON).label(crate::settings::tr("退出专注模式", "Exit Focus Mode"))
+    crate::design::Button::ghost(id).sized(crate::design::ButtonSize::Sm).optical().label(crate::settings::text("退出")).icon_end("x")
 }
 
 impl Workspace {
@@ -152,11 +158,11 @@ impl Workspace {
     }
 
     /// The header in 专注模式: an empty strip that drags the window like a title bar and, while
-    /// the pointer is on it, shows 退出专注模式 where the crumbs began.
+    /// the pointer is on it, shows 退出 where the header's buttons end, as far from the edge.
     pub(crate) fn focus_bar(&self, cx: &mut Context<Self>) -> AnyElement {
         let o = self.focus_mode.opacity();
-        div().id("focus-bar").h(px(HEADER_H)).flex_none().flex().items_center()
-            .pl(px(if cfg!(target_os = "macos") { crate::theme::TRAFFIC_LIGHTS_W + 4. } else { 18. }))
+        div().id("focus-bar").h(px(HEADER_H)).flex_none().flex().items_center().justify_end()
+            .pr(px(crate::ui::header_right_inset()))
             .title_bar()
             .on_hover(cx.listener(|w, on: &bool, _, cx| { w.focus_mode.set_reveal(*on); cx.notify(); }))
             .when(o > 0., |d| d.child(

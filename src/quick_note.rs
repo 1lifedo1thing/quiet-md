@@ -78,7 +78,7 @@ pub fn open_document(document: Option<String>, cx: &mut App) {
         titlebar: Some(TitlebarOptions {
             title: Some(crate::settings::text("Quiet.md · 快速笔记").into()),
             appears_transparent: cfg!(any(target_os = "macos", target_os = "windows")),
-            traffic_light_position: Some(point(px(20.), px(crate::app::HEADER_H / 2. - 7.))),
+            traffic_light_position: Some(crate::focus::lights_at()),
         }),
         window_min_size: Some(size(px(480.), px(480.))),
         app_owns_titlebar_drag: true,
