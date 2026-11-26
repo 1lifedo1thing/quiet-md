@@ -16,16 +16,16 @@ Project-drawn icons that sit beside Nucleo ones (the shell, the block handle, th
 
 Each project-drawn file opens with a comment beginning 本项目绘制 that says what it shows.
 
-## `assets/icons/`: 69 Nucleo icons
+## `assets/icons/`: 70 Nucleo icons
 
-Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 69 files draw on 61 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
+Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 70 files draw on 62 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
 
 Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 and `nucleo-ui-essential-outline-18` 1.1.8 by comparing the drawn shapes.
 
 | File | Set | Nucleo icon | Check |
 |---|---|---|---|
 | `arrow-left.svg` | UI Outline 18 | ArrowLeft | identical to the package |
-| `batch.svg` | UI Outline 18 | CheckList | identical to the package |
+| `batch.svg` | UI Outline 18 | ListCheckbox | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26; CheckList before) |
 | `bin.svg` | UI Outline 18 | Trash 2 | Trash 2 as exported from the Nucleo app; matches an earlier Nucleo export exactly; the 1.5.0 package draws Trash2 slightly differently. |
 | `bold.svg` | UI Outline 18 | TextBold | identical to the package |
 | `check.svg` | UI Outline 18 | Check | identical to the package |
@@ -86,6 +86,7 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `underline.svg` | UI Outline 18 | TextUnderline | identical to the package |
 | `view-grid.svg` | UI Outline 18 | Grid2 | identical to the package |
 | `view-list.svg` | UI Outline 18 | BulletList | identical to the package |
+| `view-options.svg` | UI Outline 18 | ViewAll | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26; the folder header's 显示) |
 | `view-settings.svg` | UI Outline 18 | Sliders | identical to the package |
 | `whiteboard.svg` | UI Essential Outline 18 | Shapes | identical to the package |
 | `x.svg` | UI Outline 18 | Xmark | identical to the package |
