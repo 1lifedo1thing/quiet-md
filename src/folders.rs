@@ -219,7 +219,7 @@ impl Workspace {
             div().id(SharedString::from(format!("folder-crumb-{key}"))).no_drag().flex_none().max_w(px(220.)).px(px(4.)).rounded(px(6.))
                 .overflow_hidden().whitespace_nowrap().text_ellipsis().cursor_pointer()
                 .text_color(crate::ui::crumb_ink()).hover(|s| s.text_color(crate::ui::crumb_page()))
-                .child(ui_text(label))
+                .child(ui_text(label).optical())
                 .on_click(cx.listener(move |w, _, window, cx| match &target { Some(t) => w.open(t, window, cx), None => w.show_view(View::Default, cx) }))
         };
         // The path starts at its top-level folder, by that folder's name (W5).
@@ -237,7 +237,7 @@ impl Workspace {
             crumbs = crumbs.child(sep()).child(link(e.id.clone(), display_title(&e.title), Some(e.id.clone())));
         }
         crumbs.when(!own, |d| d.child(sep())).child(div().min_w_0().px(px(4.)).overflow_hidden().whitespace_nowrap().text_ellipsis()
-            .text_color(crate::ui::crumb_page()).child(ui_text(title)))
+            .text_color(crate::ui::crumb_page()).child(ui_text(title).optical()))
     }
 
     /// The folder shown when no page is picked (`View::Default`): the documents folder, else the first top-level folder.

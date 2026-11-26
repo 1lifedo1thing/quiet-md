@@ -450,10 +450,11 @@ pub fn cjk_punct_font() -> Option<&'static str> { crate::fonts::cjk_punct_instal
 pub struct UiText {
     text: SharedString,
     hit: Option<(std::ops::Range<usize>, Hsla)>,
+    optical: bool,
 }
 
 pub fn ui_text(text: impl Into<SharedString>) -> UiText {
-    UiText { text: text.into(), hit: None }
+    UiText { text: text.into(), hit: None, optical: false }
 }
 
 pub struct UiTextLayout {
@@ -465,6 +466,12 @@ pub struct UiTextLayout {
 }
 
 impl UiText {
+    /// Centred on its line by what it looks like, not by its font box: GPUI sets the baseline
+    /// half the line's ascent minus descent below the box's middle, and a CJK fallback's tall
+    /// ascent drops the text half a point under its neighbours (the header row, lined up on the
+    /// traffic lights). Lifted so the middle of the capitals sits on the line's middle.
+    pub fn optical(mut self) -> Self { self.optical = true; self }
+
     pub fn hit(mut self, range: Option<std::ops::Range<usize>>, color: Hsla) -> Self {
         self.hit = range.map(|r| (r, color));
         self
@@ -612,7 +619,15 @@ impl Element for UiText {
         cx: &mut App,
     ) {
         if let Some(line) = line {
-            let _ = line.paint(bounds.origin, layout.line_height, TextAlign::Left, None, window, cx);
+            let mut origin = bounds.origin;
+            if self.optical && let Some(run) = layout.runs.first() {
+                let ts = window.text_system().clone();
+                let cap = ts.cap_height(ts.resolve_font(&run.font), layout.font_size);
+                // the capitals' middle sits (ascent - descent - cap) / 2 below the box's; to whole device pixels
+                let sf = window.scale_factor();
+                origin.y -= px((f32::from(line.ascent - line.descent - cap) / 2. * sf).round() / sf);
+            }
+            let _ = line.paint(origin, layout.line_height, TextAlign::Left, None, window, cx);
         }
     }
 }
