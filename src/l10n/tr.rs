@@ -1509,4 +1509,10 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("放大正文", "Metni büyüt"),
     ("缩小正文", "Metni küçült"),
     ("正文实际大小", "Metin gerçek boyutta"),
+    ("打字机模式", "Daktilo modu"),
+    ("正在写的一行停在窗口中间", "Yazdığınız satır ortada kalır"),
+    ("打字机模式已打开", "Daktilo modu açık"),
+    ("打字机模式已关闭", "Daktilo modu kapalı"),
+    ("段落聚焦", "Paragraf odağı"),
+    ("正在写的一段保持清晰，其余变淡", "Yazdığınız paragraf net kalır, gerisi soluklaşır"),
 ];

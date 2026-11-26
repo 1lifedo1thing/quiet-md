@@ -229,6 +229,10 @@ pub struct Editor {
     pub(super) below_h: f32,
     /// 放大 / 缩小's percentage and when it was shown (`zoom_badge_el`).
     pub(super) zoom_badge: Option<(u32, web_time::Instant)>,
+    /// 段落聚焦: the rows kept clear this frame, and the ones before with when
+    /// that changed while the fade runs (`sync_lit`).
+    pub(super) lit: Option<(usize, usize)>,
+    pub(super) lit_fade: Option<((usize, usize), web_time::Instant)>,
     /// Last applied (text color, background) from the color panel.
     pub last_color: (Option<ColorName>, Option<ColorName>),
     pub last_lang: String,
@@ -492,6 +496,8 @@ impl Editor {
             glide: None,
             below_h: 200.,
             zoom_badge: None,
+            lit: None,
+            lit_fade: None,
             last_color: (None, Some(ColorName("light-yellow".into()))),
             last_lang: "Plain Text".into(),
             link_field,

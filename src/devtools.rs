@@ -16,7 +16,7 @@
 //!   `doc-font-picker` / `ui-font-picker`: 外观's font lists, `font-del-<id>`: a downloaded font's delete) |
 //!   window <n> (the steps after it play in the n-th window, 0 the main one, in the order they opened) |
 //!   windows <n> (that many windows are open; else the run ends with exit code 3) |
-//!   caret (logs `caret <y> of <height>`: the caret line's middle on the page) |
+//!   caret (logs `caret <y> of <height> at <top>`: the caret line's middle on the page, the page's top in the window) |
 //!   showing <title> (the document or folder page in front has that title; else the run ends with exit code 3) |
 //!   origin board | origin window (the points of the mouse and file steps after it count from the open
 //!   画板's top-left corner, or again from the window's; no board open ends the run with exit code 3)
@@ -240,7 +240,7 @@ pub fn start(window: &mut Window, cx: &mut App) {
                         let ws = root.downcast::<crate::app::Workspace>().ok()?;
                         ws.read(cx).editor.as_ref()?.read(cx).caret_probe()
                     }).ok().flatten();
-                    match at { Some((y, h)) => eprintln!("devtools: caret {y:.1} of {h:.1}"), None => eprintln!("devtools: caret none") }
+                    match at { Some((y, h, top)) => eprintln!("devtools: caret {y:.1} of {h:.1} at {top:.1}"), None => eprintln!("devtools: caret none") }
                     continue
                 }
                 _ => { resolved = shifted(cmd, rest); (cmd, resolved.as_str()) }

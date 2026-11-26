@@ -21,6 +21,7 @@ static FEISHU: AtomicBool = AtomicBool::new(false);
 static LANG: AtomicU8 = AtomicU8::new(Lang::En as u8);
 static MOTION_HIGH: AtomicBool = AtomicBool::new(false);
 static TYPEWRITER: AtomicBool = AtomicBool::new(false);
+static PARAGRAPH_FOCUS: AtomicBool = AtomicBool::new(false);
 static PREFS: RwLock<Option<Preferences>> = RwLock::new(None);
 
 /// The active document theme draws blocks the 飞书 way (else Craft's).
@@ -47,6 +48,8 @@ pub fn english() -> bool { lang() != Lang::Zh }
 pub fn motion_high() -> bool { MOTION_HIGH.load(Ordering::Relaxed) }
 /// 打字机模式 is on (typewriter.rs).
 pub fn typewriter() -> bool { TYPEWRITER.load(Ordering::Relaxed) }
+/// 段落聚焦 is on (typewriter.rs).
+pub fn paragraph_focus() -> bool { PARAGRAPH_FOCUS.load(Ordering::Relaxed) }
 pub fn tr(zh: &'static str, en: &'static str) -> &'static str { match lang() { Lang::Zh => zh, Lang::En => en, l => crate::l10n::get(l, zh).unwrap_or(en) } }
 /// `localized_format!` for a given language: `zh` / `en` build the two
 /// originals; other languages refill their translation of `template`.
@@ -168,6 +171,8 @@ pub struct Preferences {
     pub quick_note_folder: String,
     /// 打字机模式 (typewriter.rs): the caret's line stays in the middle of the page.
     pub typewriter: bool,
+    /// 段落聚焦 (typewriter.rs): the paragraph being written stays clear, the others fade.
+    pub paragraph_focus: bool,
 }
 
 /// A week between asks to move the library to real folders.
@@ -206,7 +211,7 @@ fn system_lang() -> Lang {
 impl Default for Preferences {
     fn default() -> Self {
         let lang = system_lang();
-        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_folder: false, browser: String::new(), opaque_window: false, hide_outline: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new(), typewriter: false }
+        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_folder: false, browser: String::new(), opaque_window: false, hide_outline: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new(), typewriter: false, paragraph_focus: false }
     }
 }
 
@@ -286,6 +291,7 @@ fn apply(p: Preferences) {
     crate::model::set_untitled(translate(crate::model::UNTITLED, p.lang()));
     MOTION_HIGH.store(p.motion == "high", Ordering::Relaxed);
     TYPEWRITER.store(p.typewriter, Ordering::Relaxed);
+    PARAGRAPH_FOCUS.store(p.paragraph_focus, Ordering::Relaxed);
     // Before the themes are read (startup) the base comes from `feishu`.
     themes::select(&p.theme_id());
     themes::set_doc_font(&p.doc_family);

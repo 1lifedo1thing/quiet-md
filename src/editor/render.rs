@@ -161,6 +161,9 @@ pub(super) struct Env {
 const TEXT_PLACEHOLDER: &str = "输入“/”快速插入内容";
 /// 打字机模式 holds the caret's line this far down the page (0.5: the middle).
 pub(super) const TYPEWRITER_LINE: f32 = 0.5;
+/// 段落聚焦: the other paragraphs' opacity, and how long a change of paragraph eases (s).
+const FOCUS_DIM: f32 = 0.3;
+const FOCUS_FADE: f32 = 0.15;
 
 pub(super) fn margins(b: &Block, env: Env) -> (f32, f32) {
     if env.cell {
@@ -1415,7 +1418,8 @@ impl Editor {
         };
         let targets = r.targets.into_inner();
         self.handle_targets.extend(targets);
-        let padded = div().w_full().pl(px(self.layout.ml)).pr(px(self.layout.mr)).child(content);
+        let a = self.item_opacity(ix);
+        let padded = div().w_full().pl(px(self.layout.ml)).pr(px(self.layout.mr)).when(a < 1., |d| d.opacity(a)).child(content);
         match cover {
             // The cover spans the whole pane, above the padded header.
             Some(c) => div().w_full().child(c).child(padded).into_any_element(),
@@ -1455,13 +1459,55 @@ impl Editor {
     }
 
     /// For scripts (`caret`): the caret line's middle and the page's height,
-    /// both from the page's top, as last drawn.
+    /// both from the page's top, and the page's top in the window, as last drawn.
     #[cfg(feature = "devtools")]
-    pub fn caret_probe(&self) -> Option<(f32, f32)> {
+    pub fn caret_probe(&self) -> Option<(f32, f32, f32)> {
         let h = self.core.sel.head;
         let view = self.list.viewport_bounds();
         let y = self.cache.borrow().get(&h.block).map(|l| l.position_for(h.offset).y + l.line_height / 2.)?;
-        Some((f32::from(y - view.top()), f32::from(view.size.height)))
+        Some((f32::from(y - view.top()), f32::from(view.size.height), f32::from(view.top())))
+    }
+
+    /// 段落聚焦: the rows that stay clear, first to last (the title is row 0):
+    /// the caret's, or every one the selection spans. `None` dims nothing.
+    fn lit_rows(&self) -> Option<(usize, usize)> {
+        if !crate::settings::paragraph_focus() || self.read_only { return None }
+        let (a, b) = match self.core.block_sel {
+            Some(s) => (s.anchor, s.head),
+            None => (self.core.sel.anchor.block, self.core.sel.head.block),
+        };
+        let (a, b) = (self.item_of(a)?, self.item_of(b)?);
+        Some((a.min(b), a.max(b)))
+    }
+
+    /// 段落聚焦's opacity for row `ix`, easing over `FOCUS_FADE` from the rows
+    /// lit before (丰富 motion; 克制 switches at once).
+    fn item_opacity(&self, ix: usize) -> f32 {
+        let Some(now) = self.lit else { return 1. };
+        let at = |r: (usize, usize)| if (r.0..=r.1).contains(&ix) { 1. } else { FOCUS_DIM };
+        match self.lit_fade {
+            Some((before, t0)) => {
+                let k = (t0.elapsed().as_secs_f32() / FOCUS_FADE).min(1.);
+                let (from, to) = (at(before), at(now));
+                from + (to - from) * (1. - (1. - k).powi(3))
+            }
+            None => at(now),
+        }
+    }
+
+    /// Follows the selection to the rows 段落聚焦 keeps clear (before the list draws).
+    fn sync_lit(&mut self, window: &mut Window) {
+        let lit = self.lit_rows();
+        if lit != self.lit {
+            self.lit_fade = match (self.lit, lit) {
+                (Some(before), Some(_)) if crate::settings::motion_high() => Some((before, web_time::Instant::now())),
+                _ => None,
+            };
+            self.lit = lit;
+        }
+        if let Some((_, t0)) = self.lit_fade {
+            if t0.elapsed().as_secs_f32() >= FOCUS_FADE { self.lit_fade = None } else { window.request_animation_frame() }
+        }
     }
 
     /// The space below the last block: 200px, or with 打字机模式 half the page,
@@ -1622,6 +1668,7 @@ impl Editor {
         let focused = self.focus.is_focused(window);
         self.below_h = self.below_height();
         self.sync_items(focused, super::cover::cover_height(window));
+        self.sync_lit(window);
         let generation = self.core.generation;
         let (units, eqnos) = match self.frame.generation == Some(generation) {
             true => (self.frame.units.clone(), self.frame.eqnos.clone()),

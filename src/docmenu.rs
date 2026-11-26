@@ -30,7 +30,7 @@ thread_local! {
 /// 窗口保持在最前 switches: the user's order, 2026-11-25; 打字机模式 and 专注模式, a document's only, after 阅读模式),
 /// then what is done to it.
 #[derive(Clone, Copy, PartialEq)]
-enum Item { Width, Read, Typewriter, Focus, Refs, OnTop, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Delete, Shortcuts, Rule }
+enum Item { Width, Read, Typewriter, Dim, Focus, Refs, OnTop, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Delete, Shortcuts, Rule }
 
 /// The page open: a document, one with a 画板 opened in its place, a 画板 file, a 数据表 file.
 #[derive(Clone, Copy, PartialEq)]
@@ -43,7 +43,7 @@ fn items(page: Page, child: bool) -> Vec<Item> {
     let top: &[Item] = if crate::on_top::SUPPORTED { &[OnTop] } else { &[] };
     let top_rule: &[Item] = if crate::on_top::SUPPORTED { &[OnTop, Rule] } else { &[] };
     let list: Vec<&[Item]> = match page {
-        Page::Doc => vec![&[Width, Read, Typewriter, Focus, Refs], top, &[Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete, Rule, Shortcuts]],
+        Page::Doc => vec![&[Width, Read, Typewriter, Dim, Focus, Refs], top, &[Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete, Rule, Shortcuts]],
         // a board isn't the page: no page width, no find in its text, its own shortcut help (`?`)
         Page::Board => vec![&[Read, Refs], top, &[Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete]],
         // a board file: no Markdown, no reading mode or references either
@@ -175,6 +175,7 @@ impl Workspace {
         let page = self.editor.as_ref().map_or(Page::Doc, |e| { let e = e.read(cx); if e.table_file { Page::Table } else if e.board_file { Page::BoardFile } else if e.board_open() { Page::Board } else { Page::Doc } });
         let reading = self.reading();
         let typewriter = crate::settings::typewriter();
+        let dim = crate::settings::paragraph_focus();
         let on_top = self.on_top;
         let focus = self.focus_mode.switch();
         let sub = self.doc_sub;
@@ -217,6 +218,11 @@ impl Workspace {
                     .tip_right(crate::settings::tr("正在写的一行停在窗口中间", "Keeps the line you write in the middle"), Some(crate::shortcuts::hint("workspace::ToggleTypewriter", "⌘ + Shift + T")))
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(move |w, _, _, cx| w.set_typewriter(!typewriter, false, cx))).into_any_element(),
+                Item::Dim => menu_item("dm-dim", crate::typewriter::FOCUS_ICON, crate::settings::tr("段落聚焦", "Paragraph Focus"), false, false)
+                    .switch(dim)
+                    .tip_right(crate::settings::tr("正在写的一段保持清晰，其余变淡", "The paragraph you write stays clear, the rest fade"), None)
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, _, cx| w.set_paragraph_focus(!dim, cx))).into_any_element(),
                 Item::Refs => menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
                     .switch(refs_shown)
                     .on_hover(hover_sub(None))

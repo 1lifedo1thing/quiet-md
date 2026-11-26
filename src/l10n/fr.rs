@@ -1509,4 +1509,10 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("放大正文", "Agrandir le texte"),
     ("缩小正文", "Réduire le texte"),
     ("正文实际大小", "Texte à taille réelle"),
+    ("打字机模式", "Mode machine à écrire"),
+    ("正在写的一行停在窗口中间", "La ligne que vous écrivez reste au milieu"),
+    ("打字机模式已打开", "Mode machine à écrire activé"),
+    ("打字机模式已关闭", "Mode machine à écrire désactivé"),
+    ("段落聚焦", "Focus sur le paragraphe"),
+    ("正在写的一段保持清晰，其余变淡", "Le paragraphe en cours reste net, le reste s'estompe"),
 ];
