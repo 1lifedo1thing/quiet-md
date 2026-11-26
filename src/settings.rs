@@ -1447,13 +1447,12 @@ impl Workspace {
             // The document sidebar's header, 返回 where 添加文件夹 is: the toggle doesn't move.
             .child(self.sidebar_header(crate::ui::header_icon("settings-back", "arrow-left").relative().child(self.home.track("settings-back")).tip(tr("返回", "Back"), Some("Esc"))
                 .on_click(cx.listener(|w, _, _, cx| w.close_settings(cx))), cx))
-            // The document sidebar's rhythm: the first row sits 8 under the bar, a section
-            // header like 我的文档's, rows `ROW_GAP` apart. 设置's line sits on
-            // a row's, not a section header's: the 34pt box keeps the rows below.
-            .child(div().pt(px(8.)).px(px(sb::SB_X)).flex().flex_col()
-                .child(div().h(px(sb::SECTION_H)).pl(px(4.)).pt(px((sb::SECTION_TOP + sb::SECTION_H) / 2. - sb::ROW_H / 2.))
+            // The document sidebar's rhythm: 设置 sits where the first folder's heading does, a
+            // row right under the bar, and the rows follow `ROW_GAP` apart.
+            .child(div().px(px(sb::SB_X)).flex().flex_col().gap(px(sb::ROW_GAP))
+                .child(div().h(px(sb::ROW_H)).flex().items_center().pl(px(4.))
                     .child(div().px(px(4.)).text_size(px(theme::ui_font())).line_height(px(theme::ui_font() + 7.)).font_weight(FontWeight::SEMIBOLD).text_color(Theme::sidebar_section()).child(tr("设置", "Settings"))))
-                .child(div().flex().flex_col().gap(px(sb::ROW_GAP)).children(NAV.iter().map(|p| nav_row(*p, cx)).collect::<Vec<_>>())))
+                .children(NAV.iter().map(|p| nav_row(*p, cx)).collect::<Vec<_>>()))
             .into_any_element()
     }
 

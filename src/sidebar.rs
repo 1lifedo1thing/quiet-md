@@ -47,6 +47,11 @@ pub(crate) const ROW_R: f32 = 9.;
 pub(crate) const ROW_GAP: f32 = crate::design::G.sidebar_gap;
 pub(crate) const ROW_ICON: f32 = 18.;
 pub(crate) const GROUP_GAP: f32 = 16.;
+/// Room above each top-level folder's heading after the first: the groups stand apart.
+pub(crate) const TOP_GAP: f32 = 12.;
+/// How far the list tucks up under the window's header, its first heading that much nearer the
+/// traffic lights (a centre 35pt below theirs, as in macOS 26's Notes).
+pub(crate) const LIST_LIFT: f32 = 4.;
 pub(crate) const SECTION_H: f32 = 34.;
 pub(crate) const SECTION_TOP: f32 = 6.;
 /// 我的文档's heading is a row like the others: a `ROW_H` wash, `ROW_GAP` above the first row.
@@ -110,6 +115,7 @@ impl Workspace {
     pub(crate) fn sidebar_header(&self, first: impl IntoElement, cx: &mut Context<Self>) -> Div {
         div()
             .h(px(crate::app::HEADER_H))
+            .mb(px(-LIST_LIFT))
             .flex_none()
             .flex()
             .items_center()
