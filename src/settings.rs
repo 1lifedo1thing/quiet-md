@@ -109,6 +109,11 @@ pub struct Preferences {
     pub quick_hotkey: bool,
     /// Look for a new version now and then (update.rs).
     pub auto_update: bool,
+    /// 匿名使用统计: the `quiet` command line tool's daily counts of which
+    /// commands ran (crates/cli/src/usage.rs reads it). None until the switch
+    /// is touched: it then follows 自动检查更新, as before there was a switch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage_stats: Option<bool>,
     /// Light or dark look: "light", "dark", or empty to follow the system.
     pub appearance: String,
     /// The last version that opened this library (changelog.rs).
@@ -211,7 +216,7 @@ fn system_lang() -> Lang {
 impl Default for Preferences {
     fn default() -> Self {
         let lang = system_lang();
-        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_folder: false, browser: String::new(), opaque_window: false, hide_outline: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new(), typewriter: false, paragraph_focus: false }
+        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, usage_stats: None, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_folder: false, browser: String::new(), opaque_window: false, hide_outline: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new(), typewriter: false, paragraph_focus: false }
     }
 }
 
@@ -1544,8 +1549,9 @@ impl Workspace {
                 }, cx)
             }).into_any_element()]
         };
-        div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
-            .child(group("group-general", None, vec![
+        let g = crate::design::geo();
+        div().w_full().flex().flex_col().gap(px(g.section_gap))
+            .child(group("group-general", Some(tr("基本", "Basics")), vec![
                 row(tr("界面语言", "Interface language"), None, {
                     let anchor = self.lang_anchor.clone();
                     let current = p.lang();
@@ -1557,20 +1563,20 @@ impl Workspace {
                 row(tr("启动时打开", "On launch"), desc(tr("上次阅读的文档，或文档文件夹。", "The document read last, or the documents folder.")),
                     segmented("pref-start", &[tr("上次文档", "Last document"), tr("文档文件夹", "Documents folder")], p.start_folder as usize,
                         |w, i, cx| w.set_pref(|p| p.start_folder = i == 1, cx), cx)).into_any_element(),
-                row(tr("自动下载网络图片", "Download web images"), desc(tr("关闭后不联网，网络图片显示为占位，点击单独加载。", "When off the app stays offline; web images show a placeholder you can click to load.")),
-                    switch("pref-remote", p.remote_images).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.remote_images = !p.remote_images, cx)))).into_any_element(),
-                row(tr("自动检查更新", "Check for updates automatically"), desc(tr("只读取一份版本信息，不发送任何数据；新版本由你决定何时下载安装。", "Reads a version file and sends nothing about you; you decide when to download and install.")),
-                    switch("pref-update", p.auto_update).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.auto_update = !p.auto_update, cx)))).into_any_element(),
-                row(tr("退格键回到标题", "Backspace returns to title"), desc(tr("在正文开头按退格键时回到标题，第一段文字并入标题。关闭后光标留在正文。", "Backspace at the start of the body moves to the title, joining the first paragraph to it. When off the caret stays in the body.")),
-                    switch("pref-backspace-title", p.backspace_to_title).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.backspace_to_title = !p.backspace_to_title, cx)))).into_any_element(),
-                row(tr("中英文之间自动加空格", "Space between Chinese and English"), desc(tr("输入时在汉字和英文字母、数字之间自动加一个空格，代码、链接和公式里不加。已有的文字可用「编辑 › 整理本文空格」。", "While typing, adds a space between Chinese characters and Latin letters or digits, except in code, links and formulas. For existing text use Edit › Add Spaces Between Chinese and English.")),
-                    switch("pref-cjk-spacing", p.cjk_spacing).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.cjk_spacing = !p.cjk_spacing, cx)))).into_any_element(),
                 // The key as bound (Ctrl+N off macOS, or the user's own), in every language's text.
                 row(tr("快捷新建默认类型", "Quick new (⌘N)").replace("⌘N", new_key), Some(tr("⌘N 新建时创建的类型；「记住上次」沿用你上次从新建菜单选的类型。", "What ⌘N creates; “Last used” repeats the type you last picked from the New menu.").replace("⌘N", new_key).into()), {
                     let sel = match p.new_default.as_str() { "doc" => 1, "markdown" => 2, _ => 0 };
                     self.select("quick-new", vec![tr("记住上次", "Last used"), tr("文档", "Document"), "Markdown"], sel,
                         |w, i, cx| w.set_pref(|p| p.new_default = ["", "doc", "markdown"][i].into(), cx), cx)
                 }).into_any_element(),
+            ]))
+            .child(group("group-editing", Some(tr("编辑", "Editing")), vec![
+                row(tr("退格键回到标题", "Backspace returns to title"), desc(tr("在正文开头按退格键时回到标题，第一段文字并入标题。关闭后光标留在正文。", "Backspace at the start of the body moves to the title, joining the first paragraph to it. When off the caret stays in the body.")),
+                    switch("pref-backspace-title", p.backspace_to_title).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.backspace_to_title = !p.backspace_to_title, cx)))).into_any_element(),
+                row(tr("中英文之间自动加空格", "Space between Chinese and English"), desc(tr("输入时在汉字和英文字母、数字之间自动加一个空格，代码、链接和公式里不加。已有的文字可用「编辑 › 整理本文空格」。", "While typing, adds a space between Chinese characters and Latin letters or digits, except in code, links and formulas. For existing text use Edit › Add Spaces Between Chinese and English.")),
+                    switch("pref-cjk-spacing", p.cjk_spacing).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.cjk_spacing = !p.cjk_spacing, cx)))).into_any_element(),
+            ]))
+            .child(group("group-links", Some(tr("链接与搜索", "Links and search")), links.into_iter().chain([
                 // 网页搜索 opens the selection in the browser; which site is the
                 // user's habit, so it is a preference rather than a constant.
                 row(tr("网页搜索", "Web search"), desc(tr("选中文字后「网页搜索」用哪个网站。", "Which site “Web search” opens the selected text in.")), {
@@ -1578,7 +1584,15 @@ impl Workspace {
                     self.select("search-engine", vec!["Google", tr("百度", "Baidu"), "Bing", "DuckDuckGo"], sel,
                         |w, i, cx| w.set_pref(|p| p.search_engine = ["", "baidu", "bing", "duckduckgo"][i].into(), cx), cx)
                 }).into_any_element(),
-            ].into_iter().chain(links).collect()))
+            ]).collect()))
+            .child(group("group-privacy", Some(tr("网络与隐私", "Network and privacy")), vec![
+                row(tr("自动下载网络图片", "Download web images"), desc(tr("关闭后不联网，网络图片显示为占位，点击单独加载。", "When off the app stays offline; web images show a placeholder you can click to load.")),
+                    switch("pref-remote", p.remote_images).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.remote_images = !p.remote_images, cx)))).into_any_element(),
+                row(tr("自动检查更新", "Check for updates automatically"), desc(tr("只读取一份版本信息，不发送任何数据；新版本由你决定何时下载安装。", "Reads a version file and sends nothing about you; you decide when to download and install.")),
+                    switch("pref-update", p.auto_update).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.auto_update = !p.auto_update, cx)))).into_any_element(),
+                row(tr("匿名使用统计", "Anonymous usage statistics"), desc(tr("命令行工具 quiet 每天发一次各命令的使用次数，不含文档内容和参数。在终端运行 quiet telemetry status 可以查看发送的内容。", "The quiet command line tool sends a daily count of the commands it ran, never your documents or arguments. Run quiet telemetry status to see what it sends.")),
+                    switch("pref-usage-stats", p.usage_stats.unwrap_or(p.auto_update)).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.usage_stats = Some(!p.usage_stats.unwrap_or(p.auto_update)), cx)))).into_any_element(),
+            ]))
             .into_any_element()
     }
 

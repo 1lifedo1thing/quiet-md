@@ -1517,4 +1517,9 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("正在写的一段保持清晰，其余变淡", "Yazdığınız paragraf net kalır, gerisi soluklaşır"),
     ("段落聚焦已打开", "Paragraf odağı açık"),
     ("段落聚焦已关闭", "Paragraf odağı kapalı"),
+    ("基本", "Temel"),
+    ("链接与搜索", "Bağlantılar ve arama"),
+    ("网络与隐私", "Ağ ve gizlilik"),
+    ("匿名使用统计", "Anonim kullanım istatistikleri"),
+    ("命令行工具 quiet 每天发一次各命令的使用次数，不含文档内容和参数。在终端运行 quiet telemetry status 可以查看发送的内容。", "quiet komut satırı aracı her gün bir kez hangi komutun kaç kez çalıştığını gönderir; belgelerini ve argümanlarını asla göndermez. Gönderileni görmek için terminalde quiet telemetry status çalıştır."),
 ];

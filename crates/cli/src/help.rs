@@ -275,10 +275,11 @@ an MCP client's settings: {\"command\": \"quiet\", \"args\": [\"mcp\"]}"),
 quiet counts how often its commands run: per day, how many ran and failed and
 which commands (by name), under a random id for this computer. Never the
 library, documents, titles or arguments. Finished days are sent once a day to
-stats.quiet.md, with quiet's version and the system (macos/windows, arm or x86).
-`status` shows what is kept and waiting; `off` stops it and forgets the id.
-Nothing is counted while DO_NOT_TRACK or QUIET_NO_TELEMETRY is set, in CI, or
-while 自动检查更新 (Check for updates automatically) is off in Quiet.md."),
+telemetry.quiet.md, with quiet's version and the system (macos/windows, arm or
+x86). `status` shows what is kept and waiting; `off` stops it and forgets the
+id. Nothing is counted while DO_NOT_TRACK or QUIET_NO_TELEMETRY is set, in CI,
+or while Settings › General › Anonymous usage statistics (设置 › 通用 › 匿名使用统计)
+is off in Quiet.md (untouched, it follows Check for updates automatically)."),
     (&["guide", "skill"], "quiet guide
 
 The full guide for agents: addressing, every command, the script API,

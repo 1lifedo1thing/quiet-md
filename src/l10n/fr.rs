@@ -1517,4 +1517,9 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("正在写的一段保持清晰，其余变淡", "Le paragraphe en cours reste net, le reste s'estompe"),
     ("段落聚焦已打开", "Focus sur le paragraphe activé"),
     ("段落聚焦已关闭", "Focus sur le paragraphe désactivé"),
+    ("基本", "Général"),
+    ("链接与搜索", "Liens et recherche"),
+    ("网络与隐私", "Réseau et confidentialité"),
+    ("匿名使用统计", "Statistiques d’utilisation anonymes"),
+    ("命令行工具 quiet 每天发一次各命令的使用次数，不含文档内容和参数。在终端运行 quiet telemetry status 可以查看发送的内容。", "L’outil en ligne de commande quiet envoie chaque jour le nombre d’utilisations de ses commandes, jamais vos documents ni vos arguments. Lancez quiet telemetry status pour voir ce qui est envoyé."),
 ];

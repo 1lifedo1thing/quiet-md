@@ -484,6 +484,14 @@ fn usage_is_counted_by_command_name_only() {
     std::fs::write(lib.join(".quiet/preferences.json"), r#"{"auto_update": false}"#).unwrap();
     counted(&lib, &other, &["ls"], None);
     assert!(!other.exists());
+    // 匿名使用统计, once touched, decides on its own.
+    std::fs::write(lib.join(".quiet/preferences.json"), r#"{"auto_update": false, "usage_stats": true}"#).unwrap();
+    counted(&lib, &other, &["ls"], None);
+    assert!(other.exists());
+    let third = lib.with_extension("usage3.json");
+    std::fs::write(lib.join(".quiet/preferences.json"), r#"{"auto_update": true, "usage_stats": false}"#).unwrap();
+    counted(&lib, &third, &["ls"], None);
+    assert!(!third.exists());
 }
 
 #[test]
