@@ -334,9 +334,9 @@ pub enum Confirm {
     AddFolder(Vec<(std::path::PathBuf, fdl_core::shown::Survey)>),
 }
 
-/// What a sidebar drop would import: files and folders from the Finder, or a 本机文件.
+/// What a sidebar drop would import: files and folders from the Finder.
 #[derive(Clone, Debug)]
-pub enum DropImport { Files(Vec<std::path::PathBuf>), Local(String) }
+pub enum DropImport { Files(Vec<std::path::PathBuf>) }
 
 /// What to do once the open document is safely on disk (or its changes given up).
 pub type AfterSave = Box<dyn FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>)>;
@@ -449,6 +449,9 @@ pub struct Workspace {
     pub row_sub_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// 批量操作 mode: the checked docs of 我的文档, in check order.
     pub batch: Option<Vec<String>>,
+    /// The top-level folder 批量管理 was entered from (its heading's "…"): only its rows check.
+    /// None: every row (a folder page's 批量管理, Shift-click outside any).
+    pub batch_top: Option<String>,
     /// The open confirmation dialog.
     pub confirm: Option<Confirm>,
     /// The dialog's focus while it is up, and where focus was before it
@@ -469,13 +472,13 @@ pub struct Workspace {
     /// The toast and when it appeared.
     pub toast: Option<(ToastKind, SharedString, Instant)>,
     toast_task: Option<Task<()>>,
-    /// Folded sidebar sections: 置顶, (unused: 我的文档 never folds, #421), 本机文件.
+    /// Folded sidebar sections: 置顶, then two unused (我的文档 never folds, #421; 本机文件 is gone).
     pub folded: [bool; 3],
     /// Top-level folder folders folded shut in the sidebar, by key.
     pub folded_tops: std::collections::HashSet<String>,
     /// Expanded pages of the 我的文档 tree.
     pub expanded: HashSet<String>,
-    /// Where a drag from outside the tree (the Finder, 本机文件) would land in the sidebar.
+    /// Where a drag from the Finder would land in the sidebar.
     pub sidebar_drop: Option<crate::sidebar_drop::SidebarDropAt>,
     pub move_dlg: Option<crate::tree::MoveDialog>,
     /// 导出 Markdown 设置.
@@ -742,6 +745,7 @@ impl Workspace {
             search_cache: Default::default(),
             row_sub_bounds: Rc::new(Cell::new(None)),
             batch: None,
+            batch_top: None,
             confirm: None,
             confirm_focus: cx.focus_handle(),
             confirm_return: None,
@@ -1841,10 +1845,10 @@ impl Workspace {
             .unwrap_or_default();
         let mut crumbs: Vec<AnyElement> = vec![];
         let sep = || div().mx(px(3.)).flex_none().child(icon("chevron-right", 12., crate::ui::crumb_ink())).into_any_element();
-        // Every path starts at the library, as a folder page's does; a file
-        // under 本机文件 starts there, which has no page of its own.
+        // Every path starts at the library, as a folder page's does; a file opened on its
+        // own starts at the folder holding it on disk, which has no page here.
         let local = self.current.as_ref().and_then(|id| self.entries.iter().find(|e| &e.id == id)).is_some_and(|e| e.meta.local());
-        let start = if local { crate::settings::tr("本机文件", "Files on this computer").to_string() } else {
+        let start = if local { self.current.as_deref().and_then(|id| self.store.local_path(id)).and_then(|p| p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned())).unwrap_or_default() } else {
             let root = self.current.as_ref().and_then(|id| self.entries.iter().find(|e| &e.id == id)).map(|e| e.top.clone()).unwrap_or_default();
             self.folder_name(&root)
         };
@@ -2035,6 +2039,9 @@ pub const HEADER_H: f32 = 48.;
 /// window's minimum width: a narrower window hides the sidebar.
 pub const DOC_MIN_W: f32 = 480.;
 pub(crate) const HEADER_ACTIONS_H: f32 = 32.;
+/// Between the icon buttons of a header row: a folder page's (搜索 … "+") and the sidebar's
+/// (打开文件夹, the toggle). 2, the folder header's spacing since #421.
+pub(crate) const HEADER_ACTIONS_GAP: f32 = 2.;
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {

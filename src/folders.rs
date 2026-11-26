@@ -170,21 +170,8 @@ impl Workspace {
         // A header "+" sits at the right edge, so its menu hangs by its right edge.
         let header_new = ["create-folder", "create-home"].iter().any(|k| self.home.anchor(k).is_some_and(|b| crate::design::hang(b, crate::design::Align::End, None).0 == pos));
         let corner = if header_new { Anchor::TopRight } else { Anchor::TopLeft };
-        // 我的文档's "+": it holds no files, so it only opens — 打开文件夹, a folder used where it is,
-        // or a single file. Making and importing happen in a folder.
-        if parent.is_none() {
-            return Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(
-                crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, corner)).w(px(crate::design::menu_w::MD))
-                    .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.create_menu = None; cx.notify(); }))
-                    .child(crate::design::MenuItem::new("create-open-folder").icon("folder-plus").label(tr("打开文件夹…", "Open Folder…"))
-                        .description(tr("原位打开", "Opens in place"))
-                        .on_click(cx.listener(|w, _, window, cx| { w.create_menu = None; w.open_folder_dialog(window, cx) })))
-                    // the other way in from this computer, under 本机文件
-                    .child(crate::design::MenuItem::new("create-open-file").icon("doc-md").label(tr("打开 Markdown 文件…", "Open Markdown File…"))
-                        .description(tr("原位编辑", "Edits in place"))
-                        .on_click(cx.listener(|w, _, window, cx| { w.create_menu = None; w.open_file_dialog(window, cx) })))
-            )).with_priority(3).into_any_element());
-        }
+        // Only a folder's "+" opens this menu: the sidebar's opens a folder straight away.
+        let parent = Some(parent?);
         // Every 新建 menu ends with the 导入 rows, into the same place it makes things: the same
         // rows each time it opens, whichever "+" opened it.
         let import = self.import_items(parent.clone(), cx);

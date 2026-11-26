@@ -30,7 +30,7 @@ impl Workspace {
             .tip(tr("搜索文档", "Search documents"), Some(crate::shortcuts::hint("workspace::FocusSearch", "⌘ + J")))
             .on_click(cx.listener(|w, _, window, cx| w.open_search(window, cx)));
         let batch = icon_btn("tb-batch", "batch").relative().child(self.home.track("tb-batch")).tip(crate::settings::text("批量管理"), None)
-            .on_click(cx.listener(|w, _, _, cx| { w.batch = Some(vec![]); w.row_menu = None; w.home.view_menu = false; cx.notify(); }));
+            .on_click(cx.listener(|w, _, _, cx| { w.batch = Some(vec![]); w.batch_top = None; w.row_menu = None; w.home.view_menu = false; cx.notify(); }));
         let display = icon_btn("home-view", "view-options").relative().selected(view_open).child(self.home.track("home-view"))
             .when(!view_open, |d| d.tip(tr("显示", "View"), None))
             .on_mouse_down(MouseButton::Left, cx.listener(move |w, _, _, cx| { cx.stop_propagation(); w.home.view_menu = !view_open; cx.notify(); }));
@@ -56,7 +56,7 @@ impl Workspace {
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-folder") else { return }; let pos = hang(b, Align::End, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((parent.clone(), pos)) }; cx.notify(); }))
         };
-        let right = div().relative().flex_none().flex().items_center().gap(px(2.))
+        let right = div().relative().flex_none().flex().items_center().gap(px(crate::app::HEADER_ACTIONS_GAP))
             .child(search).child(batch).child(display).child(more).child(primary).child(self.home.track("tb-right"));
         crate::trash::page_header_with(self, left, 18., cx).child(div().w(px(16.)).flex_none()).child(right).into_any_element()
     }

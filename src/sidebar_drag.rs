@@ -313,16 +313,16 @@ impl Workspace {
 
     /// Where something dragged in from outside the tree lands at `at`: into the
     /// folder row under it (`takes_drop`), or a slot between rows (as a row being moved gets),
-    /// beside the row below it. `local`: a 本机文件 row, which lands only on the
+    /// beside the row below it.
     /// tree, not back in its own section.
-    pub(crate) fn sidebar_target(&self, at: Point<Pixels>, local: bool) -> Option<crate::sidebar_drop::SidebarDropAt> {
+    pub(crate) fn sidebar_target(&self, at: Point<Pixels>) -> Option<crate::sidebar_drop::SidebarDropAt> {
         use crate::sidebar_drop::SidebarDropAt;
         if !self.list_scroll.bounds().contains(&at) { return None; }
-        let Some(b) = self.folder_drag.bounds.get() else { return (!local).then(SidebarDropAt::top) };
+        let Some(b) = self.folder_drag.bounds.get() else { return Some(SidebarDropAt::top()) };
         let rows = self.drag_rows();
         let y = f32::from(at.y - b.top());
-        // Below the tree: the end of 我的文档 (a 本机文件 row over its own section: nowhere).
-        if y > (rows.len() + 1) as f32 * PITCH + 6. { return (!local).then_some(SidebarDropAt { parent: None, slot: Some((rows.len(), 0)), before: None }); }
+        // Below the tree: the end of 我的文档.
+        if y > (rows.len() + 1) as f32 * PITCH + 6. { return Some(SidebarDropAt { parent: None, slot: Some((rows.len(), 0)), before: None }); }
         // Rows where they stand with the open slot, as for a row being moved: the hit stays put while they make room.
         let cur = self.sidebar_drop.as_ref().and_then(|t| t.slot).map(|s| s.0);
         let top_of = |i: usize| (i + usize::from(cur.is_some_and(|c| i >= c))) as f32 * PITCH;

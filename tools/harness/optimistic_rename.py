@@ -167,7 +167,7 @@ MOVE = "rrow Project\nwait 300\nrow Move to\nwait 500\nclick 534 217\nwait 400\n
 def move_dialog():
     # A page inside clicked right after OK opens once the folder is there; typed into, it is saved there.
     # Project opened first (its icon turns into the arrow under the pointer), so Alpha has a row to click.
-    code, lib, log = run("move_dialog", "hoverrow Project\nwait 400\nclick 30 156\nwait 500\n" + MOVE + "shot ahead\nrow Alpha\nwait 3000\nshowing Alpha\nclick 700 400\nkey cmd-down\ntype  typed\nwait 2500\nshot landed\n", moving(work / "src-move"))
+    code, lib, log = run("move_dialog", "hoverrow Project\nwait 400\nclick 30 133\nwait 500\n" + MOVE + "shot ahead\nrow Alpha\nwait 3000\nshowing Alpha\nclick 700 400\nkey cmd-down\ntype  typed\nwait 2500\nshot landed\n", moving(work / "src-move"))
     assert code == 0, log[-600:]
     assert "Could not open" not in log
     alpha = (lib / "Target" / "Project" / "Alpha.xml").read_text()

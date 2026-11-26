@@ -199,7 +199,7 @@ impl Workspace {
         let pos = m.pos;
         let open = self.store.top_folders().into_iter().find(|r| r.0 == key);
         let (name, path, missing) = open.map(|r| (r.1, r.2, r.3.is_some())).unwrap_or_default();
-        let (doc, folder, rename, k1, k2) = (m.id.clone(), m.id.clone(), m.id.clone(), key.to_string(), key.to_string());
+        let (doc, folder, rename, k1, k2, k3, top_row) = (m.id.clone(), m.id.clone(), m.id.clone(), key.to_string(), key.to_string(), key.to_string(), m.id.clone());
         let mut menu = crate::design::Popover::new("top-row-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }));
         if missing {
@@ -217,8 +217,17 @@ impl Workspace {
             menu = menu.when(create, |menu| menu
                 .child(row("rr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.create_doc(false, Some(doc.clone()), window, cx); })))
                 .child(row("rr-new-folder", "folder", tr("新建文件夹", "New folder")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_folder(Some(folder.clone()), window, cx); }))))
+                // 批量管理 lives here, one top-level folder at a time: its rows check, the others don't.
+                .child(row("rr-batch", "batch", crate::settings::text("批量管理")).on_click(cx.listener(move |w, _, _, cx| {
+                    w.row_menu = None;
+                    w.batch = Some(vec![]);
+                    w.batch_top = Some(k3.clone());
+                    w.expanded.insert(top_row.clone());
+                    cx.notify();
+                })))
                 .when(self.store.can_rename_folder_top(key), |m| m.child(row("rr-rename", "square-pen", tr("重命名", "Rename")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.start_rename(&rename.clone(), window, cx); }))))
-                .child(row("rr-reveal", "folder", show_in_files()).on_click(cx.listener(move |w, _, _, cx| { w.row_menu = None; cx.reveal_path(&path); cx.notify(); })));
+                .child(row("rr-reveal", "folder", show_in_files()).on_click(cx.listener(move |w, _, _, cx| { w.row_menu = None; cx.reveal_path(&path); cx.notify(); })))
+                .child(crate::design::MenuSeparator::new());
         }
         menu = menu.child(row("rr-remove", "x", tr("从侧栏移除", "Remove from sidebar")).on_click(cx.listener(move |w, _, _, cx| {
             w.row_menu = None;
@@ -259,10 +268,6 @@ impl Workspace {
         self.store.top_folders().into_iter().find(|r| r.0 == key).map(|r| r.1).unwrap_or_default()
     }
 
-    /// The rows of 本机文件: single files opened where they are, last opened first.
-    pub(crate) fn local_rows(&self) -> Vec<(&crate::store::Entry, usize)> {
-        self.local_entries().into_iter().filter(|e| e.meta.folder.is_none()).map(|e| (e, 0)).collect()
-    }
 }
 
 #[cfg(test)]
