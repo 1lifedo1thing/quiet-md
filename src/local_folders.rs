@@ -227,9 +227,9 @@ impl Workspace {
                     if page { w.batch_top = None } else { w.batch_top = Some(k3.clone()); w.expanded.insert(top_row.clone()); }
                     cx.notify();
                 })))
-                .when(self.store.can_rename_folder_top(key), |m| m.child(row("rr-rename", "square-pen", tr("重命名", "Rename")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.start_rename(&rename.clone(), window, cx); }))))
+                .when(self.store.can_rename_folder_top(key), |m| m.child(row("rr-rename", "pen-line", tr("重命名", "Rename")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.start_rename(&rename.clone(), window, cx); }))))
                 // A folder the system names, or a preview's own: in sight, greyed, saying why.
-                .when(self.store.folder_top_keeps_name(key), |m| m.child(row("rr-rename", "square-pen", tr("重命名", "Rename")).disabled(true).description(tr("这个文件夹保持原名", "This folder keeps its name"))))
+                .when(self.store.folder_top_keeps_name(key), |m| m.child(row("rr-rename", "pen-line", tr("重命名", "Rename")).disabled(true).description(tr("这个文件夹保持原名", "This folder keeps its name"))))
                 .child(row("rr-reveal", "folder", show_in_files()).on_click(cx.listener(move |w, _, _, cx| { w.row_menu = None; cx.reveal_path(&path); cx.notify(); })))
                 .child(crate::design::MenuSeparator::new());
         }

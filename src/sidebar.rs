@@ -809,7 +809,7 @@ impl Workspace {
                     .on_hover(set_sub(true)),
             )
             .child(
-                item("rm-rename", "square-pen", crate::settings::text("重命名"))
+                item("rm-rename", "pen-line", crate::settings::text("重命名"))
                     .on_hover(set_sub(false))
                     .on_click(cx.listener(move |w, _, window, cx| w.start_rename(&ren, window, cx))),
             )
