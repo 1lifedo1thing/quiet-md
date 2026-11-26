@@ -2008,7 +2008,7 @@ impl Workspace {
             )
             .child(div().flex_1().min_w(px(16.)))
             .child(
-                // + · 搜索 · …, "…" last: counted from the right each sits where a folder page's does
+                // + · 搜索 · …: "…" and 搜索 sit where a folder page's do, "+" first as there
                 div().gap(px(HEADER_ACTIONS_GAP))
                     .h(px(HEADER_ACTIONS_H)).flex_none()
                     .flex()
