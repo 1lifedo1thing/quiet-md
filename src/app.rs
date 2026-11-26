@@ -2001,7 +2001,8 @@ impl Workspace {
             )
             .child(div().flex_1().min_w(px(16.)))
             .child(
-                div().gap(px(4.))
+                // the folder page's gap: "+" and 搜索 stay put from page to page
+                div().gap(px(HEADER_ACTIONS_GAP))
                     .h(px(HEADER_ACTIONS_H)).flex_none()
                     .flex()
                     .items_center()
