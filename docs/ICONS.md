@@ -74,8 +74,8 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `restore.svg` | UI Outline 18 | ArrowRotateAnticlockwise | identical to the package |
 | `search-clear.svg` | UI Outline 18 | CircleXmark | identical to the package |
 | `search.svg` | UI Outline 18 | Magnifier | identical to the package |
-| `settings-gear.svg` | UI Outline 18 | Gear | identical to the package |
-| `sidebar.svg` | UI Outline 18 | SidebarLeft | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26); shows and hides the sidebar alike |
+| `settings-gear.svg` | UI Outline 18 | Gear3 | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26) |
+| `sidebar.svg` | UI Outline 18 | LayoutLeft | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26); shows and hides the sidebar alike |
 | `sigma.svg` | UI Outline 18 | MathFunction | identical to the package |
 | `sort-down.svg` | UI Outline 18 | SortNumDescending | identical to the package |
 | `square-pen.svg` | UI Outline 18 | EditSquare | identical to the package |
