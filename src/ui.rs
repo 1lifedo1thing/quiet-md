@@ -285,6 +285,10 @@ pub(crate) fn header_right_inset() -> f32 {
 
 pub(crate) fn window_controls(window: &Window) -> Option<Div> {
     if !cfg!(any(target_os = "windows", target_os = "linux")) { return None; }
+    // The header's ghost buttons' ink and fills (`ui::header_icon`), so the caption buttons match
+    // the search / new / more beside them in either look.
+    let (hover, pressed) = crate::design::toolbar::ghost_fills(false);
+    let ink = crate::design::color::foreground();
     // Windows must receive mouse-down to arm its native caption buttons.
     let button = |id: &'static str, area: WindowControlArea, label: &'static str| {
         div().id(id).size(px(crate::app::HEADER_ACTIONS_H)).mx(px(7.)).rounded(px(8.)).flex_none().flex().items_center().justify_center().cursor_pointer()
@@ -296,17 +300,17 @@ pub(crate) fn window_controls(window: &Window) -> Option<Div> {
                 WindowControlArea::Max => window.zoom_window(),
                 WindowControlArea::Close => window.dispatch_action(Box::new(crate::app::CloseWindow), cx),
                 WindowControlArea::Drag => {},
-            })).hover(|s| s.bg(Theme::fill_hover())).active(|s| s.bg(Theme::fill_pressed())).tip(label, None)
+            })).hover(move |s| s.bg(hover)).active(move |s| s.bg(pressed)).tip(label, None)
     };
     let maximized = window.is_maximized();
     // Native hit-test areas preserve Snap Layouts and the normal WM_CLOSE save guard.
     Some(div().absolute().top_0().right_0().h(px(crate::app::HEADER_H)).flex().items_center().title_bar()
         .child(div().mx(px(12.)).w(px(1.)).h(px(18.)).bg(Theme::line_divider()))
         .child(button("window-minimize", WindowControlArea::Min, crate::settings::tr("最小化", "Minimize"))
-            .child(icon("minus", 18., Theme::icon())))
-        .child(button("window-maximize", WindowControlArea::Max, if maximized { crate::settings::tr("还原", "Restore") } else { crate::settings::tr("最大化", "Maximize") }).child(icon(if maximized { "copy" } else { "expand" }, 18., Theme::icon())))
+            .child(icon("minus", 18., ink)))
+        .child(button("window-maximize", WindowControlArea::Max, if maximized { crate::settings::tr("还原", "Restore") } else { crate::settings::tr("最大化", "Maximize") }).child(icon(if maximized { "copy" } else { "expand" }, 18., ink)))
         .child(button("window-close", WindowControlArea::Close, crate::settings::tr("关闭", "Close"))
-            .child(icon("x", 18., Theme::icon()))))
+            .child(icon("x", 18., ink))))
 }
 
 /// "名称 (键 + 键)" plus an optional "Markdown: …" line.

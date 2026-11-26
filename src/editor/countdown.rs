@@ -49,6 +49,14 @@ fn hex(s: &str) -> Hsla {
     u32::from_str_radix(s.trim_start_matches('#'), 16).map(theme::c).unwrap_or(theme::c(craft::old::O500))
 }
 
+/// The fill behind the white figures: the colour as drawn in the light look; in the dark not
+/// mirrored light (white on the mirrored blue read 2.1:1) but that same vivid colour, lowered until
+/// the white reads 4.5:1 under the 15% white wash too (about 6.6:1 bare).
+fn tile(s: &str) -> Hsla {
+    if !crate::theme::dark() { return hex(s) }
+    crate::theme::under_white(crate::theme::light(|| hex(s)), 6.)
+}
+
 /// Selection and focus: the accent.
 fn accent() -> Hsla {
     Theme::primary()
@@ -223,7 +231,8 @@ impl R<'_> {
         }
         let left = c.remaining(now);
         let parts = [left / 86_400, left / 3600 % 24, left / 60 % 60, left % 60];
-        let color = hex(&c.color);
+        let color = tile(&c.color);
+        let unit = crate::theme::lift(color, 4.5);
         let progress = if c.duration > 0. { (left as f32 / c.duration as f32).clamp(0., 1.) } else { 0. };
         let menu_on = matches!(&ed.menu, Some(Menu::Block { block, .. }) | Some(Menu::Add { block, .. }) if *block == id);
         let selected = !menu_on && self.selected.contains(&id);
@@ -246,7 +255,7 @@ impl R<'_> {
                         .text_color(gpui::white())
                         .child(format!("{v:02}")),
                 )
-                .child(div().mt(px(4.)).text_size(px(13.)).line_height(px(20.)).text_color(color).child(crate::settings::text(UNITS[i]))),
+                .child(div().mt(px(4.)).text_size(px(13.)).line_height(px(20.)).text_color(unit).child(crate::settings::text(UNITS[i]))),
             );
         }
         for r in SEP_RIGHT {
@@ -262,7 +271,7 @@ impl R<'_> {
                     .text_size(px(28.))
                     .line_height(px(46.))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(color)
+                    .text_color(unit)
                     .child(":"),
             );
         }
@@ -306,7 +315,7 @@ impl R<'_> {
         let picker = (tools && ed.cd.palette == Some(id)).then(|| {
             let mut row = div().mt(px(8.)).flex();
             for (i, hexs) in COUNTDOWN_COLORS.iter().enumerate() {
-                let sw = hex(hexs);
+                let sw = tile(hexs);
                 let active = c.color.eq_ignore_ascii_case(hexs);
                 row = row.child(
                     // Colour chips: radius 6; the chosen one in an

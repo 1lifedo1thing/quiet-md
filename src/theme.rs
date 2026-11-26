@@ -132,6 +132,43 @@ pub fn lift(c: Hsla, min: f32) -> Hsla {
     srgb(0.98, oa, ob, a)
 }
 
+/// WCAG contrast of two opaque colours.
+fn contrast(a: Hsla, b: Hsla) -> f32 {
+    let (x, y) = (luminance(a), luminance(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+
+/// `fg` raised in OKLab lightness (hue and chroma kept) until it reads `min` times against `bg`,
+/// with `lift`'s margin for antialiasing: coloured labels on their own tinted chip in the dark.
+pub fn lift_on(fg: Hsla, bg: Hsla, min: f32) -> Hsla {
+    if contrast(fg, bg) >= min { return fg }
+    let Rgba { r, g, b, a } = Rgba::from(fg);
+    let [l, oa, ob] = oklab(r, g, b);
+    let mut up = l;
+    while up < 0.98 {
+        up = (up + 0.01).min(0.98);
+        let x = srgb(up, oa, ob, a);
+        if contrast(x, bg) >= min * 1.15 { return x }
+    }
+    srgb(0.98, oa, ob, a)
+}
+
+/// A literal fill lowered in OKLab lightness until white on it reads `min` times: a vivid swatch
+/// that carries white figures (the countdown's tiles) without being mirrored light in the dark.
+pub fn under_white(fill: Hsla, min: f32) -> Hsla {
+    let w: Hsla = gpui::white();
+    if contrast(fill, w) >= min { return fill }
+    let Rgba { r, g, b, a } = Rgba::from(fill);
+    let [l, oa, ob] = oklab(r, g, b);
+    let mut down = l;
+    while down > 0.2 {
+        down -= 0.01;
+        let x = srgb(down, oa, ob, a);
+        if contrast(x, w) >= min * 1.1 { return x }
+    }
+    srgb(0.2, oa, ob, a)
+}
+
 /// The text highlight to draw for light-look highlight `c` (a marker colour at its strength, 35% or
 /// 65%): in dark mode a deep tint of the same hue laid into the page, opaque, so the highlight reads
 /// as a highlight without lighting up like a lamp (it used to be the light page's pale colour, a
