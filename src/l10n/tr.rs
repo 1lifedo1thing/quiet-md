@@ -183,7 +183,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("添加到收藏", "Favorilere Ekle"),
     ("取消收藏", "Favorilerden Çıkar"),
     ("取消置顶", "Sabitlemeyi Kaldır"),
-    ("字数统计", "Kelime sayısı"),
     ("所有文档", "Tüm Belgeler"),
     ("按名称", "Ada göre"),
     ("上次浏览", "Son görüntüleme"),
@@ -787,7 +786,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("无法在 {} 准备更新，请确认目录可写：{}", "{} konumunda güncelleme hazırlanamadı. Klasörün yazılabilir olduğunu doğrulayın: {}"),
     ("下周{w}", "Gelecek {w}"),
     ("本周{w}", "Bu {w}"),
-    ("{n} 字", "{n|one:# kelime|other:# kelime}"),
     // 画板界面外壳
     ("上移一层", "Öne getir"),
     ("下移一层", "Arkaya gönder"),

@@ -1929,7 +1929,6 @@ pub(crate) fn localize(text: &str, english: bool) -> &str {
         "取消收藏" => "Remove from favorites",
         "取消置顶" => "Unpin",
         "文档信息" => "Document information",
-        "字数统计" => "Word count",
         "快捷键" => "Keyboard shortcuts",
         "最近浏览" => "Recently viewed",
         "所有文档" => "All documents",

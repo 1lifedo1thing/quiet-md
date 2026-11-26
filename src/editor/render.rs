@@ -1553,7 +1553,6 @@ impl Editor {
         let toast = self.toast_el(window);
         let probes = std::mem::take(&mut *self.probes.borrow_mut());
         let origin0 = self.content_origin.get();
-        let counter = self.word_counter();
         let find_box = self.find_box(window, cx);
         if std::mem::take(&mut self.autoscroll) && self.reveal.is_none() {
             self.reveal = Some((Reveal::Caret, 0));
@@ -1850,7 +1849,6 @@ impl Editor {
             .children(table_overlay)
             .children(block_overlay)
             .children(image_layer)
-            .children(counter)
             .children(find_box)
             .children(lightbox)
             .children(board)
@@ -1887,50 +1885,6 @@ impl Editor {
             Change::Added => crate::theme::ca(crate::theme::craft::old::G500, 0.10),
             Change::Changed => crate::theme::ca(crate::theme::craft::old::O500, 0.12),
         })
-    }
-
-    /// "N 字" chip at the bottom right while text is selected (§2).
-    fn word_counter(&self) -> Option<AnyElement> {
-        let n = if let Some(sel) = self.core.block_sel {
-            // Walking a long document for the selected blocks costs ~10ms
-            // (1M chars): once per selection and edit, not every frame.
-            let key = (self.core.generation, sel);
-            match self.sel_words.get() {
-                Some((k, n)) if k == key => n,
-                _ => {
-                    let n = self.core.block_sel_ids().iter().filter_map(|id| self.core.block(*id)).map(|b| crate::docinfo::blocks_word_count(std::slice::from_ref(b))).sum();
-                    self.sel_words.set(Some((key, n)));
-                    n
-                }
-            }
-        } else if self.core.sel.is_collapsed() {
-            return None;
-        } else {
-            crate::docinfo::word_count(&self.core.selected_text())
-        };
-        // Selection word count at the note's bottom right: an outline xs
-        // button's face (1px `border`, shadow-xs, radius 8, text-xs), not a
-        // button; opaque (`background`) as it floats over the text.
-        Some(
-            div()
-                .absolute()
-                .bottom(px(10.))
-                .right(px(34.))
-                .h(px(24.))
-                .px(px(8.))
-                .flex()
-                .items_center()
-                .rounded(px(8.))
-                .bg(crate::design::color::background())
-                .border_1()
-                .border_color(crate::design::color::border())
-                .shadow(crate::design::shadow::xs())
-                .font_family(crate::theme::ui_family())
-                .text_size(px(12.))
-                .text_color(crate::design::color::muted_foreground())
-                .child(crate::settings::localized(crate::settings::lang(), "{n} 字", || format!("{n} 字"), || format!("{n} {}", if n == 1 { "word" } else { "words" })))
-                .into_any_element(),
-        )
     }
 }
 

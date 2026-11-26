@@ -278,8 +278,6 @@ pub struct Editor {
     pub(super) drag_fx: RefCell<super::drag::DragFx>,
     /// The first and last top-level blocks the page drew rows of this frame.
     pub(super) rendered_top: Cell<Option<(usize, usize)>>,
-    /// The selected blocks' word count, for the document version and selection.
-    pub(super) sel_words: Cell<Option<((u64, super::core::BlockSel), usize)>>,
     /// Blocks just dropped, flashing since.
     pub(super) drop_flash: Option<(Vec<BlockId>, web_time::Instant)>,
     /// The fold arrow turning after a click: block → start.
@@ -528,7 +526,6 @@ impl Editor {
             block_drag: None,
             drag_fx: Default::default(),
             rendered_top: Cell::new(None),
-            sel_words: Cell::new(None),
             drop_flash: None,
             fold_anim: None,
             col_anim: HashMap::default(),
