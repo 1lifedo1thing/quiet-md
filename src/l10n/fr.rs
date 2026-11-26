@@ -700,7 +700,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("应用快捷键最多四组，全局快捷键只支持一组", "Jusqu’à quatre combinaisons, ou une seule pour un raccourci global"),
     ("与全局快速新建快捷键冲突，请先修改全局快捷键", "Conflit avec le raccourci global de note rapide. Modifiez-le d’abord"),
     ("与全局打开上次文档的快捷键冲突，请先修改那一项", "Conflit avec le raccourci global d’ouverture du dernier document. Modifiez-le d’abord"),
-    ("请使用开关关闭全局快捷键", "Utilisez l’interrupteur pour désactiver le raccourci global"),
     ("已达到组合键上限，请保存或按退格修改", "Limite de combinaisons atteinte. Enregistrez ou appuyez sur Retour arrière pour corriger"),
     ("按下组合键，回车保存 · Esc 取消 · 退格重录", "Appuyez sur un raccourci · Entrée pour enregistrer · Échap pour annuler · Retour arrière pour réenregistrer"),
     ("连续输入最多四组，回车保存 · Esc 取消 · 退格修改", "Jusqu’à quatre combinaisons · Entrée pour enregistrer · Échap pour annuler · Retour arrière pour corriger"),

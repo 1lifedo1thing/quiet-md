@@ -688,7 +688,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("应用快捷键最多四组，全局快捷键只支持一组", "En fazla dört tuş bileşimi veya genel kısayol için tek bileşim"),
     ("与全局快速新建快捷键冲突，请先修改全局快捷键", "Genel hızlı not kısayoluyla çakışıyor. Önce onu değiştirin"),
     ("与全局打开上次文档的快捷键冲突，请先修改那一项", "Genel son belgeyi aç kısayoluyla çakışıyor. Önce onu değiştirin"),
-    ("请使用开关关闭全局快捷键", "Genel kısayolu kapatmak için anahtarı kullanın"),
     ("已达到组合键上限，请保存或按退格修改", "Bileşim sınırına ulaşıldı. Kaydedin veya düzeltmek için Geri Sil tuşuna basın"),
     ("按下组合键，回车保存 · Esc 取消 · 退格重录", "Kısayola basın · Kaydetmek için Enter · İptal için Esc · Yeniden kaydetmek için Geri Sil"),
     ("连续输入最多四组，回车保存 · Esc 取消 · 退格修改", "En fazla dört bileşim · Kaydetmek için Enter · İptal için Esc · Düzeltmek için Geri Sil"),

@@ -105,7 +105,8 @@ pub struct Preferences {
     pub language: String,
     /// Fetch `http(s)` images referenced by documents.
     pub remote_images: bool,
-    /// The system-wide quick note hotkey is registered.
+    /// Older builds' 快速新建笔记 switch. Read once: off clears that shortcut's key instead
+    /// (`shortcuts::init`), and it is written back on; a cleared key is off now.
     pub quick_hotkey: bool,
     /// Look for a new version now and then (update.rs).
     pub auto_update: bool,
@@ -1393,9 +1394,6 @@ impl Workspace {
         }
         // 匿名使用统计 off: forget the app's id and waiting days.
         if old.usage_stats.unwrap_or(old.auto_update) && !p.usage_stats.unwrap_or(p.auto_update) { crate::usage::forget(); }
-        if p.quick_hotkey != old.quick_hotkey {
-            if p.quick_hotkey { crate::quick_note::register(cx); } else { crate::quick_note::suspend_hotkey(); }
-        }
         if p.appearance != old.appearance { apply_appearance(&p.appearance); }
         if p.doc_family != old.doc_family { crate::fonts::probe(&p.doc_family, cx); }
         if p.ui_family != old.ui_family { crate::fonts::probe(&p.ui_family, cx); }
