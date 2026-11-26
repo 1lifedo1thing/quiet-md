@@ -108,7 +108,7 @@ impl Workspace {
         crate::devtools::rows_begin(window);
 
         // The window's header over the sidebar (macOS Notes): clear of the traffic lights, then
-        // room to drag the window by, and at the sidebar's right end 打开文件夹 and the toggle that
+        // room to drag the window by, and at the sidebar's right end 添加文件夹 and the toggle that
         // hides it, as far apart as a folder page's header buttons; hidden, the toggle alone waits
         // by the traffic lights.
         let header = div()
@@ -122,7 +122,7 @@ impl Workspace {
             .child(div().flex_1())
             .children(crate::settings::update_pill(cx))
             .child(div().flex_none().flex().items_center().gap(px(crate::app::HEADER_ACTIONS_GAP))
-                .child(crate::ui::header_icon("section-add", "folder-plus").tip(crate::settings::tr("打开文件夹", "Open Folder"), None)
+                .child(crate::ui::header_icon("section-add", "folder-plus").tip(crate::settings::tr("添加文件夹", "Add Folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + ⇧ + O")))
                     .on_click(cx.listener(|w, _: &ClickEvent, window, cx| w.open_folder_dialog(window, cx))))
                 .child(crate::ui::header_icon("collapse-sidebar", "sidebar")
                     .tip(crate::settings::tr("收起侧栏", "Hide sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))

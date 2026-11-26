@@ -70,7 +70,7 @@ fn menu_bar(markdown: bool) -> Vec<Menu> {
                 MenuItem::action(tr("新建文档", "New Document"), NewDoc),
                 MenuItem::action(tr("新建笔记窗口", "New Note Window"), crate::quick_note::QuickNew),
                 MenuItem::action(tr("打开 Markdown 文件…", "Open Markdown File…"), OpenFile),
-                MenuItem::action(tr("打开文件夹…", "Open Folder…"), OpenFolder),
+                MenuItem::action(tr("添加文件夹…", "Add Folder…"), OpenFolder),
                 // 打开 uses things where they are; 导入 copies them in: two groups.
                 MenuItem::separator(),
                 MenuItem::action(tr("导入为文档…", "Import as Document…"), ImportDoc),
@@ -330,7 +330,7 @@ pub enum Confirm {
     RemoveFolder(String, String),
     /// Dropped on the sidebar from outside: import it into the library there?
     Import { what: DropImport, target: crate::sidebar_drop::SidebarDropAt },
-    /// 打开文件夹… on a code project or a very big folder: add it? The first one is asked about.
+    /// 添加文件夹… on a code project or a very big folder: add it? The first one is asked about.
     AddFolder(Vec<(std::path::PathBuf, fdl_core::shown::Survey)>),
 }
 
@@ -2040,7 +2040,7 @@ pub const HEADER_H: f32 = 48.;
 pub const DOC_MIN_W: f32 = 480.;
 pub(crate) const HEADER_ACTIONS_H: f32 = 32.;
 /// Between the icon buttons of a header row: a folder page's (搜索 … "+") and the sidebar's
-/// (打开文件夹, the toggle). 2, the folder header's spacing since #421.
+/// (添加文件夹, the toggle). 2, the folder header's spacing since #421.
 pub(crate) const HEADER_ACTIONS_GAP: f32 = 2.;
 
 impl Render for Workspace {

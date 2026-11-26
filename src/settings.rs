@@ -1746,8 +1746,8 @@ impl Workspace {
                 self.select("quick-note-folder", open.into_iter().map(|r| r.1).collect(), at, move |w, i, cx| { let k = keys[i].clone(); w.set_pref(|p| p.quick_note_folder = k, cx) }, cx)).into_any_element());
         }
         // A new folder is made in the system's own open panel (its 新建文件夹 button), not here.
-        folders.push(row(tr("打开文件夹", "Open a folder"), Some(tr("打开电脑上的文件夹，它会显示在侧栏里；要新的文件夹，在打开窗口里新建。", "Open a folder on your computer and it shows in the sidebar; for a new one, make it in the open window.").into()),
-            button("open-folder", tr("打开…", "Open…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx)))).into_any_element());
+        folders.push(row(tr("添加文件夹", "Add a folder"), Some(tr("电脑上的文件夹原位使用，显示在侧栏里；要新的文件夹，在选择窗口里新建。", "A folder on your computer is used in place and shows in the sidebar; for a new one, make it in the picker.").into()),
+            button("open-folder", tr("添加…", "Add…")).on_click(cx.listener(|w, _, window, cx| w.open_folder_dialog(window, cx)))).into_any_element());
         div().w_full().flex().flex_col().gap(px(crate::design::geo().section_gap))
             .child(group("group-folders", Some(tr("文件夹", "Folders")), folders))
             .child(group("group-library", None, vec![

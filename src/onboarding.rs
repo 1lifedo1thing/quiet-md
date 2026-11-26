@@ -271,7 +271,7 @@ pub struct Onboarding {
     page: Page,
     /// 新建文件夹: where a new, empty top-level folder would go.
     root: PathBuf,
-    /// 打开文件夹: folders already on this computer, opened where they are
+    /// 添加文件夹: folders already on this computer, opened where they are
     /// (W12, the main choice); none means the new folder above.
     open: Vec<PathBuf>,
     /// The found and picked folders go in as copies (导入副本), not opened.
@@ -547,8 +547,8 @@ impl Onboarding {
             else { tr("用电脑上已有的文件夹，比如 Obsidian 库或 git 仓库，文件就地编辑", "Use a folder you already have, such as an Obsidian vault or a git repository; files are edited where they are").into() };
         let open_card = card("onb-open-card")
             .child(card_icon("folder-input"))
-            .child(card_text(tr("打开文件夹", "Open a folder").into(), open_desc, false))
-            .child(soft_button("onb-open", if opening { tr("再选…", "Add…") } else { tr("打开…", "Open…") }).on_click(cx.listener(|w, _, window, cx| w.pick_folder(Pick::Open, window, cx))))
+            .child(card_text(tr("添加文件夹", "Add a folder").into(), open_desc, false))
+            .child(soft_button("onb-open", if opening { tr("再选…", "Add…") } else { tr("添加…", "Add…") }).on_click(cx.listener(|w, _, window, cx| w.pick_folder(Pick::Open, window, cx))))
             .when(opening, |d| d.child(soft_button("onb-open-clear", tr("清除", "Clear")).on_click(cx.listener(|w, _, _, cx| { w.open.clear(); cx.notify(); }))));
         let lib = card("onb-lib-card")
             .when(opening, |d| d.opacity(0.55))
