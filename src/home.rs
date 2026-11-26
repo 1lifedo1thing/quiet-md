@@ -884,7 +884,7 @@ impl Workspace {
         // rise above the first row without being cut off — and that clip line is
         // where a row scrolling out of sight stops. It used to sit 4pt higher,
         // the list lifted into the tab row above it, so a scrolling row drew over
-        // 我的文档 / 收藏 and the buttons beside them (#238). 16 under the header (the
+        // the tabs and the buttons beside them (#238). 16 under the header (the
         // maintainer, 2026-11-26): the first row's top 64pt down the window, the list
         // view's header where it starts; rows scroll right up to the header.
         .flex_1().min_h_0().pt(px(16.)).pb(px(32.)).track_scroll(grid_scroll);
