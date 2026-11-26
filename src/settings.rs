@@ -1481,7 +1481,7 @@ impl Workspace {
     }
 
     /// With the sidebar hidden: 展开侧栏 where the document page's waits by the traffic lights,
-    /// and 返回 beside it (navigation stays in sight, unlike 添加文件夹).
+    /// alone, as there.
     pub(crate) fn header_navigation(&self, cx: &mut Context<Self>) -> AnyElement {
         let open = self.sidebar_open;
         let bar_button = |id: &'static str, glyph: &'static str| Button::ghost(id).icon(glyph).no_drag();
@@ -1489,9 +1489,8 @@ impl Workspace {
             .child(bar_button("settings-collapse", "sidebar")
                 .tip(if open { tr("收起侧栏", "Hide sidebar") } else { tr("展开侧栏", "Show sidebar") }, Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                 .on_click(cx.listener(|w, _, _, cx| { w.sidebar_open = !w.sidebar_open; cx.notify(); })))
-            // 返回, where navigation goes back (HIG): to the page 设置 was opened from, as the footer's 返回 does.
-            .child(bar_button("settings-back", "arrow-left").tip(tr("返回", "Back"), Some("Esc"))
-                .on_click(cx.listener(|w, _, _, cx| w.close_settings(cx))))
+            // no 返回 beside it: it sits where the document sidebar's 添加文件夹 does, and that hides
+            // with the sidebar too, so the toggle stays the only thing by the traffic lights (Esc goes back)
             .into_any_element()
     }
 
