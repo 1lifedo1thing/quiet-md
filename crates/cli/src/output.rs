@@ -73,7 +73,7 @@ pub fn text(op: &str, v: &Value) -> String {
             let types: Vec<String> = list(v, "schema").filter(|f| fields.contains(&s(f, "name"))).map(|f| {
                 let mut d = s(f, "type");
                 if let Some(x) = f.get("options").and_then(Value::as_array).filter(|l| !l.is_empty()) { d += &format!(" [{}]", x.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("/")); }
-                for k in ["formula", "link", "lookup"] { if f.get(k).is_some() { d += &format!(" {k} {}", s(f, k)); } }
+                for (k, sign) in [("formula", "="), ("link", "→"), ("lookup", "←")] { if f.get(k).is_some() { d += &format!(" {sign} {}", s(f, k)); } }
                 if f.get("computed").is_some() { d += " (computed)"; }
                 format!("{}: {d}", s(f, "name"))
             }).collect();
@@ -90,7 +90,7 @@ pub fn text(op: &str, v: &Value) -> String {
             fn groups(o: &mut String, gs: &Value, depth: usize, head: &str, line: &dyn Fn(&Value) -> String) {
                 for g in gs.as_array().into_iter().flatten() {
                     let label = if s(g, "value").is_empty() { "(empty)".to_string() } else { s(g, "value") };
-                    *o += &format!("\n{} {} = {}  ({} rows)\n", "#".repeat(depth + 2), s(g, "field"), label, s(g, "count"));
+                    *o += &format!("\n{} {} = {}  ({} row{})\n", "#".repeat(depth + 2), s(g, "field"), label, s(g, "count"), if g["count"] == 1 { "" } else { "s" });
                     if g.get("groups").is_some() { groups(o, &g["groups"], depth + 1, head, line); } else { *o += head; for r in list(g, "rows") { *o += &line(r); } }
                 }
             }
