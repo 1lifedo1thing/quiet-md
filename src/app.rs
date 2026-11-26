@@ -250,6 +250,7 @@ pub fn bind_keys(cx: &mut App) {
         let _ = h.update(cx, |ws, _, cx| ws.set_pref(|p| p.appearance = to.into(), cx));
     }));
     crate::modes::bind_keys(cx);
+    crate::typewriter::bind_keys(cx);
 }
 
 /// 退出: the open document is saved first; when that fails its dialog asks
@@ -2229,6 +2230,7 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|w, _: &crate::modes::EditMode, window, cx| w.set_mode(false, window, cx)))
             .on_action(cx.listener(|w, _: &crate::modes::ReadMode, window, cx| w.set_mode(true, window, cx)))
+            .on_action(cx.listener(|w, _: &crate::typewriter::ToggleTypewriter, _, cx| w.set_typewriter(!crate::settings::typewriter(), true, cx)))
             .on_action(cx.listener(|w, _: &crate::modes::ToggleShortcuts, _, cx| {
                 w.shortcuts = !w.shortcuts;
                 cx.notify();

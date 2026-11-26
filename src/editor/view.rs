@@ -217,6 +217,12 @@ pub struct Editor {
     /// I-beam left where the user clicked doesn't sit on top of the new text.
     pub pointer_hidden: bool,
     pub autoscroll: bool,
+    /// 打字机模式's glide toward the middle (丰富 motion): when the last step
+    /// ran, where the page stood before it and for how many frames it hasn't
+    /// moved (`apply_reveal`).
+    pub(super) glide: Option<(web_time::Instant, Pixels, u8)>,
+    /// The space below the last block this frame (`below_height`).
+    pub(super) below_h: f32,
     /// Last applied (text color, background) from the color panel.
     pub last_color: (Option<ColorName>, Option<ColorName>),
     pub last_lang: String,
@@ -476,6 +482,8 @@ impl Editor {
             toolbar_hidden: false,
             pointer_hidden: false,
             autoscroll: false,
+            glide: None,
+            below_h: 200.,
             last_color: (None, Some(ColorName("light-yellow".into()))),
             last_lang: "Plain Text".into(),
             link_field,
@@ -663,6 +671,23 @@ impl Editor {
         }
         self.restart_blink(window, cx);
         cx.notify();
+    }
+
+    /// 打字机模式 was switched: the page pads its end for it, and turning it on
+    /// brings the caret's line to the middle at once.
+    pub fn typewriter_changed(&mut self, cx: &mut Context<Self>) {
+        self.glide = None;
+        self.items_key = None;
+        if crate::settings::typewriter() && self.reveal.is_none() { self.autoscroll = true; }
+        cx.notify();
+    }
+
+    /// The wheel takes over from a glide under way: the page stays where the
+    /// user scrolled it until the caret moves again.
+    pub(super) fn wheel_stops_glide(&mut self) {
+        if self.glide.take().is_some() && matches!(self.reveal, Some((super::render::Reveal::Caret, _))) {
+            self.reveal = None;
+        }
     }
 
     /// 重命名 from the sidebar: swap the title text as one undoable edit,

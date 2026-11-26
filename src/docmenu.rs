@@ -1,4 +1,4 @@
-//! The header "…" menu: how the document is seen (page width, then the 阅读模式, 显示引用列表
+//! The header "…" menu: how the document is seen (page width, then the 阅读模式, 打字机模式, 显示引用列表
 //! and 窗口保持在最前 switches), find & replace, move, pin, star, 新建子文档, duplicate,
 //! 下载为 PDF / Markdown, 复制为 Markdown, 打印, document info, 版本历史, delete, 快捷键.
 
@@ -29,7 +29,7 @@ thread_local! {
 /// page can't do. How the page is seen comes first (页宽, then the 阅读模式, 显示引用列表 and
 /// 窗口保持在最前 switches: the user's order, 2026-11-25), then what is done to it.
 #[derive(Clone, Copy, PartialEq)]
-enum Item { Width, Read, Refs, OnTop, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Delete, Shortcuts, Rule }
+enum Item { Width, Read, Typewriter, Refs, OnTop, Find, Move, Pin, Star, Child, Copy, Download, CopyMd, Print, Info, History, Delete, Shortcuts, Rule }
 
 /// The page open: a document, one with a 画板 opened in its place, a 画板 file, a 数据表 file.
 #[derive(Clone, Copy, PartialEq)]
@@ -42,7 +42,7 @@ fn items(page: Page, child: bool) -> Vec<Item> {
     let top: &[Item] = if crate::on_top::SUPPORTED { &[OnTop] } else { &[] };
     let top_rule: &[Item] = if crate::on_top::SUPPORTED { &[OnTop, Rule] } else { &[] };
     let list: Vec<&[Item]> = match page {
-        Page::Doc => vec![&[Width, Read, Refs], top, &[Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete, Rule, Shortcuts]],
+        Page::Doc => vec![&[Width, Read, Typewriter, Refs], top, &[Rule, Find, Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete, Rule, Shortcuts]],
         // a board isn't the page: no page width, no find in its text, its own shortcut help (`?`)
         Page::Board => vec![&[Read, Refs], top, &[Rule, Move, Pin, Star, Rule], child, &[Copy, Download, CopyMd, Rule], print, &[Info, History, Rule, Delete]],
         // a board file: no Markdown, no reading mode or references either
@@ -173,6 +173,7 @@ impl Workspace {
         // which list the 「…」 shows (`items`)
         let page = self.editor.as_ref().map_or(Page::Doc, |e| { let e = e.read(cx); if e.table_file { Page::Table } else if e.board_file { Page::BoardFile } else if e.board_open() { Page::Board } else { Page::Doc } });
         let reading = self.reading();
+        let typewriter = crate::settings::typewriter();
         let on_top = self.on_top;
         let sub = self.doc_sub;
         let hover_sub = |s: Option<DocSub>| {
@@ -209,6 +210,11 @@ impl Workspace {
                     .switch(reading)
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(move |w, _, window, cx| w.set_mode(!reading, window, cx))).into_any_element(),
+                Item::Typewriter => menu_item("dm-typewriter", crate::typewriter::ICON, crate::settings::tr("打字机模式", "Typewriter Mode"), false, false)
+                    .switch(typewriter)
+                    .tip_right(crate::settings::tr("正在写的一行停在窗口中间", "Keeps the line you write in the middle"), Some(crate::shortcuts::hint("workspace::ToggleTypewriter", "⌘ + Shift + T")))
+                    .on_hover(hover_sub(None))
+                    .on_click(cx.listener(move |w, _, _, cx| w.set_typewriter(!typewriter, false, cx))).into_any_element(),
                 Item::Refs => menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
                     .switch(refs_shown)
                     .on_hover(hover_sub(None))
