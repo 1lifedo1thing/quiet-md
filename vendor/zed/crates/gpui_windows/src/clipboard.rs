@@ -338,8 +338,8 @@ fn read_string() -> Option<ClipboardEntry> {
 }
 
 /// quiet.md: the `HTML Format` payload as text, header included, up to its
-/// NUL. Invalid UTF-8 is replaced; the reader finds the fragment by its
-/// marker comments when that shifts the byte offsets.
+/// NUL. Invalid UTF-8 is replaced; the app reads the page after the header,
+/// not the byte offsets, so that shifts nothing it relies on.
 fn read_clipboard_html() -> Option<String> {
     if unsafe { IsClipboardFormatAvailable(*CLIPBOARD_HTML_FORMAT) }.is_err() {
         return None;

@@ -1,4 +1,4 @@
-ClipboardString gains an html field (with_html): the HTML flavor beside the text, as the platform stores it. Windows reads and writes "HTML Format" (CF_HTML, header included, UTF-8 and NUL-terminated); X11 and Wayland read the text/html target (UTF-8, or UTF-16 with a BOM as Firefox has offered). Quiet.md finds the fragment and converts it to blocks (#144); macOS keeps reading public.html in the app.
+ClipboardString gains an html field (with_html): the HTML flavor beside the text, as the platform stores it. Windows reads and writes "HTML Format" (CF_HTML, header included, UTF-8 and NUL-terminated); X11 and Wayland read the text/html target (UTF-8, or UTF-16 with a BOM as Firefox has offered). Quiet.md converts the page after the header to blocks (#144); macOS keeps reading public.html in the app.
 
 diff --git a/crates/gpui/src/platform.rs b/crates/gpui/src/platform.rs
 index e1e50a7b0ad0a39e55142795ac4e50fe1bbf488d..8a049d55047e8130c4d368439a9242bdb43acb48 100644
@@ -58,10 +58,10 @@ index e1e50a7b0ad0a39e55142795ac4e50fe1bbf488d..8a049d55047e8130c4d368439a9242bd
      }
  }
 diff --git a/crates/gpui_linux/src/linux/platform.rs b/crates/gpui_linux/src/linux/platform.rs
-index c9bbd2defd8f37c2a5f1d01928828ec11cf4e133..bb614f429438e3268565c7656d9d4c47dfb8029c 100644
+index 31bbeb827dc69621b94432e869d2b904d994258a..1c087c8fc847589701bb6287eef3ff216b3d9700 100644
 --- a/crates/gpui_linux/src/linux/platform.rs
 +++ b/crates/gpui_linux/src/linux/platform.rs
-@@ -1753,6 +1753,23 @@ async fn await_idle_sleep_prevention(
+@@ -1754,6 +1754,23 @@ async fn await_idle_sleep_prevention(
      }
  }
  
@@ -159,7 +159,7 @@ index 499f60b78716fbf61015cba43e167daec643c126..b6616cdb5800fe977b7d28f7cd2b510e
  
                  for entry in item.entries {
 diff --git a/crates/gpui_windows/src/clipboard.rs b/crates/gpui_windows/src/clipboard.rs
-index 096caf018dae1fb3bd443532f8b83f1e3f6dcebe..db3dd86166e1a13882d7ec993c34f8a39629d4df 100644
+index 096caf018dae1fb3bd443532f8b83f1e3f6dcebe..ec64c536d3ca2ec0156023437793d7b199838e0d 100644
 --- a/crates/gpui_windows/src/clipboard.rs
 +++ b/crates/gpui_windows/src/clipboard.rs
 @@ -28,6 +28,9 @@ static CLIPBOARD_HASH_FORMAT: LazyLock<u32> =
@@ -194,8 +194,8 @@ index 096caf018dae1fb3bd443532f8b83f1e3f6dcebe..db3dd86166e1a13882d7ec993c34f8a3
 +}
 +
 +/// quiet.md: the `HTML Format` payload as text, header included, up to its
-+/// NUL. Invalid UTF-8 is replaced; the reader finds the fragment by its
-+/// marker comments when that shifts the byte offsets.
++/// NUL. Invalid UTF-8 is replaced; the app reads the page after the header,
++/// not the byte offsets, so that shifts nothing it relies on.
 +fn read_clipboard_html() -> Option<String> {
 +    if unsafe { IsClipboardFormatAvailable(*CLIPBOARD_HTML_FORMAT) }.is_err() {
 +        return None;

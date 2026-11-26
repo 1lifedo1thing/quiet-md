@@ -219,31 +219,17 @@ pub fn cf_html(fragment: &str) -> String {
     format!("{}{pre}{fragment}{post}", header(len, ef + post.len(), sf, ef))
 }
 
-/// The HTML in Windows' `HTML Format`. The marker comments find the fragment
-/// first (an app may count the offsets wrong, e.g. in characters); without
-/// them the StartFragment/EndFragment offsets, then StartHTML/EndHTML, then
-/// all that follows the header. Text with no header is HTML already.
-pub fn cf_html_fragment(s: &str) -> String {
+/// The page in Windows' `HTML Format`: all that follows the header, as
+/// macOS's `public.html` holds it. Not the fragment between the markers:
+/// apps keep a selection's context outside them (Excel's `<table>` around
+/// the copied rows), and some count the offsets wrong (in characters), so
+/// neither the markers nor the offsets are read. Text with no header is HTML
+/// already.
+pub fn cf_html_page(s: &str) -> String {
     let s = s.trim_end_matches('\0');
-    if !s.starts_with("Version:") {
-        return s.to_string();
-    }
-    let body_at = s.find('<').unwrap_or(s.len());
-    let head = &s[..body_at];
-    let num = |key: &str| -> Option<usize> {
-        let v: i64 = head.lines().find_map(|l| l.trim().strip_prefix(key)?.strip_prefix(':')?.trim().parse().ok())?;
-        usize::try_from(v).ok()
-    };
-    let span = |a: Option<usize>, b: Option<usize>| match (a, b) {
-        (Some(a), b) if a >= body_at && a <= b.unwrap_or(s.len()).min(s.len()) && s.is_char_boundary(a) && s.is_char_boundary(b.unwrap_or(s.len()).min(s.len())) => Some(&s[a..b.unwrap_or(s.len()).min(s.len())]),
-        _ => None,
-    };
-    let body = &s[body_at..];
-    if let Some(i) = body.find(START) {
-        let rest = &body[i + START.len()..];
-        return rest[..rest.find(END).unwrap_or(rest.len())].to_string();
-    }
-    span(num("StartFragment"), num("EndFragment")).or_else(|| span(num("StartHTML"), num("EndHTML"))).unwrap_or(body).to_string()
+    // The header is `Key:value` lines; a URL in it has no `<` unescaped.
+    let at = if s.starts_with("Version:") { s.find('<').unwrap_or(s.len()) } else { 0 };
+    s[at..].to_string()
 }
 
 #[cfg(test)]
@@ -256,50 +242,18 @@ mod tests {
     }
 
     #[test]
-    fn cf_html_round_trips_with_non_ascii() {
+    fn cf_html_page_reads_whole_page() {
         let frag = "<p>中文 <b>粗体</b> émoji 🎉</p>";
-        let env = cf_html(frag);
-        assert_eq!(cf_html_fragment(&env), frag);
-        // The offsets alone (no markers) find it too: they count UTF-8 bytes.
-        let bare = env.replace(START, "").replace(END, "");
-        let start: usize = bare.lines().find_map(|l| l.strip_prefix("StartFragment:")).unwrap().trim().parse().unwrap();
-        let shift = START.len();
-        let fixed = bare
-            .replace(&format!("StartFragment:{start:010}"), &format!("StartFragment:{:010}", start - shift))
-            .replace(&format!("EndFragment:{:010}", start + frag.len()), &format!("EndFragment:{:010}", start - shift + frag.len()));
-        assert_eq!(cf_html_fragment(&fixed), frag);
-        assert_eq!(cf_html_fragment(&format!("{env}\0")), frag);
-    }
-
-    #[test]
-    fn cf_html_bad_offsets() {
-        // Offsets counted in characters land inside a character, or past the end:
-        // the markers still find the fragment.
-        let s = "Version:0.9\r\nStartHTML:0000000097\r\nEndHTML:0000000999\r\nStartFragment:0000000133\r\nEndFragment:0000000140\r\n<html><body>\r\n<!--StartFragment--><p>标题一</p><!--EndFragment-->\r\n</body></html>";
-        assert_eq!(cf_html_fragment(s), "<p>标题一</p>");
-        // No markers and offsets inside a character: the page after the header.
-        let s = "Version:0.9\r\nStartHTML:0000000001\r\nEndHTML:0000000999\r\nStartFragment:0000000101\r\nEndFragment:0000000999\r\n<html><body><p>标题一</p></body></html>";
-        let got = cf_html_fragment(s);
-        assert!(got.starts_with("<html>") && got.contains("<p>标题一</p>"), "{got}");
-        // -1 (no context) is not an offset.
-        let head = "Version:1.0\r\nStartHTML:-1\r\nEndHTML:-1\r\nStartFragment:0000000000\r\nEndFragment:0000000000\r\n";
-        let at = head.len() + "<html><body>".len();
-        let s = format!("Version:1.0\r\nStartHTML:-1\r\nEndHTML:-1\r\nStartFragment:{at:010}\r\nEndFragment:{:010}\r\n<html><body><p>abcd</p></body></html>", at + 11);
-        assert_eq!(cf_html_fragment(&s), "<p>abcd</p>");
+        let page = cf_html_page(&format!("{}\0", cf_html(frag)));
+        assert!(page.starts_with("<html>") && page.ends_with("</html>") && page.contains(frag), "{page}");
+        // Offsets counted in characters (here past the end) are not read.
+        let s = "Version:0.9\r\nStartHTML:0000000097\r\nEndHTML:0000000101\r\nStartFragment:0000000133\r\nEndFragment:0000000140\r\n<html><body>\r\n<!--StartFragment--><p>标题一</p><p>二</p><!--EndFragment-->\r\n</body></html>";
+        assert_eq!(xml(html_to_blocks(&cf_html_page(s))), xml(html_to_blocks("<p>标题一</p><p>二</p>")));
+        // Excel's rows: the table is outside the markers.
+        let s = "Version:1.0\r\nStartHTML:-1\r\nEndHTML:-1\r\nStartFragment:0000000105\r\nEndFragment:0000000180\r\n<html><body><table><!--StartFragment--><tr><td>a</td><td>b</td></tr><!--EndFragment--></table></body></html>";
+        assert!(xml(html_to_blocks(&cf_html_page(s))).contains("<table"), "{s}");
         // Not CF_HTML at all.
-        assert_eq!(cf_html_fragment("<p>x</p>"), "<p>x</p>");
-    }
-
-    #[test]
-    fn cf_html_missing_end_fragment() {
-        // No EndFragment line and no end marker: up to the end of the text.
-        let s = "Version:0.9\r\nStartHTML:0000000071\r\nStartFragment:0000000105\r\n<html><body>\r\n<!--StartFragment--><p>a</p><p>b</p></body></html>";
-        let got = cf_html_fragment(s);
-        assert_eq!(xml(html_to_blocks(&got)), xml(html_to_blocks("<p>a</p><p>b</p>")));
-        // Offsets alone, no EndFragment: to the end.
-        let s = "Version:0.9\r\nStartFragment:0000000040\r\n<html><body><p>a</p></body></html>";
-        let got = cf_html_fragment(s);
-        assert!(got.contains("<p>a</p>"), "{got}");
+        assert_eq!(cf_html_page("<p>x</p>"), "<p>x</p>");
     }
 
     #[test]
@@ -313,7 +267,7 @@ mod tests {
         for want in ["<h2>Head</h2>", "<b>bold</b>", "<em>it</em>", "<u>u</u>", "<del>s</del>", "<code>c</code>", "<a href=\"https://x.y/\">link</a>", "sub", "<li seq=\"3\">three</li>", "<checkbox done=\"true\">done</checkbox>", "<blockquote>", "<hr/>", "lang=\"rust\""] {
             assert!(back.contains(want), "{want} missing:\n{html}\n{back}");
         }
-        assert_eq!(cf_html_fragment(&cf_html(&html)), html);
+        assert!(cf_html_page(&cf_html(&html)).contains(&html));
     }
 
     #[test]

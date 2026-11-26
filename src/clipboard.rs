@@ -36,7 +36,7 @@ pub fn clipboard_html(_item: Option<&gpui::ClipboardItem>) -> Option<String> {
     }
 }
 
-/// Windows: `HTML Format` (CF_HTML), its fragment; Linux: the `text/html`
+/// Windows: `HTML Format` (CF_HTML), the page after its header; Linux: the `text/html`
 /// target (X11 and Wayland). The vendored gpui reads them with the text.
 #[cfg(not(target_os = "macos"))]
 pub fn clipboard_html(item: Option<&gpui::ClipboardItem>) -> Option<String> {
@@ -44,7 +44,7 @@ pub fn clipboard_html(item: Option<&gpui::ClipboardItem>) -> Option<String> {
         gpui::ClipboardEntry::String(s) => s.html.as_deref(),
         _ => None,
     })?;
-    Some(fdl_core::clip_html::cf_html_fragment(html)).filter(|h| !h.trim().is_empty())
+    Some(fdl_core::clip_html::cf_html_page(html)).filter(|h| !h.trim().is_empty())
 }
 
 /// Our copy for the clipboard: the text, the blocks as DocxXML for pasting
