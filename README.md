@@ -130,11 +130,11 @@ Two pieces: the `quiet` command line tool, which ships inside the Quiet.md app, 
    npx skills add s1dashu/quiet-md -g -y -a claude-code   # or -a codex, …; leave out -a to choose
    ```
 
-2. **Put `quiet` on your PATH.** macOS: Settings › 连接 Agent › 安装命令行工具 in Quiet.md (it links `quiet` into `~/.local/bin`), or `ln -sf /Applications/quiet.md.app/Contents/MacOS/quiet ~/.local/bin/quiet`; the Homebrew cask links it for you. Windows: the installer adds it to your PATH (open a new terminal). Linux: `bin/quiet` in the `.tar.gz`, or a link named `quiet` to the AppImage.
+2. **Put `quiet` on your PATH.** macOS: Settings › Agent Connector › Install Command (设置 › 连接 Agent › 安装命令行工具) in Quiet.md (it links `quiet` into `~/.local/bin`), or `ln -sf /Applications/quiet.md.app/Contents/MacOS/quiet ~/.local/bin/quiet`; the Homebrew cask links it for you. Windows: the installer adds it to your PATH (open a new terminal). Linux: `bin/quiet` in the `.tar.gz`, or a link named `quiet` to the AppImage.
 
 3. **Check:** `quiet ls` lists the folders Quiet.md has open.
 
-An agent can do all of this for you. Tell it: *Install the Quiet.md skill and CLI from https://github.com/s1dashu/quiet-md into my Claude Code* (or Codex, …): it runs step 1 for that agent and follows the skill's first section for step 2.
+An agent can do all of this for you. Tell it: *Install the Quiet.md skill and CLI by following https://github.com/s1dashu/quiet-md/blob/main/docs/AGENT_INSTALL.md*. That page gives each agent (Claude Code, Codex, others) the exact commands.
 
 ## Performance
 

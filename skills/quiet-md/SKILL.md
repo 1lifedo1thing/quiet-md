@@ -15,7 +15,7 @@ text as a version, and refuses to overwrite a change made since you read.
 
 Run `quiet version`. If it is not found, it ships inside the Quiet.md app:
 
-- **macOS**: ask the user to click Settings › 连接 Agent › 安装命令行工具 in
+- **macOS**: ask the user to click Settings › Agent Connector › Install Command (设置 › 连接 Agent › 安装命令行工具) in
   Quiet.md (it links `quiet` into `~/.local/bin`), or do it yourself:
   `mkdir -p ~/.local/bin && ln -sf /Applications/quiet.md.app/Contents/MacOS/quiet ~/.local/bin/quiet`
   (the app may be in `~/Applications` instead). If `~/.local/bin` is not on

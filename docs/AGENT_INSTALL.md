@@ -22,8 +22,8 @@ If it prints `quiet <version>`, go to step 2. Otherwise the command ships
 inside the Quiet.md app:
 
 - **macOS:** the app is at `/Applications/quiet.md.app`. Ask the user to open
-  Quiet.md and click **Settings › Agent Connector › Install Command**, or link
-  it yourself (no administrator password needed):
+  Quiet.md and click **Settings › Agent Connector › Install Command**
+  (设置 › 连接 Agent › 安装命令行工具), or link it yourself (no administrator password needed):
 
   ```sh
   mkdir -p ~/.local/bin
@@ -38,14 +38,18 @@ inside the Quiet.md app:
 - **Linux:** `quiet` is in the package's `bin/` folder, beside `quiet_md`.
   Link it into a folder on `PATH`, e.g. `ln -sf <package>/bin/quiet ~/.local/bin/quiet`.
 
-If Quiet.md is not installed, tell the user to download it from
-https://quiet.md and open it once, then continue.
+If Quiet.md is not installed, or its app has no `quiet` inside (versions
+before the one with 连接 Agent / Agent Connector in Settings), tell the user to
+download the latest Quiet.md from https://quiet.md and open it once, then
+continue.
 
 ## 2. Install the skill
 
 The skill lives in this repository at `skills/quiet-md/`. Install it with the
 [skills](https://github.com/vercel-labs/skills) CLI (needs Node.js 22.20 or
-later). The flags below install for the user (`-g`) without questions (`-y`).
+later). The flags below install for the user (`-g`) without questions (`-y`);
+without `-y` it stops to ask, and without `-g` it installs into the current
+folder only. Cloning the repository takes up to a minute or two.
 
 ### Claude Code
 
@@ -61,7 +65,9 @@ This puts the skill in `~/.claude/skills/quiet-md/`.
 npx skills add s1dashu/quiet-md -g -a codex -y
 ```
 
-This puts the skill in `~/.agents/skills/quiet-md/`.
+This puts the skill in `~/.agents/skills/quiet-md/`. (Codex's own skill
+installer, putting it in `~/.codex/skills/quiet-md/`, works too, but
+`npx skills update` then leaves it out.)
 
 ### Other agents
 
