@@ -289,22 +289,31 @@ impl Home {
         Ok(to)
     }
 
-    /// Whether top-level folder `key` may be renamed from the sidebar: open, not a test
-    /// run's one top-level folder (`QUIET_MD_HOME`), and not a folder the system names
-    /// (home, Desktop, Documents, Downloads …).
+    /// Whether top-level folder `key` may be renamed from the sidebar: open, not the folder a
+    /// test run or preview was started on (`QUIET_MD_HOME`), and not a folder the system names
+    /// (home, Desktop, Documents, Downloads …). Folders added in such a run rename as usual.
     pub fn can_rename(&self, key: &str) -> bool {
-        // A test run's one top-level folder stays where the run put it (a scripted
-        // launch's environment: unit tests are not that run, whatever their shell sets).
-        let pinned = cfg!(target_family = "wasm") || (!cfg!(test) && std::env::var_os("QUIET_MD_HOME").is_some() && std::env::var_os("QUIET_MD_FOLDERS").is_none());
-        let Some(r) = self.folder(key).filter(|r| r.store.is_some() && !pinned) else { return false };
+        // A scripted launch's environment: unit tests are not that run, whatever their shell sets.
+        // With `QUIET_MD_FOLDERS` the run keeps its own list, which follows a rename.
+        let started_on = if cfg!(test) || std::env::var_os("QUIET_MD_FOLDERS").is_some() { None } else { std::env::var_os("QUIET_MD_HOME").map(PathBuf::from) };
+        self.can_rename_beside(key, started_on.as_deref())
+    }
+
+    /// `can_rename`, `started_on` the folder the run's launch named, which stays where it put it:
+    /// it is where the run's library lives (a preview's is the real one), and renaming it would
+    /// move that.
+    fn can_rename_beside(&self, key: &str, started_on: Option<&Path>) -> bool {
+        if cfg!(target_family = "wasm") { return false; }
+        let Some(r) = self.folder(key).filter(|r| r.store.is_some()) else { return false };
+        if started_on.is_some_and(|h| canonical(h) == canonical(&r.path)) { return false; }
         let system = [dirs::home_dir(), dirs::desktop_dir(), dirs::document_dir(), dirs::download_dir(), dirs::picture_dir(), dirs::audio_dir(), dirs::video_dir(), dirs::public_dir()];
         r.path.parent().is_some() && !system.into_iter().flatten().any(|d| canonical(&d) == canonical(&r.path))
     }
 
     pub fn folder(&self, key: &str) -> Option<&TopFolder> { self.folders.iter().find(|r| r.key == key) }
 
-    /// Why top-level folder `key` keeps its name, for the menu: a test run's or preview's one
-    /// folder (`QUIET_MD_HOME`), or a folder the system names. None: it may be renamed (or is not open).
+    /// Why top-level folder `key` keeps its name, for the menu: the folder a test run or preview
+    /// was started on (`QUIET_MD_HOME`), or a folder the system names. None: it may be renamed (or is not open).
     pub fn keeps_name(&self, key: &str) -> bool { self.folder(key).is_some_and(|r| r.store.is_some()) && !self.can_rename(key) }
 
     /// The first top-level folder that opened: where things go when nothing says otherwise.
@@ -483,6 +492,18 @@ mod tests {
         crate::vfs::create_dir_all(&lib).unwrap();
         assert!(follows_default(&lib, &lib) && follows_default(&lib.join("."), &lib), "the same folder, however written");
         assert!(!follows_default(&d.join("Other"), &lib));
+    }
+
+    #[test]
+    fn a_run_keeps_the_folder_it_was_started_on_and_renames_the_others() {
+        let (home, other) = (dir("started-on").join("lib"), dir("added").join("vault"));
+        crate::vfs::create_dir_all(&home).unwrap();
+        crate::vfs::create_dir_all(&other).unwrap();
+        let mut ws = Home { fixed: true, ..Default::default() };
+        let (kh, ko) = (ws.add(&home).unwrap(), ws.add(&other).unwrap());
+        assert!(!ws.can_rename_beside(&kh, Some(&home)) && !ws.can_rename_beside(&kh, Some(&home.join("."))), "the run's own folder, however written");
+        assert!(ws.can_rename_beside(&ko, Some(&home)), "a folder added in the run renames");
+        assert!(ws.can_rename_beside(&kh, None) && ws.can_rename_beside(&ko, None), "an ordinary launch renames both");
     }
 
     #[test]
