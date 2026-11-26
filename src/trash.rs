@@ -48,14 +48,16 @@ pub(crate) fn page_header_with(ws: &Workspace, title: impl IntoElement, left: f3
         .pl(if ws.sidebar_open { px(left) } else { px(theme::TRAFFIC_LIGHTS_W) })
         .pr(px(crate::ui::header_right_inset()))
         .title_bar()
-        // 回收站 (设置's sidebar): 展开侧栏 and 返回, as 设置's own header; a folder's page: the toggle.
-        .when(!ws.sidebar_open && ws.view == crate::app::View::Trash, |d| d.child(div().mr(px(12.)).child(ws.header_navigation(cx))))
+        // 回收站 (设置's sidebar): 展开侧栏, as 设置's own header; a folder's page: the toggle. Either
+        // way then the document header's rule, so the text after it starts where a document's
+        // path does (a plain title 4 further in: a path's links carry 4 of padding).
+        .when(!ws.sidebar_open && ws.view == crate::app::View::Trash, |d| d.child(ws.header_navigation(cx))
+            .child(div().ml(px(12.)).mr(px(16.)).child(crate::design::Separator::new().vertical().h(px(18.)))))
         .when(!ws.sidebar_open && ws.view != crate::app::View::Trash, |d| {
             d.child(
                 Button::ghost("open-sidebar")
                     .no_drag()
                     .ml(px(4.))
-                    .mr(px(12.))
                     .icon("sidebar")
                     .tip(crate::settings::tr("展开侧栏", "Show sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                     .on_click(cx.listener(|w, _, _, cx| {
@@ -63,6 +65,7 @@ pub(crate) fn page_header_with(ws: &Workspace, title: impl IntoElement, left: f3
                         cx.notify();
                     })),
             )
+            .child(div().mx(px(12.)).child(crate::design::Separator::new().vertical().h(px(18.))))
         })
         .child(title)
         .child(div().flex_1())
