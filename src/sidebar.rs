@@ -102,16 +102,13 @@ impl Workspace {
         self.sidebar_width.clamp(theme::SIDEBAR_MIN, max)
     }
 
-    pub(crate) fn render_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
-        self.more_bounds.borrow_mut().clear();
-        self.settle_sidebar_drop(cx);
-        crate::devtools::rows_begin(window);
-
-        // The window's header over the sidebar (macOS Notes): clear of the traffic lights, then
-        // room to drag the window by, and at the sidebar's right end 添加文件夹 and the toggle that
-        // hides it, as far apart as a folder page's header buttons; hidden, the toggle alone waits
-        // by the traffic lights.
-        let header = div()
+    /// The window's header over the sidebar (macOS Notes): clear of the traffic lights, then
+    /// room to drag the window by, and at the sidebar's right end `first` (添加文件夹; 设置's and
+    /// 回收站's 返回) and the toggle that hides the sidebar, HEADER_ACTIONS_GAP apart like a folder
+    /// page's header buttons. The toggle sits in the same spot in every sidebar; hidden, it waits
+    /// by the traffic lights.
+    pub(crate) fn sidebar_header(&self, first: impl IntoElement, cx: &mut Context<Self>) -> Div {
+        div()
             .h(px(crate::app::HEADER_H))
             .flex_none()
             .flex()
@@ -122,14 +119,22 @@ impl Workspace {
             .child(div().flex_1())
             .children(crate::settings::update_pill(cx))
             .child(div().flex_none().flex().items_center().gap(px(crate::app::HEADER_ACTIONS_GAP))
-                .child(crate::ui::header_icon("section-add", "folder-plus").tip(crate::settings::tr("添加文件夹", "Add Folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + ⇧ + O")))
-                    .on_click(cx.listener(|w, _: &ClickEvent, window, cx| w.open_folder_dialog(window, cx))))
+                .child(first)
                 .child(crate::ui::header_icon("collapse-sidebar", "sidebar")
                     .tip(crate::settings::tr("收起侧栏", "Hide sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                     .on_click(cx.listener(|w, _, _, cx| {
                         w.sidebar_open = false;
                         cx.notify();
-                    }))));
+                    }))))
+    }
+
+    pub(crate) fn render_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        self.more_bounds.borrow_mut().clear();
+        self.settle_sidebar_drop(cx);
+        crate::devtools::rows_begin(window);
+
+        let header = self.sidebar_header(crate::ui::header_icon("section-add", "folder-plus").tip(crate::settings::tr("添加文件夹", "Add Folder"), Some(crate::shortcuts::hint("workspace::OpenFolder", "⌘ + ⇧ + O")))
+            .on_click(cx.listener(|w, _: &ClickEvent, window, cx| w.open_folder_dialog(window, cx))), cx);
 
         let nav = div().flex_none();
 
@@ -158,12 +163,12 @@ impl Workspace {
         if tops.is_empty() {
             list = list.child(self.empty_home(cx));
         } else {
-            // No 我的文档 heading: the first folder's heading is the sidebar's first row, 8 under
-            // the window's header (设置's sidebar keeps the same). 批量操作's 已选 N 项 takes the top.
+            // No 我的文档 heading: the first folder's heading is the sidebar's first row, right under
+            // the window's header where 我的文档's was. 批量操作's 已选 N 项 takes the top.
             let first = self.entries.iter().all(|e| !e.meta.pinned);
             let in_batch = self.batch.is_some();
             if in_batch { fixed = fixed.child(div().when(first, |d| d.mt(px(-SECTION_TOP))).child(self.section(1, crate::settings::text("我的文档"), cx))); }
-            list = list.when(first && !in_batch, |d| d.pt(px(8.))).child(self.render_folder_rows(window, cx));
+            list = list.child(self.render_folder_rows(window, cx));
         }
         // The first listing still running: grey rows in place of the tree, fading out over it once it is here.
         let load = if crate::loading::adding(cx) { crate::loading::Phase::Gone } else { crate::loading::phase(cx) };

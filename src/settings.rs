@@ -1444,8 +1444,9 @@ impl Workspace {
                 .on_click(cx.listener(move |w, _, _, cx| match page { Some(p) => w.open_settings(p, cx), None => w.show_view(View::Trash, cx) }))
         };
         div().w(px(self.sidebar_w(window))).h_full().flex_none().flex().flex_col().text_color(Theme::text()).font_family(theme::ui_family())
-            .child(div().h(px(crate::app::HEADER_H)).flex_none().flex().items_center().pl(px(theme::TRAFFIC_LIGHTS_W)).pr(px(12.)).title_bar().child(self.header_navigation(cx))
-                .child(div().flex_1()).children(update_pill(cx)))
+            // The document sidebar's header, 返回 where 添加文件夹 is: the toggle doesn't move.
+            .child(self.sidebar_header(crate::ui::header_icon("settings-back", "arrow-left").relative().child(self.home.track("settings-back")).tip(tr("返回", "Back"), Some("Esc"))
+                .on_click(cx.listener(|w, _, _, cx| w.close_settings(cx))), cx))
             // The document sidebar's rhythm: the first row sits 8 under the bar, a section
             // header like 我的文档's, rows `ROW_GAP` apart. 设置's line sits on
             // a row's, not a section header's: the 34pt box keeps the rows below.
@@ -1453,20 +1454,15 @@ impl Workspace {
                 .child(div().h(px(sb::SECTION_H)).pl(px(4.)).pt(px((sb::SECTION_TOP + sb::SECTION_H) / 2. - sb::ROW_H / 2.))
                     .child(div().px(px(4.)).text_size(px(theme::ui_font())).line_height(px(theme::ui_font() + 7.)).font_weight(FontWeight::SEMIBOLD).text_color(Theme::sidebar_section()).child(tr("设置", "Settings"))))
                 .child(div().flex().flex_col().gap(px(sb::ROW_GAP)).children(NAV.iter().map(|p| nav_row(*p, cx)).collect::<Vec<_>>())))
-            // Where 设置 was: 返回, back to the page 设置 was opened from.
-            .child(div().flex_1())
-            .child(sb::footer_slot(sb::footer_row("ft-back", "arrow-left", tr("返回", "Back")).tip(tr("返回", "Back"), Some("Esc"))
-                .on_click(cx.listener(|w, _, _, cx| w.close_settings(cx)))))
             .into_any_element()
     }
 
-    /// 收起 / 展开侧栏 and 返回, in the very box the document sidebar's
-    /// 收起侧栏 uses (28pt, 4pt past the traffic lights, glyph 17), so the
-    /// buttons don't move when switching between the document list and 设置.
+    /// With the sidebar hidden: 展开侧栏 where the document page's waits by the traffic lights,
+    /// and 返回 beside it (navigation stays in sight, unlike 添加文件夹).
     pub(crate) fn header_navigation(&self, cx: &mut Context<Self>) -> AnyElement {
         let open = self.sidebar_open;
         let bar_button = |id: &'static str, glyph: &'static str| Button::ghost(id).icon(glyph).no_drag();
-        div().flex().items_center().ml(px(4.)).gap(px(4.))
+        div().flex().items_center().ml(px(4.)).gap(px(crate::app::HEADER_ACTIONS_GAP))
             .child(bar_button("settings-collapse", "sidebar")
                 .tip(if open { tr("收起侧栏", "Hide sidebar") } else { tr("展开侧栏", "Show sidebar") }, Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                 .on_click(cx.listener(|w, _, _, cx| { w.sidebar_open = !w.sidebar_open; cx.notify(); })))

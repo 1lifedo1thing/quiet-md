@@ -43,8 +43,9 @@ pub(crate) fn page_header_with(ws: &Workspace, title: impl IntoElement, left: f3
         .pl(if ws.sidebar_open { px(left) } else { px(theme::TRAFFIC_LIGHTS_W) })
         .pr(px(crate::ui::header_right_inset()))
         .title_bar()
-        .when(!ws.sidebar_open && cfg!(target_os = "windows"), |d| d.child(div().mr(px(12.)).child(ws.header_navigation(cx))))
-        .when(!ws.sidebar_open && !cfg!(target_os = "windows"), |d| {
+        // 回收站 (设置's sidebar): 展开侧栏 and 返回, as 设置's own header; a folder's page: the toggle.
+        .when(!ws.sidebar_open && ws.view == crate::app::View::Trash, |d| d.child(div().mr(px(12.)).child(ws.header_navigation(cx))))
+        .when(!ws.sidebar_open && ws.view != crate::app::View::Trash, |d| {
             d.child(
                 Button::ghost("open-sidebar")
                     .no_drag()
