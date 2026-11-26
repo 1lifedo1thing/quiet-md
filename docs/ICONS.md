@@ -16,9 +16,9 @@ Project-drawn icons that sit beside Nucleo ones (the shell, the block handle, th
 
 Each project-drawn file opens with a comment beginning 本项目绘制 that says what it shows.
 
-## `assets/icons/`: 67 Nucleo icons
+## `assets/icons/`: 68 Nucleo icons
 
-Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 67 files draw on 59 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
+Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 68 files draw on 60 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
 
 Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 and `nucleo-ui-essential-outline-18` 1.1.8 by comparing the drawn shapes.
 
@@ -82,6 +82,7 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `star-off.svg` | UI Outline 18 | StarSlash | identical to the package |
 | `star.svg` | UI Outline 18 | Star | identical to the package |
 | `strikethrough.svg` | UI Outline 18 | TextStrikethrough | identical to the package |
+| `table-import.svg` | UI Outline 18 | TableDownload | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26); 从 CSV 新建数据表 |
 | `text-search.svg` | UI Outline 18 | TextASparkle | identical to the package |
 | `todo-check.svg` | UI Outline 18 | Check | identical to the package |
 | `tree-triangle.svg` | UI Fill 18 | CaretRight | Fill 18 CaretRight; not checked against a package (no UI Fill 18 package was available); the header and the comma path style match the other Nucleo 1.5.1 files. |
@@ -125,7 +126,7 @@ The 18 project-drawn icons in this folder (MIT) are listed in THIRD_PARTY.md; ea
 | `todo.svg` | CheckboxChecked |
 | `type.svg` | Text |
 
-24 files, each a different Nucleo icon, 14 of them found nowhere else in the project (AlarmClock, BracketsCurly, Button, CheckboxChecked, GridLayoutCols, Heading4, Heading5, Heading6, Link, ListTree, Paperclip, Stopwatch, Table, Text); the other ten (Palette2, FileContent, Heading1–3, Image, BulletList, OrderedList, Quote, MathFunction) are already in `assets/icons/`. With them the project uses 73 distinct Nucleo icons of the 100 its licence allows.
+24 files, each a different Nucleo icon, 14 of them found nowhere else in the project (AlarmClock, BracketsCurly, Button, CheckboxChecked, GridLayoutCols, Heading4, Heading5, Heading6, Link, ListTree, Paperclip, Stopwatch, Table, Text); the other ten (Palette2, FileContent, Heading1–3, Image, BulletList, OrderedList, Quote, MathFunction) are already in `assets/icons/`. With them the project uses 74 distinct Nucleo icons of the 100 its licence allows.
 
 | File | Lucide icon |
 |---|---|

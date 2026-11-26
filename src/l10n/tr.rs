@@ -1193,7 +1193,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("原位打开（推荐）", "Bulunduğu yerde aç (önerilen)"),
     ("和 Obsidian 共用同一份文件", "Obsidian ile paylaşılır"),
     ("导入一份副本", "Bir kopya içe aktar"),
-    ("复制到这里", "Buraya kopyalanır"),
     ("导入到「{}」", "“{}” içine aktar"),
     ("复制到「{}」", "“{}” içine kopyalanır"),
     ("「{}」是一个 Obsidian 库", "“{}” bir Obsidian kasası"),

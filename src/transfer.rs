@@ -765,9 +765,9 @@ impl Workspace {
                 .on_click(cx.listener(move |w, _, window, cx| { w.create_menu = None; w.open_import_kind(kind, parent.clone(), window, cx) }))
         };
         let mut out = vec![
-            // The two that read like 打开: the line under each says it copies.
-            item("import-md", "doc-md", crate::settings::tr("导入 Markdown 文件…", "Import Markdown Files…"), ImportKind::Markdown).description(crate::settings::tr("复制到这里", "Copies here")),
-            item("import-folder", "folder", crate::settings::tr("导入文件夹…", "Import Folder…"), ImportKind::Folder).description(crate::settings::tr("复制到这里", "Copies here")),
+            // Everything here copies in; only the header's 添加文件夹 uses a folder where it is.
+            item("import-md", "doc-md", crate::settings::tr("导入 Markdown 文件…", "Import Markdown Files…"), ImportKind::Markdown),
+            item("import-folder", "folder", crate::settings::tr("导入文件夹…", "Import Folder…"), ImportKind::Folder),
             {
                 let parent = parent.clone();
                 crate::design::MenuItem::new("import-apps").icon("import").label(crate::settings::tr("从其他应用导入…", "Import from Another App…"))
@@ -775,7 +775,7 @@ impl Workspace {
             },
             item("import-xml", "doc", crate::settings::tr("导入 DocxXML…", "Import DocxXML…"), ImportKind::DocxXml),
         ];
-        out.push(item("import-csv", "datatable", crate::settings::tr("从 CSV 新建数据表…", "New Data Table from CSV…"), ImportKind::Csv));
+        out.push(item("import-csv", "table-import", crate::settings::tr("从 CSV 新建数据表…", "New Data Table from CSV…"), ImportKind::Csv));
         out
     }
 

@@ -1224,7 +1224,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("原位打开（推荐）", "Ouvrir là où il est (recommandé)"),
     ("和 Obsidian 共用同一份文件", "Partagé avec Obsidian"),
     ("导入一份副本", "Importer une copie"),
-    ("复制到这里", "Copié ici"),
     ("导入到「{}」", "Importer dans « {} »"),
     ("复制到「{}」", "Copié dans « {} »"),
     ("「{}」是一个 Obsidian 库", "« {} » est un coffre Obsidian"),
