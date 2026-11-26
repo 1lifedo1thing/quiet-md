@@ -221,6 +221,7 @@ pub(crate) enum Popup {
 /// A plain list of choices on top of a popup (a form's select boxes).
 pub(crate) struct Dropdown {
     pub pos: Point<Pixels>,
+    pub corner: Anchor,
     pub width: f32,
     pub items: Vec<DropItem>,
     pub pick: Rc<dyn Fn(&mut TableView, usize, &mut Window, &mut Context<TableView>)>,
@@ -455,6 +456,13 @@ impl TableView {
 
     /// A button's menu or panel, hung from the button as last laid out (`design::hang`), never the
     /// pointer; a button not laid out yet opens nothing. `open` opens it at the point given.
+    /// A popup in the place of the one open, hanging the same way (a menu's row opening a form there).
+    pub(crate) fn swap_popup(&mut self, pos: Point<Pixels>, popup: Popup, cx: &mut Context<Self>) {
+        let corner = self.popup_corner;
+        self.open_popup(pos, popup, cx);
+        self.popup_corner = corner;
+    }
+
     pub(crate) fn hang_popup(&mut self, key: &str, align: crate::design::Align, open: impl FnOnce(&mut Self, Point<Pixels>)) {
         let Some(b) = self.anchors.borrow().get(key).copied() else { return };
         let (pos, corner) = crate::design::hang(b, align, None);
@@ -465,6 +473,13 @@ impl TableView {
     /// The open popup's room to the window's edge, for its `Popover::fit` (`design::room`).
     pub(crate) fn popup_room(&self) -> f32 {
         self.popup.as_ref().map_or(600., |(pos, _)| crate::design::room(*pos, self.popup_corner.unwrap_or(Anchor::TopLeft)))
+    }
+
+    /// Records where the box it is laid over is, for a list it opens (`open_dropdown`).
+    pub(crate) fn mark() -> (AnyElement, Rc<Cell<Bounds<Pixels>>>) {
+        let b = Rc::new(Cell::new(Bounds::default()));
+        let set = b.clone();
+        (canvas(move |bounds, _, _| set.set(bounds), |_, _, _, _| {}).absolute().inset_0().into_any_element(), b)
     }
 
     /// Records where the button it is laid over is, for `hang_popup` (`key` its id).
@@ -481,8 +496,11 @@ impl TableView {
         }
     }
 
-    pub(crate) fn open_dropdown(&mut self, pos: Point<Pixels>, width: f32, items: Vec<DropItem>, pick: impl Fn(&mut TableView, usize, &mut Window, &mut Context<TableView>) + 'static, cx: &mut Context<Self>) {
-        self.dropdown = Some(Dropdown { pos, width, items, pick: Rc::new(pick) });
+    /// A list of choices hung from the box that opens it (`from`, as `mark` records it), as wide as
+    /// the box or `width`, whichever is more (the shared `hang`: under it, or over it when there is no room).
+    pub(crate) fn open_dropdown(&mut self, from: Bounds<Pixels>, width: f32, items: Vec<DropItem>, pick: impl Fn(&mut TableView, usize, &mut Window, &mut Context<TableView>) + 'static, cx: &mut Context<Self>) {
+        let (pos, corner) = crate::design::hang(from, crate::design::Align::Start, None);
+        self.dropdown = Some(Dropdown { pos, corner, width: width.max(f32::from(from.size.width)), items, pick: Rc::new(pick) });
         cx.notify();
     }
 

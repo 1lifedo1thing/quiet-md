@@ -458,15 +458,16 @@ pub(crate) fn render(v: &TableView, base: &Base, t: &Table, view: &View, window:
                 // the name first: narrow, the type goes (wrapped onto a second line, cut off) before the name is cut short
                 div().flex_1().min_w_0().h(px(20.)).overflow_hidden().flex().flex_wrap().content_start().items_center().gap_x(px(6.))
                     .child(div().flex_none().max_w_full().overflow_hidden().whitespace_nowrap().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(header_text()).child(ui_text(f.name.clone())))
-                    .child(div().id(("tb-hdr-type", fid)).flex_none().px(px(4.)).mx(px(-4.)).rounded(px(crate::design::geo().tool_r)).cursor_pointer()
+                    .child(div().id(("tb-hdr-type", fid)).relative().flex_none().px(px(4.)).mx(px(-4.)).rounded(px(crate::design::geo().tool_r)).cursor_pointer()
                         .text_size(px(text_xs())).text_color(Theme::text_placeholder()).hover(|s| s.bg(Theme::fill_hover_strong()).text_color(Theme::text_caption()))
-                        .whitespace_nowrap().child(crate::settings::label(f.ty.label()))
-                        .on_mouse_down(MouseButton::Left, cx.listener(move |v, ev: &MouseDownEvent, window, cx| {
+                        .whitespace_nowrap().child(crate::settings::label(f.ty.label())).child(v.anchor(format!("tb-hdr-type-{fid}")))
+                        .on_mouse_down(MouseButton::Left, cx.listener(move |v, _: &MouseDownEvent, window, cx| {
                             cx.stop_propagation();
                             window.focus(&v.focus, cx);
                             v.col_sel = vec![fid];
                             v.sel = None;
-                            menus::edit_field(v, fid, point(ev.position.x - px(12.), ev.position.y + px(16.)), window, cx);
+                            // hung from the type's words, as a button's menu is, not the pointer
+                            v.hang_popup(&format!("tb-hdr-type-{fid}"), crate::design::Align::Start, |v, pos| menus::edit_field(v, fid, pos, window, cx));
                         })))
                     .into_any_element()
             })
