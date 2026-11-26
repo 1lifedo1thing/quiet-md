@@ -68,11 +68,11 @@ impl Workspace {
         let all = n > 0 && ids.iter().all(|id| self.batch.as_ref().is_some_and(|s| s.contains(id)));
         let compact = main < 640.;
         let left = div().flex().items_center().min_w_0()
-            .child(div().id("home-batch-all").no_drag().flex_none().ml(px(4.)).size(px(14.)).cursor_pointer().group("home-batch-all")
+            .child(div().id("home-batch-all").no_drag().flex_none().ml(px(4.)).size(px(16.)).flex().items_center().justify_center().cursor_pointer().group("home-batch-all")
                 .child(checkbox(if all { Check::On } else if n > 0 { Check::Partial } else { Check::Off }, false))
                 .tip(crate::settings::text("全选"), None)
                 .on_click(cx.listener(move |w, _, _, cx| { w.batch = Some(if all { vec![] } else { ids.clone() }); cx.notify(); })))
-            .child(div().ml(px(10.)).text_size(px(15.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(Theme::text()).whitespace_nowrap()
+            .child(div().ml(px(8.)).text_size(px(15.)).line_height(px(24.)).font_weight(FontWeight::SEMIBOLD).text_color(Theme::text()).whitespace_nowrap()
                 .child(crate::localized_format!("已选 {n} 项", "Selected: {n}")));
         let act = |id: &'static str, ic: &'static str, label: &'static str| Button::ghost(id).icon(ic).no_drag().disabled(n == 0)
             .when(!compact, |d| d.label(crate::settings::label(label))).when(compact, |d| d.size(px(crate::app::HEADER_ACTIONS_H)).tip(label, None));
