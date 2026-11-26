@@ -1,6 +1,6 @@
 //! A folder page's header: one row — the path on the left, four glyphs on the right
-//! (… · 显示 · 搜索 · "+"). Counted from the right "+" and 搜索 sit where a document's do,
-//! so they stay put from page to page; "…" starts the group, 显示 between it and 搜索.
+//! (显示 · "+" · 搜索 · …). Counted from the right "…", 搜索 and "+" sit where a document's
+//! do, so they stay put from page to page; 显示, the folder page's own, comes first.
 
 use super::{HomeSort, SortDir};
 use crate::app::Workspace;
@@ -56,7 +56,7 @@ impl Workspace {
                 .on_click(cx.listener(move |w, _: &ClickEvent, _, cx| { let Some(b) = w.home.anchor("create-folder") else { return }; let pos = hang(b, Align::End, None).0; w.create_menu = if w.create_menu.is_some() { None } else { Some((parent.clone(), pos)) }; cx.notify(); }))
         };
         let right = div().relative().flex_none().flex().items_center().gap(px(crate::app::HEADER_ACTIONS_GAP))
-            .child(more).child(display).child(search).child(primary).child(self.home.track("tb-right"));
+            .child(display).child(primary).child(search).child(more).child(self.home.track("tb-right"));
         crate::trash::page_header_with(self, left, 18., cx).child(div().w(px(16.)).flex_none()).child(right).into_any_element()
     }
 

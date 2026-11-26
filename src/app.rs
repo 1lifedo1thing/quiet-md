@@ -2008,11 +2008,20 @@ impl Workspace {
             )
             .child(div().flex_1().min_w(px(16.)))
             .child(
-                // the folder page's gap: "+" and 搜索 stay put from page to page
+                // + · 搜索 · …, "…" last: counted from the right each sits where a folder page's does
                 div().gap(px(HEADER_ACTIONS_GAP))
                     .h(px(HEADER_ACTIONS_H)).flex_none()
                     .flex()
                     .items_center()
+                    .child(
+                        // Straight to a new document: no 新建 menu, as 导入 is rare.
+                        seg("doc-new", "plus").tip(crate::settings::tr("新建文档", "New document"), None).on_click(cx.listener(|w, _, window, cx| w.new_doc(window, cx))),
+                    )
+                    .child(
+                        seg("doc-search", "search")
+                            .tip_label(crate::shortcuts::keys(crate::settings::text("搜索(⌘ + J)")).into(), TipSide::Below)
+                            .on_click(cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(FocusSearch), cx))),
+                    )
                     .when(self.current.is_some(), |d| {
                         d.child(
                             // No tooltip while its dropdown is open; the menu hangs
@@ -2031,16 +2040,7 @@ impl Workspace {
                                     cx.notify();
                                 })),
                         )
-                    })
-                    .child(
-                        seg("doc-search", "search")
-                            .tip_label(crate::shortcuts::keys(crate::settings::text("搜索(⌘ + J)")).into(), TipSide::Below)
-                            .on_click(cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(FocusSearch), cx))),
-                    )
-                    .child(
-                        // Straight to a new document: no 新建 menu, as 导入 is rare.
-                        seg("doc-new", "plus").tip(crate::settings::tr("新建文档", "New document"), None).on_click(cx.listener(|w, _, window, cx| w.new_doc(window, cx))),
-                    ).into_any_element()
+                    }).into_any_element()
             )
     }
 }
