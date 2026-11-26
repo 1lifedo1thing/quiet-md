@@ -57,7 +57,7 @@
   <img src="docs/images/readme-write.webp" width="100%" alt="Una nota larga abierta en Quiet.md, con encabezados, fórmulas en línea y una tabla de concentraciones de iones.">
 </p>
 
-Encabezados, listas, tareas, citas, avisos destacados, columnas, tablas con celdas combinadas, código con resaltado de sintaxis, fórmulas LaTeX, imágenes, archivos y portadas. Los atajos de Markdown funcionan mientras escribes y el menú `/` tiene todo lo demás. Menciona otra nota para enlazarla; esa nota mostrará sus referencias inversas.
+Encabezados, listas, tareas, citas, avisos destacados, columnas, tablas con celdas combinadas, código con resaltado de sintaxis, fórmulas LaTeX, imágenes, archivos y portadas. Los atajos de Markdown funcionan mientras escribes y el menú `/` tiene todo lo demás. Menciona otra nota para enlazarla; esa nota mostrará sus referencias inversas. Los bloques de código Mermaid se dibujan como diagramas. Las tablas de datos guardan registros con campos de selección, fecha, número, fórmula, búsqueda y relación, en vistas que filtras, ordenas y agrupas; cada celda de una columna Notas es una nota de verdad. El menú … tiene Modo concentración, Modo máquina de escribir y Enfoque de párrafo, y Visualización › Acercar agranda solo el texto.
 
 ### Dibujar
 
@@ -69,7 +69,7 @@ Las pizarras son un tablero portado de Excalidraw: formas, flechas que siguen un
 
 ### Organiza en carpetas de verdad
 
-La página de una carpeta muestra cada carpeta que contiene como una pila de sus páginas. Mantén una nota sobre una carpeta y se abrirá sola; las carpetas pueden ir dentro de otras carpetas y los movimientos se pueden deshacer. Fija notas en la barra lateral, busca en todos los títulos y líneas con `⌘ J`, y busca y reemplaza dentro de una nota, también con expresiones regulares. Las notas eliminadas esperan en la papelera. Los archivos y carpetas Markdown que tengas en otras partes del ordenador se pueden abrir en **Archivos de este ordenador** y editar donde están.
+La barra lateral agrupa tus carpetas de primer nivel, y la página de cada una es su inicio: las subcarpetas aparecen como pilas de sus páginas y la vista de lista ordena por cualquier columna. Añade cualquier carpeta del ordenador con **Añadir carpeta** y se usa donde está. Mantén una nota sobre una carpeta y se abrirá sola; las carpetas pueden ir dentro de otras carpetas, las páginas y carpetas pasan de una carpeta de primer nivel a otra, y cada movimiento se puede deshacer. Fija notas arriba en la barra lateral, busca en todos los títulos y líneas desde el icono de búsqueda o con `⌘ J`, y busca y reemplaza dentro de una nota, también con expresiones regulares. Las notas eliminadas esperan en la papelera los días que elijas. Un archivo Markdown abierto por separado se edita en su propia ventana, donde está.
 
 ### Trae tus notas
 
@@ -77,14 +77,15 @@ La página de una carpeta muestra cada carpeta que contiene como una pila de sus
   <img src="docs/images/readme-import.webp" width="100%" alt="La pantalla del primer inicio de Quiet.md, que ofrece abrir donde está una bóveda de Obsidian que ha encontrado.">
 </p>
 
-En el primer inicio, Quiet.md busca tus bibliotecas de Obsidian, Logseq, iA Writer y Typora y las copia, sin tocar los originales. Los `[[enlaces wiki]]` de Obsidian siguen funcionando: haz clic en uno para abrir la nota a la que apunta. Más adelante, arrastra archivos y carpetas Markdown a la página de una carpeta o directamente a una carpeta de la barra lateral. Las notas vuelven a salir como Markdown o PDF, o directas a la impresora.
+En el primer inicio, Quiet.md busca tus bibliotecas de Obsidian, Logseq, iA Writer y Typora y las copia, sin tocar los originales. Los `[[enlaces wiki]]` de Obsidian siguen funcionando: haz clic en uno para abrir la nota a la que apunta. Más adelante, arrastra archivos y carpetas Markdown a la página de una carpeta o directamente a una carpeta de la barra lateral; Importar desde otra app… también trae espacios de trabajo de SiYuan. Las notas vuelven a salir como Markdown o PDF, o directas a la impresora.
 
 ### Y además
 
 - **Historial de versiones**: cada nota guarda instantáneas al guardarse (20 por defecto, hasta 30). Abre una para ver en su sitio qué cambió, restáurala con un clic o ponle nombre.
 - **Notas rápidas**: en macOS, un atajo global (`⌥ Espacio` por defecto) abre una pequeña ventana de nota sobre cualquier app.
 - **Tu aspecto**: cuatro estilos integrados —Craft, Feishu, Notion y Obsidian—, cada uno con variante oscura, o tu propio CSS ([docs/THEMES.md](docs/THEMES.md)). Elige la fuente de la interfaz y la de los documentos.
-- **Tus teclas**: pulsa `⌘ /` para ver todos los atajos y reasignar cualquiera. En Windows y Linux, Ctrl sustituye a ⌘ y Alt a ⌥.
+- **Tus teclas**: pulsa `⌘ /` para ver todos los atajos y reasignar o borrar cualquiera. En Windows y Linux, Ctrl sustituye a ⌘ y Alt a ⌥.
+- **Línea de comandos y agentes**: la herramienta `quiet`, incluida en la app, permite que agentes de IA como Claude Code o Codex lean y editen tu biblioteca con el mismo motor que la app. Ajustes › Conector de agentes te da una línea para pegarle a tu agente, que se instala solo; en macOS instala la herramienta con un clic. Más detalles en el [README en inglés](README.md#work-with-agents).
 - **Tu idioma**: inglés, chino simplificado, chino tradicional, japonés, coreano, español, francés, árabe y turco. El árabe une sus letras y se escribe de derecha a izquierda.
 - **Limpieza**: Ajustes › Biblioteca encuentra las imágenes y archivos que ya no usa ninguna nota y los retira cuando lo confirmas.
 - **Actualizaciones**: las versiones nuevas se instalan desde la propia app tras verificar su firma. Las comprobaciones automáticas se pueden desactivar.
@@ -152,7 +153,7 @@ Gracias a todas las personas que han ayudado a construir Quiet.md. Los issues y 
 - **0.1.7** (6 nov): guardado en varias ventanas, recuperación de conflictos y escritura en disco más seguros; acceso a archivos restringido al exportar; las exportaciones a Markdown conservan los adjuntos en línea. Corregido el borrado de texto al escribir chino con Weasel en Windows.
 - **0.1.6** (6 nov): cambio de ventana y escritura más fluidos, tablas más anchas, guardado periódico mientras escribes sin parar y Option+Espacio para notas rápidas desde cualquier lugar en macOS. Windows añade pegar imágenes, exportar a PDF e imprimir, y corrige el borrado por palabras.
 - **0.1.5** (5 nov): la app pasa a llamarse Quiet.md; tu biblioteca y tus notas siguen donde estaban.
-  - Gestiona varios documentos a la vez desde la página de una carpeta: duplícalos, muévelos o elimínalos juntos.
+  - Gestiona varios documentos a la vez desde **Inicio**: duplícalos, muévelos o elimínalos juntos.
   - Vacía la papelera de una vez; las flechas recorren los iconos del menú de inserción; eliminar todos los documentos ya no crea uno vacío.
   - Tras actualizar desde la app, la barra lateral muestra una vez qué ha cambiado en la nueva versión.
   - Windows: los atajos y la guía integrada indican Ctrl / Alt, y si el arranque falla se explica el motivo y se deja un registro.
