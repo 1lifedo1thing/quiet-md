@@ -244,10 +244,13 @@ pub(crate) fn short_path(p: &Path) -> String {
 
 /// A picked folder as a library, used as it is: its Markdown and DocxXML
 /// files show up as documents (#282). Only the home folder and a disk's
-/// top-level folder get a Quiet.md folder inside; scanning all of either is never meant.
+/// top-level folder get a Quiet Notes folder inside; scanning all of either is never meant.
 pub(crate) fn library_in(dir: PathBuf) -> PathBuf {
     let broad = dir.parent().is_none() || dirs::home_dir().is_some_and(|h| h == dir);
-    if broad && !crate::store::Store::is_library(&dir) { dir.join("Quiet.md") } else { dir }
+    if !broad || crate::store::Store::is_library(&dir) { return dir }
+    // one builds before 2026-11-26 made there (`Quiet.md`) is the one
+    let old = dir.join(fdl_core::store::OLD_DEFAULT_NAME);
+    if crate::store::Store::is_library(&old) { old } else { dir.join(fdl_core::store::DEFAULT_NAME) }
 }
 
 // ---- the view
@@ -863,9 +866,9 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("notes.md"), "# Notes").unwrap();
         assert_eq!(super::library_in(dir.clone()), dir);
-        assert_eq!(super::library_in("/".into()), Path::new("/Quiet.md"));
+        assert_eq!(super::library_in("/".into()), Path::new("/Quiet Notes"));
         let home = dirs::home_dir().unwrap();
-        assert_eq!(super::library_in(home.clone()), home.join("Quiet.md"));
+        assert_eq!(super::library_in(home.clone()), home.join("Quiet Notes"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

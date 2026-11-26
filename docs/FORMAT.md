@@ -2,7 +2,7 @@
 
 ## Library directory (FORMAT 6)
 
-The default library is a folder users can browse and back up at `~/Documents/Quiet.md`. Users can select a different location on first launch. The app stores it in `quiet-md/library.json` in the local application data directory. The `store::Location` record currently has one field, `path`. Add `#[serde(default)]` to future fields. Set `QUIET_MD_HOME` for a temporary override and always use it for tests.
+The default library is a folder users can browse and back up at `~/Documents/Quiet Notes` (`Store::default_in`; a `~/Documents/Quiet.md` from builds before 2026-11-26 stays the default when it is there, so nobody's library is renamed or doubled). Users can select a different location on first launch. The app stores it in `quiet-md/library.json` in the local application data directory. The `store::Location` record currently has one field, `path`. Add `#[serde(default)]` to future fields. Set `QUIET_MD_HOME` for a temporary override and always use it for tests.
 
 The sidebar mirrors the filesystem. Folders are directories and each document is a file named after its title. See `layout::file_name_for` for escaping. A duplicate gets a suffix such as ` (2)`; ` 2` from older versions is still read as one. The design is described in [Real folders](design/real-folders.md).
 

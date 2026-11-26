@@ -36,7 +36,7 @@ bench "wheel 900 500 40" x100: step [p50 0.01 p95 0.02 max 0.02] frame [p50 2.08
 
 ## Reproduce the benchmark
 
-The test uses a temporary library and leaves `~/Documents/Quiet.md` untouched.
+The test uses a temporary library and leaves the default library (`~/Documents/Quiet Notes`, or `Quiet.md` from earlier versions) untouched.
 
 ```sh
 cargo build --release --locked --features devtools

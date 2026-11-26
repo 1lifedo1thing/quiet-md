@@ -25,7 +25,7 @@ cask "quietmd" do
   # have it: the tap's cask takes this line from the first release that does.
   binary "#{appdir}/quiet.md.app/Contents/MacOS/quiet"
 
-  # The library (~/Documents/Quiet.md by default) holds the user's notes and is never removed.
+  # The library (~/Documents/Quiet Notes by default, Quiet.md from earlier versions) holds the user's notes and is never removed.
   zap trash: [
     "~/Library/Application Support/quiet-md",
     "~/Library/Caches/com.s1dashu.quietmd",

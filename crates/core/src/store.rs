@@ -622,6 +622,11 @@ struct Local {
     window_display: Option<String>,
 }
 
+/// The default library's folder, in the user's Documents (`Store::default_in`).
+pub const DEFAULT_NAME: &str = "Quiet Notes";
+/// What builds before 2026-11-26 named it; a library by that name stays the default.
+pub const OLD_DEFAULT_NAME: &str = "Quiet.md";
+
 /// `library.json`: where the library is when it isn't the default.
 #[derive(Serialize, Deserialize)]
 struct Location { path: PathBuf }
@@ -935,14 +940,27 @@ impl Store {
     /// own in the user's Documents, where they can see and back it up.
     pub fn legacy_dir() -> PathBuf {
         std::env::var_os("QUIET_MD_HOME").map(PathBuf::from)
-            .or_else(|| crate::vfs::read(Self::location_file()).ok().and_then(|b| serde_json::from_slice::<Location>(&b).ok()).map(|l| l.path).filter(|p| p.fs_is_absolute()))
-            .unwrap_or_else(Self::default_dir)
+            .unwrap_or_else(|| Self::chosen(crate::vfs::read(Self::location_file()).ok().and_then(|b| serde_json::from_slice::<Location>(&b).ok()).map(|l| l.path), Self::default_dir))
+    }
+
+    /// The library `library.json` names (`remembered`) when it names one, else the default.
+    fn chosen(remembered: Option<PathBuf>, default: impl FnOnce() -> PathBuf) -> PathBuf {
+        remembered.filter(|p| p.fs_is_absolute()).unwrap_or_else(default)
     }
 
     pub fn default_dir() -> PathBuf {
         // The web build's library lives in memory (vfs).
-        if cfg!(target_family = "wasm") { return PathBuf::from("/Quiet.md") }
-        dirs::document_dir().or_else(|| dirs::home_dir().map(|h| h.join("Documents"))).unwrap_or_else(|| PathBuf::from(".")).join("Quiet.md")
+        if cfg!(target_family = "wasm") { return PathBuf::from("/").join(DEFAULT_NAME) }
+        Self::default_in(&dirs::document_dir().or_else(|| dirs::home_dir().map(|h| h.join("Documents"))).unwrap_or_else(|| PathBuf::from(".")))
+    }
+
+    /// The default library in `docs` (the user's Documents): `Quiet Notes` for someone new
+    /// ("Quiet.md" read like a Markdown file in Finder, 2026-11-26), the `Quiet.md` builds
+    /// before that made wherever it is there, even beside a `Quiet Notes`: nobody's library
+    /// is renamed, moved or doubled.
+    pub fn default_in(docs: &Path) -> PathBuf {
+        let old = docs.join(OLD_DEFAULT_NAME);
+        if old.fs_is_dir() { old } else { docs.join(DEFAULT_NAME) }
     }
 
     /// 应用级设置: preferences, shortcuts, themes, emoji and the window's
@@ -3810,6 +3828,21 @@ mod tests {
     thread_local!(pub static STAY_4: std::cell::Cell<bool> = const { std::cell::Cell::new(false) });
     // … and FORMAT 5.
     thread_local!(pub static STAY_5: std::cell::Cell<bool> = const { std::cell::Cell::new(false) });
+
+    #[test]
+    fn someone_new_gets_quiet_notes_and_an_old_library_stays_the_default() {
+        let docs = crate::vfs::temp_dir().join(format!("fdl-test-docs-{}", uuid::Uuid::new_v4()));
+        crate::vfs::create_dir_all(&docs).unwrap();
+        assert_eq!(Store::default_in(&docs), docs.join("Quiet Notes"), "a new install");
+        crate::vfs::create_dir_all(docs.join("Quiet.md")).unwrap();
+        assert_eq!(Store::default_in(&docs), docs.join("Quiet.md"), "a library builds before made, at the default place");
+        crate::vfs::create_dir_all(docs.join("Quiet Notes").join(INTERNAL)).unwrap();
+        assert_eq!(Store::default_in(&docs), docs.join("Quiet.md"), "both there: the old one, nothing doubled");
+        let elsewhere = docs.join("Elsewhere");
+        assert_eq!(Store::chosen(Some(elsewhere.clone()), || Store::default_in(&docs)), elsewhere, "library.json's place, whatever is in Documents");
+        assert_eq!(Store::chosen(Some("relative".into()), || Store::default_in(&docs)), docs.join("Quiet.md"), "a pointer that isn't a place: the default");
+        let _ = crate::vfs::remove_dir_all(&docs);
+    }
 
     /// A library in a fresh temporary folder, removed on drop.
     struct Lib(PathBuf);

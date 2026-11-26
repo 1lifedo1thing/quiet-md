@@ -17,7 +17,7 @@
 | 事实 | 位置 | 和本方案的关系 |
 |---|---|---|
 | 整个应用只有一个 `Store`，包在全局的 `SharedStore` 里；启动时打不开就直接退出 | `src/shared_store.rs`、`src/main.rs:163`、`src/app.rs:445` | 要变成「一组」，而且一组可以是空的 |
-| 库在哪：`QUIET_MD_HOME` → 本机 `library.json`（`store::Location { path }`）→ `~/Documents/Quiet.md` | `store.rs:477`、`Store::root_dir` | 被顶层文件夹列表取代（2.9） |
+| 库在哪：`QUIET_MD_HOME` → 本机 `library.json`（`store::Location { path }`）→ `~/Documents/Quiet Notes`（已有 `~/Documents/Quiet.md` 时用它，2026-11-26）| `store.rs:477`、`Store::root_dir` | 被顶层文件夹列表取代（2.9） |
 | **已经有「本机文件夹」**（56f67656，0.1.13 起）：`打开文件夹…`、⌘⇧O、拖到「本机文件」、系统「打开方式」。文件夹在原地编辑，显示在侧栏「本机文件」下；只记文件夹本身（本机的 `Local.files`），内容每次 `list` 时从磁盘读，id 由路径哈希得到 | `crates/core/src/mounts.rs`、`src/local_folders.rs` | 这就是一个简化版的多个顶层文件夹。新模型把它升级成和文档库同等的顶层文件夹，`mounts.rs` 的单独代码路径删掉 |
 | 本机文件夹里能新建 Markdown 和文件夹、改名、在同一个文件夹内拖动；删除进系统废纸篓（新模型改用各顶层文件夹的应用回收站）；和「我的文档」之间只能复制。**不写 `.quiet/`**，没有置顶、星标、手动排序、历史版本，不能新建 XML 文档、画板、数据表 | 同上 | 新模型补齐这些 |
 | 单个本机文件（`Meta.path`，文档库外的 md 原地编辑）也在「本机文件」下 | `src/local_files.rs` | 保留 |

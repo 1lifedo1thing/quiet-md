@@ -1,13 +1,15 @@
 #!/bin/zsh
 # Replace the running hand-test build (dist-preview) with target/release. It
 # runs as dist-preview/Quiet.md Preview.app (so it is never mistaken for the installed app) on the
-# saved preview library, or ~/Documents/Quiet.md. The app initializes the
+# saved preview library, or the default one (~/Documents/Quiet.md if it is there, else
+# ~/Documents/Quiet Notes, as the app picks). The app initializes the
 # bundled 开始指南 on first launch, just like an installed build.
 # Only this checkout's own binaries are stopped:
 # pkill matches this checkout's absolute path. Log: /tmp/quiet-md-preview.log
 set -e
 cd "$(dirname "$0")/.."
-preview_library="${QUIET_MD_HOME:-$(cat dist-preview/library-path 2>/dev/null || printf '%s' "$HOME/Documents/Quiet.md")}"
+default_library="$HOME/Documents/Quiet Notes"; [ -d "$HOME/Documents/Quiet.md" ] && default_library="$HOME/Documents/Quiet.md"
+preview_library="${QUIET_MD_HOME:-$(cat dist-preview/library-path 2>/dev/null || printf '%s' "$default_library")}"
 # An empty path would put the library in the current directory.
 [ -n "$preview_library" ] || { echo "preview.sh: no preview library" >&2; exit 1; }
 export QUIET_MD_HOME="$preview_library"
@@ -47,7 +49,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
-  <key>NSDocumentsFolderUsageDescription</key><string>Quiet.md 把文档库放在「文稿」里的 Quiet.md 文件夹。</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>Quiet.md 把文档库放在「文稿」里的 Quiet Notes 文件夹。</string>
   <key>CFBundleDocumentTypes</key><array><dict>
     <key>CFBundleTypeName</key><string>Markdown</string>
     <key>CFBundleTypeRole</key><string>Editor</string>
