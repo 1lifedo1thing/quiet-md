@@ -33,6 +33,9 @@ quiet blocks DOC --kind todo --undone  blocks by kind, text, state
 quiet new TITLE [--in FOLDER] --md '…' a new document from Markdown
 quiet insert DOC --end-of HEADING --md '…'   add to the end of a section
 quiet set DOC#REF --text '…' | --done  change one block
+quiet table DOC --where '状态 = 在读' --sort 评分:desc   a 数据表's rows: filtered, sorted (--view V: as a view shows them)
+quiet table update DOC --where '状态 = 想读' --set 状态=在读   change every row that matches (--dry-run lists them)
+quiet table field add DOC 评分 --type number   fields, views, tables: `quiet help table`
 quiet run script.js                    a JavaScript script against `lib`: one transaction
 ```
 
