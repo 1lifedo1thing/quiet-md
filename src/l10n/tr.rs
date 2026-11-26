@@ -1521,4 +1521,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("网络与隐私", "Ağ ve gizlilik"),
     ("匿名使用统计", "Anonim kullanım istatistikleri"),
     ("Quiet.md 和命令行工具 quiet 每天发送一次匿名的使用次数，例如应用打开了几次、各命令运行了几次。只有计数，不含任何个人信息、文档内容或文件名。", "Quiet.md ve quiet komut satırı aracı, uygulamanın kaç kez açıldığı ve her komutun kaç kez çalıştığı gibi anonim kullanım sayılarını günde bir kez gönderir. Yalnızca sayılar: kişisel bilgi, belge içeriği ya da dosya adı yok."),
+    ("不能移到所选文件夹里面", "Seçili bir klasörün içine taşınamaz"),
+    ("包括其中的 {} 篇文档。删除的内容将进入回收站，30 天后自动彻底删除", "İçindeki {} belge de dahildir. Silinen öğeler Çöp Kutusuna taşınır ve 30 gün sonra kalıcı olarak silinir."),
 ];

@@ -1510,4 +1510,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("网络与隐私", "Red y privacidad"),
     ("匿名使用统计", "Estadísticas de uso anónimas"),
     ("Quiet.md 和命令行工具 quiet 每天发送一次匿名的使用次数，例如应用打开了几次、各命令运行了几次。只有计数，不含任何个人信息、文档内容或文件名。", "Quiet.md y la herramienta de línea de comandos quiet envían una vez al día recuentos de uso anónimos, como cuántas veces se abrió la app y se ejecutó cada comando. Solo recuentos: ninguna información personal, documento ni nombre de archivo."),
+    ("不能移到所选文件夹里面", "No se puede mover dentro de una carpeta seleccionada"),
+    ("包括其中的 {} 篇文档。删除的内容将进入回收站，30 天后自动彻底删除", "{|one:Incluye el documento que contiene.|other:Incluye los # documentos que contienen.} Los elementos eliminados irán a la papelera y se borrarán definitivamente al cabo de 30 días"),
 ];
