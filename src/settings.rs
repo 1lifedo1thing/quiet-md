@@ -1792,7 +1792,7 @@ impl Workspace {
 }
 
 /// 关于 › 项目主页: the source repository, opened in the 打开链接 browser.
-pub(crate) const REPO: &str = "https://github.com/s1dashu/quiet-md";
+const REPO: &str = "https://github.com/s1dashu/quiet-md";
 
 /// The sidebar bar's 更新 pill, only while a new version is on offer:
 /// 更新 downloads it (the pill then fills with its progress), 重启更新

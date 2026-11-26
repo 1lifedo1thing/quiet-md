@@ -1,21 +1,22 @@
 //! 设置 › 连接 Agent: how to let an AI agent (Claude Code, Codex, …)
 //! read and write the library: the skill and the `quiet` CLI it drives, a
 //! pair. First the line that installs the skill (`npx skills add`, pasted to
-//! the agent), then a prompt that has the agent set up both, then the CLI.
+//! the agent), then a sentence that has the agent set up both by following
+//! docs/AGENT_INSTALL.md, then the CLI.
 
 use crate::app::Workspace;
 use crate::design::{Badge, Button, ButtonSize, color, geo};
-use crate::settings::{REPO, tr};
+use crate::settings::tr;
 use crate::ui::ToastKind;
 use gpui::{prelude::FluentBuilder, *};
 use std::path::PathBuf;
 
-/// Where the blank in the prompt is: the agent's name goes there.
-const BLANK: &str = "____";
+/// What the agent follows to install the skill and the CLI (`docs/AGENT_INSTALL.md`).
+const GUIDE: &str = "https://github.com/s1dashu/quiet-md/blob/main/docs/AGENT_INSTALL.md";
 
-/// The prompt for an agent named `who` (`BLANK` for the template).
-fn prompt(who: &str) -> String {
-    crate::localized_format!("请从 {} 安装 Quiet.md 的 skill 和 CLI，并把它装到我的 {} 里。", "Install the Quiet.md skill and CLI from {} into my {}.", REPO, who)
+/// The sentence to paste to the agent.
+fn prompt() -> String {
+    crate::localized_format!("按照 {} 安装 Quiet.md 的 skill 和 CLI。", "Install the Quiet.md skill and CLI by following {}", GUIDE)
 }
 
 /// The skill's install line (Vercel's `skills` CLI, the agents' common installer).
@@ -85,11 +86,8 @@ pub(crate) fn page(cx: &mut Context<Workspace>) -> AnyElement {
     let skill = part(tr("安装 Skill", "Install the skill"), Some(tr("推荐", "Recommended")), tr("把这行粘贴给你的 Agent，它会自己装好，之后就知道怎么用 Quiet.md。", "Paste this line to your agent. It installs itself and learns how to use Quiet.md."), vec![
         code("copy-skill", SKILL_ADD.into(), cx).into_any_element(),
     ]);
-    let ask = part(tr("让 Agent 帮你安装", "Let your agent set it up"), None, tr("也可以复制这段话发给 Agent，把空白处换成它的名字。", "Or copy this to your agent and put its name in the blank."), vec![
-        prose("copy-prompt", prompt(BLANK), cx).into_any_element(),
-        small(tr("示例", "Examples")).into_any_element(),
-        prose("copy-prompt-claude", prompt("Claude Code"), cx).into_any_element(),
-        prose("copy-prompt-codex", prompt("Codex"), cx).into_any_element(),
+    let ask = part(tr("让 Agent 帮你安装", "Let your agent set it up"), None, tr("或者把这句话发给你的 Agent。", "Or copy this to your agent."), vec![
+        prose("copy-prompt", prompt(), cx).into_any_element(),
     ]);
     let mut cli_body: Vec<AnyElement> = vec![];
     #[cfg(target_os = "macos")]
