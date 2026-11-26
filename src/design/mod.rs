@@ -310,6 +310,12 @@ pub const G: Geo = Geo {
     add_row_h: 36., footer_h: 40., group_h: 36.,
 };
 
+/// How far a page's own surface sits in from the pane under the header, on the sides and at the
+/// foot: the header's margin round its buttons, so the surface lines up with them. At the top it
+/// starts at the header's foot (that margin is already above it). The 数据表's sheet and the board's
+/// floating controls (menu, tool bar, styles panel, zoom, help) both keep to it.
+pub const PAGE_INSET: f32 = (crate::app::HEADER_H - crate::app::HEADER_ACTIONS_H) / 2.;
+
 /// The geometry (a function, so a later density or step-up can choose).
 pub fn geo() -> &'static Geo { &G }
 

@@ -688,7 +688,7 @@ impl Render for TableView {
             // a sheet of its own under the page's header: squircle corners and a 0.5pt hairline
             // (as Home's cards), set in from the pane's edges by the header's own margin round
             // its buttons (8pt): below them on top, so the sheet starts at the header's foot
-            const GAP: f32 = (crate::app::HEADER_H - crate::app::HEADER_ACTIONS_H) / 2.;
+            const GAP: f32 = crate::design::PAGE_INSET;
             const RADIUS: f32 = SHEET_R;
             // Home's document cards' shadow (`theme::shadow_sheet`), not cast down but all round
             let around: Vec<BoxShadow> = crate::theme::shadow_sheet().into_iter().map(|mut s| { s.offset = point(px(0.), px(0.)); s }).collect();

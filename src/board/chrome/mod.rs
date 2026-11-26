@@ -1,6 +1,6 @@
 //! 画板的界面外壳, after Excalidraw's `LayerUI.tsx` @ 3a317b5: the main menu
-//! (top left, `MainMenu`), the tool bar with its hint line (top center,
-//! `Toolbar.tsx`, `HintViewer.tsx`), the styles panel (left,
+//! (top left, `MainMenu`), the tool bar (top center, `Toolbar.tsx`; no
+//! `HintViewer` line under it), the styles panel (left,
 //! `SelectedShapeActions`), the footer (zoom, undo / redo, help), the context
 //! menu and the help dialog. Upstream decides what each piece contains, when
 //! it shows and in what order; the looks are the app's design system
@@ -20,7 +20,6 @@ pub mod colors;
 mod context_menu;
 mod controls;
 mod help;
-mod hints;
 mod menu;
 mod properties;
 pub mod style;

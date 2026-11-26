@@ -14,11 +14,13 @@ fn pick(light: u32, dark_: u32) -> Hsla { hex(if dark() { dark_ } else { light }
 /// falls back to the system face until then): a frame's name on the canvas.
 pub const UI_FONT: &str = "Assistant";
 
-/// `--editor-container-padding`: the chrome's distance from the board's edges.
-pub const PADDING: f32 = 16.;
-/// Above the top row (menu, toolbar): ours, as the board sits under the
-/// app's header, which already leaves room (upstream: `PADDING`).
-pub const TOP_PADDING: f32 = 8.;
+/// The chrome's distance from the board's sides and foot (upstream's
+/// `--editor-container-padding`, 16): the page inset a 数据表's sheet keeps
+/// too (`design::PAGE_INSET`), so the two kinds of page line up.
+pub const PADDING: f32 = crate::design::PAGE_INSET;
+/// Above the top row (menu, toolbar): none, as a 数据表's sheet starts at the
+/// header's foot, whose margin already leaves room (upstream: `PADDING`).
+pub const TOP_PADDING: f32 = 0.;
 
 /// `--color-primary`.
 pub fn primary() -> Hsla { pick(0x6965db, 0xa8a5ff) }

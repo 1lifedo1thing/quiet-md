@@ -1,7 +1,7 @@
 //! The tool bar, after Excalidraw `Toolbar.tsx`, `Tools.tsx`, `LockButton.tsx`
 //! @ 3a317b5: the tool lock, a separator, hand, selection, the shapes, text,
 //! sticky note and eraser, a separator and the "more tools" dropdown (image,
-//! frame, lasso: the ones we have), the hint line under it. Each tool shows
+//! frame, lasso: the ones we have); no hint line under it. Each tool shows
 //! its letter, and its title "Rectangle — R or 2", as upstream's. Looks: a
 //! `design::Toolbar` of `Toggle`s (the active tool pressed) with Nucleo's
 //! icons, `ButtonGroupSeparator`s, the dropdown a `Popover` menu hung 4 under
@@ -113,6 +113,6 @@ pub(crate) fn render(me: &BoardView, cx: &mut Context<BoardView>) -> impl IntoEl
     let (more, menu) = extra_tools(me, cx);
     let mut tb = bar("board-toolbar").child(lock).child(ButtonGroupSeparator::new());
     for t in MAIN { tb = tb.child(tool_button(me, t, cx)); }
-    let tb = tb.child(ButtonGroupSeparator::new()).child(more).overlays(menu).overlays(super::hints::render(me));
+    let tb = tb.child(ButtonGroupSeparator::new()).child(more).overlays(menu);
     div().absolute().top(px(style::TOP_PADDING)).left_0().right_0().flex().justify_center().child(tb)
 }
