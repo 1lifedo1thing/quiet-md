@@ -4,6 +4,7 @@
 pub(crate) const APP_ID: &str = "com.s1dashu.quietmd";
 
 mod app;
+mod agent_connect;
 #[cfg(unix)]
 mod big_alloc;
 mod board;
