@@ -1494,4 +1494,8 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("或者把这句话发给你的 Agent。", "O copia esto para tu agente."),
     ("按照 {} 安装 Quiet.md 的 skill 和 CLI。", "Instala el skill y la CLI de Quiet.md siguiendo {}"),
     ("首次启动引导", "Bienvenida"),
+    ("实际大小", "Tamaño real"),
+    ("放大正文", "Ampliar el texto"),
+    ("缩小正文", "Reducir el texto"),
+    ("正文实际大小", "Texto a tamaño real"),
 ];

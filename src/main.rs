@@ -45,6 +45,7 @@ mod input;
 mod logging;
 mod modes;
 mod typewriter;
+mod zoom;
 mod import_sources;
 mod onboarding;
 #[cfg(target_os = "macos")]

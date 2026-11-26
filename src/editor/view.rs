@@ -227,6 +227,8 @@ pub struct Editor {
     pub(super) glide: Option<(web_time::Instant, Pixels, u8)>,
     /// The space below the last block this frame (`below_height`).
     pub(super) below_h: f32,
+    /// 放大 / 缩小's percentage and when it was shown (`zoom_badge_el`).
+    pub(super) zoom_badge: Option<(u32, web_time::Instant)>,
     /// Last applied (text color, background) from the color panel.
     pub last_color: (Option<ColorName>, Option<ColorName>),
     pub last_lang: String,
@@ -489,6 +491,7 @@ impl Editor {
             autoscroll: false,
             glide: None,
             below_h: 200.,
+            zoom_badge: None,
             last_color: (None, Some(ColorName("light-yellow".into()))),
             last_lang: "Plain Text".into(),
             link_field,

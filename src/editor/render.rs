@@ -68,6 +68,9 @@ pub(super) enum Reveal {
     Find(Pos),
     /// A block, put 24px below the top.
     Block(BlockId),
+    /// The caret's line back at this many px below the page's top (a zoom
+    /// keeps the line being read where it was).
+    At(f32),
 }
 
 /// `box-shadow: 0 0 0 1px` around a radius-8 bordered box. (A GPUI shadow
@@ -1427,6 +1430,30 @@ impl Editor {
             && self.core.block_sel.is_none() && self.core.sel.is_collapsed()
     }
 
+    /// 放大 / 缩小 is about to change the text size: the line being read stays
+    /// where it is. A caret on the page keeps its height (in 打字机模式 the
+    /// middle); otherwise the row at the top keeps its share scrolled past.
+    pub fn hold_position(&mut self, ratio: f32) {
+        let view = self.list.viewport_bounds();
+        let h = self.core.sel.head;
+        let at = self.cache.borrow().get(&h.block).map(|l| l.position_for(h.offset).y);
+        match at.filter(|y| *y >= view.top() && *y < view.bottom()) {
+            Some(y) if self.core.block_sel.is_none() => {
+                self.reveal = Some((if self.typewriter_on() { Reveal::Caret } else { Reveal::At(f32::from(y - view.top())) }, 0));
+            }
+            _ => {
+                let top = self.list.logical_scroll_top();
+                self.list.scroll_to(ListOffset { item_ix: top.item_ix, offset_in_item: top.offset_in_item * ratio });
+            }
+        }
+    }
+
+    /// 放大 / 缩小's percentage in the note's corner.
+    pub fn show_zoom_badge(&mut self, pct: u32, cx: &mut Context<Self>) {
+        self.zoom_badge = Some((pct, web_time::Instant::now()));
+        cx.notify();
+    }
+
     /// For scripts (`caret`): the caret line's middle and the page's height,
     /// both from the page's top, as last drawn.
     #[cfg(feature = "devtools")]
@@ -1462,7 +1489,7 @@ impl Editor {
             })
         };
         let (block, target) = match req {
-            Reveal::Caret => match self.core.block_sel {
+            Reveal::Caret | Reveal::At(_) => match self.core.block_sel {
                 Some(b) => (b.head, self.block_bounds.borrow().get(&b.head).copied()),
                 // A selected image has no text layout: keep its box in view.
                 None => {
@@ -1498,6 +1525,7 @@ impl Editor {
                 (t.bottom() - (view.bottom() - margin)).min(t.top() - view.top() - margin)
             }
             Reveal::Caret => px(0.),
+            Reveal::At(y) => t.top() - (view.top() + px(y)),
             // The find box covers the top right of the page.
             Reveal::Find(_) if t.top() >= view.top() + px(250.) && t.bottom() <= view.bottom() - margin => px(0.),
             Reveal::Find(_) => t.top() - (view.top() + view.size.height / 2.),
@@ -1553,6 +1581,7 @@ impl Editor {
         let toast = self.toast_el(window);
         let probes = std::mem::take(&mut *self.probes.borrow_mut());
         let origin0 = self.content_origin.get();
+        let zoom_badge = self.zoom_badge_el(window);
         let find_box = self.find_box(window, cx);
         if std::mem::take(&mut self.autoscroll) && self.reveal.is_none() {
             self.reveal = Some((Reveal::Caret, 0));
@@ -1849,6 +1878,7 @@ impl Editor {
             .children(table_overlay)
             .children(block_overlay)
             .children(image_layer)
+            .children(zoom_badge)
             .children(find_box)
             .children(lightbox)
             .children(board)
@@ -1886,7 +1916,21 @@ impl Editor {
             Change::Changed => crate::theme::ca(crate::theme::craft::old::O500, 0.12),
         })
     }
+
+    /// 放大 / 缩小's percentage at the note's bottom right (shadcn's `Badge`), a
+    /// second, then it fades.
+    fn zoom_badge_el(&self, window: &mut Window) -> Option<AnyElement> {
+        let (pct, t0) = self.zoom_badge.as_ref()?;
+        let e = t0.elapsed().as_secs_f32();
+        if e >= ZOOM_BADGE + 0.2 { return None }
+        window.request_animation_frame();
+        let a = if e > ZOOM_BADGE { (ZOOM_BADGE + 0.2 - e) / 0.2 } else { 1. };
+        Some(div().absolute().bottom(px(12.)).right(px(34.)).opacity(a).child(crate::design::Badge::new(format!("{pct}%"))).into_any_element())
+    }
 }
+
+/// How long 放大 / 缩小's percentage stays before it fades (s).
+const ZOOM_BADGE: f32 = 1.;
 
 impl R<'_> {
 fn spec_for_feishu(&self, b: &Block, env: Env) -> TextSpec {
