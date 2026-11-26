@@ -119,7 +119,7 @@ impl Workspace {
                 Button::ghost("collapse-sidebar")
                     .no_drag()
                     .ml(px(4.))
-                    .icon("panel-left-close")
+                    .icon("sidebar")
                     .tip(crate::settings::tr("收起侧栏", "Hide sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                     .on_click(cx.listener(|w, _, _, cx| {
                         w.sidebar_open = false;

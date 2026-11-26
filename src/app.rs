@@ -1944,7 +1944,7 @@ impl Workspace {
                     crate::design::Button::ghost("open-sidebar")
                         .no_drag()
                         .ml(px(4.))
-                        .icon("panel-left-open")
+                        .icon("sidebar")
                         .tip(crate::settings::tr("展开侧栏", "Show sidebar"), Some(crate::shortcuts::hint("workspace::ToggleSidebar", "⌘ + ]")))
                         .on_click(cx.listener(|w, _, _, cx| {
                             w.sidebar_open = true;

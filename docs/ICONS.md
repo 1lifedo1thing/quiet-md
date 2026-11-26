@@ -16,9 +16,9 @@ Project-drawn icons that sit beside Nucleo ones (the shell, the block handle, th
 
 Each project-drawn file opens with a comment beginning 本项目绘制 that says what it shows.
 
-## `assets/icons/`: 70 Nucleo icons
+## `assets/icons/`: 68 Nucleo icons
 
-Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 70 files draw on 62 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
+Nucleo UI Outline 18, UI Fill 18 and UI Essential Outline 18, under the project’s commercial Nucleo licence (up to 100 icons in an open-source project). 68 files draw on 60 distinct Nucleo icons: several names reuse one icon (for example `code` and `braces` are both Code, `doc` and `file-text` both FileContent). They are excluded from the MIT licence and may not be extracted into an icon set.
 
 Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 and `nucleo-ui-essential-outline-18` 1.1.8 by comparing the drawn shapes.
 
@@ -28,6 +28,7 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `batch.svg` | UI Outline 18 | ListCheckbox | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26; CheckList before) |
 | `bin.svg` | UI Outline 18 | Trash 2 | Trash 2 as exported from the Nucleo app; matches an earlier Nucleo export exactly; the 1.5.0 package draws Trash2 slightly differently. |
 | `bold.svg` | UI Outline 18 | TextBold | identical to the package |
+| `braces.svg` | UI Outline 18 | Code | identical to the package |
 | `check.svg` | UI Outline 18 | Check | identical to the package |
 | `chevron-down.svg` | UI Outline 18 | ChevronDown | identical to the package |
 | `chevron-left.svg` | UI Outline 18 | ChevronLeft | Same polyline as ChevronLeft, points listed in reverse order. |
@@ -36,13 +37,14 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `code.svg` | UI Outline 18 | Code | identical to the package |
 | `copy.svg` | UI Outline 18 | Copy | identical to the package |
 | `divider.svg` | UI Outline 18 | Minus | identical to the package |
-| `doc.svg` | UI Outline 18 | FileContent | identical to the package |
 | `doc-md.svg` | UI Outline 18 | FileContent | FileContent with MD lettering added by the project. |
+| `doc.svg` | UI Outline 18 | FileContent | identical to the package |
 | `ellipsis.svg` | UI Outline 18 | Dots | identical to the package |
 | `expand.svg` | UI Outline 18 | Expand | Expand, the same four corners in absolute path notation. |
 | `export.svg` | UI Outline 18 | FileExport | identical to the package |
-| `eye.svg` | UI Outline 18 | Eye | identical to the package |
 | `eye-open.svg` | UI Outline 18 | Eye | identical to the package |
+| `eye.svg` | UI Outline 18 | Eye | identical to the package |
+| `file-text.svg` | UI Outline 18 | FileContent | identical to the package |
 | `folder-input.svg` | UI Outline 18 | FolderDownload | identical to the package |
 | `folder-plus.svg` | UI Outline 18 | FolderPlus | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-25) |
 | `heading-1.svg` | UI Outline 18 | Heading1 | identical to the package |
@@ -51,34 +53,34 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 | `image-broken.svg` | UI Outline 18 | Image | identical to the package |
 | `indent-decrease.svg` | UI Outline 18 | TextOutdentLeft | identical to the package |
 | `indent-increase.svg` | UI Outline 18 | TextOutdentRight | identical to the package |
-| `info.svg` | UI Outline 18 | CircleInfo | identical to the package |
 | `info-mark.svg` | UI Outline 18 | CircleInfo | CircleInfo without its circle: the “i” drawn on top of `circle-filled`. |
+| `info.svg` | UI Outline 18 | CircleInfo | identical to the package |
 | `italic.svg` | UI Outline 18 | TextItalic | identical to the package |
 | `keyboard.svg` | UI Outline 18 | Keyboard | identical to the package |
 | `layer-front.svg` | UI Outline 18 | LayerFront | identical to the package |
-| `list.svg` | UI Outline 18 | BulletList | identical to the package |
 | `list-ordered.svg` | UI Outline 18 | OrderedList | identical to the package |
 | `list-todo.svg` | UI Outline 18 | ListTodo | identical to the package |
+| `list.svg` | UI Outline 18 | BulletList | identical to the package |
 | `minus.svg` | UI Outline 18 | Minus | Minus, the same line written as a path. |
 | `page-width.svg` | UI Outline 18 | ArrowsExpandX | identical to the package |
 | `palette.svg` | UI Outline 18 | Palette2 | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0; the same file was `board.svg` until the board took its own drawing) |
-| `panel-left-close.svg` | UI Outline 18 | SidebarLeftHide | identical to the package |
-| `panel-left-open.svg` | UI Outline 18 | SidebarLeftShow | identical to the package |
 | `pen-line.svg` | UI Outline 18 | Pen | identical to the package |
-| `pin.svg` | UI Outline 18 | PinTack | identical to the package |
 | `pin-filled.svg` | UI Fill 18 | PinTack | identical to the package |
 | `pin-off.svg` | UI Outline 18 | PinTackSlash | identical to the package |
+| `pin.svg` | UI Outline 18 | PinTack | identical to the package |
 | `plus.svg` | UI Outline 18 | Plus | identical to the package |
 | `printer.svg` | UI Outline 18 | Print | identical to the package |
 | `quote.svg` | UI Outline 18 | Quote | identical to the package |
 | `restore.svg` | UI Outline 18 | ArrowRotateAnticlockwise | identical to the package |
-| `search.svg` | UI Outline 18 | Magnifier | identical to the package |
 | `search-clear.svg` | UI Outline 18 | CircleXmark | identical to the package |
+| `search.svg` | UI Outline 18 | Magnifier | identical to the package |
 | `settings-gear.svg` | UI Outline 18 | Gear | identical to the package |
+| `sidebar.svg` | UI Outline 18 | SidebarLeft | identical to the package (taken from `nucleo-ui-outline-18` 1.5.0, 2026-11-26); shows and hides the sidebar alike |
+| `sigma.svg` | UI Outline 18 | MathFunction | identical to the package |
 | `sort-down.svg` | UI Outline 18 | SortNumDescending | identical to the package |
 | `square-pen.svg` | UI Outline 18 | EditSquare | identical to the package |
-| `star.svg` | UI Outline 18 | Star | identical to the package |
 | `star-off.svg` | UI Outline 18 | StarSlash | identical to the package |
+| `star.svg` | UI Outline 18 | Star | identical to the package |
 | `strikethrough.svg` | UI Outline 18 | TextStrikethrough | identical to the package |
 | `text-search.svg` | UI Outline 18 | TextASparkle | identical to the package |
 | `todo-check.svg` | UI Outline 18 | Check | identical to the package |
@@ -93,9 +95,9 @@ Checked 2026-11-24 against the official packages `nucleo-ui-outline-18` 1.5.0 an
 
 The 18 project-drawn icons in this folder (MIT) are listed in THIRD_PARTY.md; each opens with a comment saying so.
 
-## `assets/editor-icons/`: 173 icons
+## `assets/editor-icons/`: 171 icons
 
-24 are Nucleo UI Outline 18 icons, the block types (the block handle, the slash menu and 转换为) and the colour pickers' `palette`, taken unchanged from `nucleo-ui-outline-18` 1.5.0 on 2026-11-25 and counted against the same licence as `assets/icons/`; with them go the project-drawn `callout`, `divider`, `board` and `doc-table`, drawn to the rules above. 61 come from [Lucide](https://lucide.dev) (ISC, see `assets/editor-icons/LICENSE-lucide`): 55 unchanged and 6 adapted or taken from an earlier Lucide version. The other 88 were drawn by the project and are distributed under MIT; most of the older ones keep Lucide's 24 px grid and 2 px stroke. Lucide checked 2026-11-24 against the shapes in `lucide-react` (several versions up to 1.70).
+24 are Nucleo UI Outline 18 icons, the block types (the block handle, the slash menu and 转换为) and the colour pickers' `palette`, taken unchanged from `nucleo-ui-outline-18` 1.5.0 on 2026-11-25 and counted against the same licence as `assets/icons/`; with them go the project-drawn `callout`, `divider`, `board` and `doc-table`, drawn to the rules above. 59 come from [Lucide](https://lucide.dev) (ISC, see `assets/editor-icons/LICENSE-lucide`): 53 unchanged and 6 adapted or taken from an earlier Lucide version. The other 88 were drawn by the project and are distributed under MIT; most of the older ones keep Lucide's 24 px grid and 2 px stroke. Lucide checked 2026-11-24 against the shapes in `lucide-react` (several versions up to 1.70).
 
 | File | Nucleo UI Outline 18 icon |
 |---|---|
@@ -124,7 +126,7 @@ The 18 project-drawn icons in this folder (MIT) are listed in THIRD_PARTY.md; ea
 | `todo.svg` | CheckboxChecked |
 | `type.svg` | Text |
 
-24 files, each a different Nucleo icon, 14 of them found nowhere else in the project (AlarmClock, BracketsCurly, Button, CheckboxChecked, GridLayoutCols, Heading4, Heading5, Heading6, Link, ListTree, Paperclip, Stopwatch, Table, Text); the other ten (Palette2, FileContent, Heading1–3, Image, BulletList, OrderedList, Quote, MathFunction) are already in `assets/icons/`. With them the project uses 75 distinct Nucleo icons of the 100 its licence allows.
+24 files, each a different Nucleo icon, 14 of them found nowhere else in the project (AlarmClock, BracketsCurly, Button, CheckboxChecked, GridLayoutCols, Heading4, Heading5, Heading6, Link, ListTree, Paperclip, Stopwatch, Table, Text); the other ten (Palette2, FileContent, Heading1–3, Image, BulletList, OrderedList, Quote, MathFunction) are already in `assets/icons/`. With them the project uses 74 distinct Nucleo icons of the 100 its licence allows.
 
 | File | Lucide icon |
 |---|---|
@@ -160,8 +162,6 @@ The 18 project-drawn icons in this folder (MIT) are listed in THIRD_PARTY.md; ea
 | `minus.svg` | minus |
 | `move.svg` | move |
 | `octagon-x.svg` | octagon-x |
-| `panel-left-close.svg` | panel-left-close |
-| `panel-left-open.svg` | panel-left-open |
 | `pause-filled.svg` | pause |
 | `pen-line.svg` | pen-line |
 | `pin.svg` | pin |
