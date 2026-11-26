@@ -882,8 +882,9 @@ impl Workspace {
         // where a row scrolling out of sight stops. It used to sit 4pt higher,
         // the list lifted into the tab row above it, so a scrolling row drew over
         // 我的文档 / 收藏 and the buttons beside them (#238). 28 under that lift is
-        // 24 without it: the cards stay exactly where they were.
-        .flex_1().min_h_0().pt(px(24.)).pb(px(32.)).track_scroll(grid_scroll);
+        // 24 without it, and 8 more for the band the folder page had under its header
+        // (the list starts at the header now, so rows scroll right up to it).
+        .flex_1().min_h_0().pt(px(32.)).pb(px(32.)).track_scroll(grid_scroll);
         let scroll = grid_scroll.0.borrow().base_handle.clone();
         div().relative().flex_1().min_h_0().flex().flex_col()
             .on_mouse_move(cx.listener(|w, ev: &MouseMoveEvent, _, cx| w.track_home_press(ev, cx)))

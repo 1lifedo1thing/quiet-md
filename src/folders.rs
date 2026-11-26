@@ -253,10 +253,13 @@ impl Workspace {
         let id = self.folder_current.clone().unwrap_or_default();
         let header = self.topbar(&id, window, cx);
         let children = self.level_entries(Some(&id));
+        // the grid scrolls right up to the header: its 8 above the cards is inside the list (`render_home_grid`),
+        // not a band between, where a scrolling row was cut off 8 under the header
+        let grid = self.home.grid && !children.is_empty();
         let body = if children.is_empty() {
             crate::trash::empty_state("illus/empty-list.svg", tr("这个文件夹还是空的", "This folder is empty")).into_any_element()
-        } else if self.home.grid { self.render_home_grid(&children, window, cx) } else { self.render_home_list(&children, cx) };
-        div().size_full().flex().flex_col().child(header).child(div().h(px(8.)).flex_none()).child(body).into_any_element()
+        } else if grid { self.render_home_grid(&children, window, cx) } else { self.render_home_list(&children, cx) };
+        div().size_full().flex().flex_col().child(header).when(!grid, |d| d.child(div().h(px(8.)).flex_none())).child(body).into_any_element()
     }
 
     pub(crate) fn folder_row_menu(&self, m: crate::app::RowMenu, cx: &mut Context<Self>) -> Vec<AnyElement> {
