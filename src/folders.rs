@@ -185,10 +185,10 @@ impl Workspace {
         // a folder hung under 主页 and used where it is. Making and importing happen in a folder.
         if parent.is_none() {
             return Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(
-                crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, corner)).min_w(px(240.))
+                crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, corner)).w(px(crate::design::menu_w::MD))
                     .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.create_menu = None; cx.notify(); }))
                     .child(crate::design::MenuItem::new("create-open-folder").icon("folder-plus").label(tr("打开文件夹…", "Open Folder…"))
-                        .description(tr("在原位置使用，不复制；也可以在打开窗口里新建", "Used where it is, not copied; a new one can be made in the open window"))
+                        .description(tr("原位打开", "Opens in place"))
                         .on_click(cx.listener(|w, _, window, cx| { w.create_menu = None; w.open_folder_dialog(window, cx) })))
             )).with_priority(3).into_any_element());
         }
@@ -196,7 +196,7 @@ impl Workspace {
         // rows each time it opens, whichever "+" opened it.
         let import = self.import_items(parent.clone(), cx);
         Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(
-            crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, corner)).min_w(px(180.))
+            crate::design::Popover::new("create-items").menu().fit(crate::design::room(pos, corner)).w(px(crate::design::menu_w::MD))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.create_menu = None; cx.notify(); }))
                 .children(self.create_rows(parent.clone(), cx))
                 .child(crate::design::MenuSeparator::new()).children(import)
@@ -282,7 +282,7 @@ impl Workspace {
         // right-click still creates straight from the menu. The folder page's header "…"
         // is this same menu, its "+" the same 新建 menu.
         let create = m.from.is_none();
-        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().fit(crate::design::room(pos, m.corner)).min_w(px(190.))
+        vec![deferred(anchored().anchor(m.corner).position(pos).snap_to_window_with_margin(px(8.)).child(crate::design::Popover::new("folder-row-menu").menu().fit(crate::design::room(pos, m.corner)).w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.row_menu = None; cx.notify(); }))
             .when(create, |d| d
                 .child(row("fr-new-doc", "doc", tr("新建文档", "New document")).on_click(cx.listener(move |w, _, window, cx| { w.row_menu = None; w.new_child(&doc, window, cx); })))
@@ -321,7 +321,7 @@ impl Workspace {
     /// The menu of a breadcrumb's folded crumbs.
     pub(crate) fn render_crumb_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let (items, pos, corner) = self.crumb_menu.clone()?;
-        let menu = crate::design::Popover::new("crumb-menu").menu().fit(crate::design::room(pos, corner)).min_w(px(180.)).max_w(px(320.))
+        let menu = crate::design::Popover::new("crumb-menu").menu().fit(crate::design::room(pos, corner)).w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.crumb_menu = None; cx.notify(); }))
             .children(items.into_iter().enumerate().map(|(i, (label, target))| crate::design::MenuItem::new(("crumb-item", i)).label(label)
                 .on_click(cx.listener(move |w, _, window, cx| {

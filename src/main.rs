@@ -43,6 +43,7 @@ mod html;
 mod input;
 mod logging;
 mod modes;
+mod typewriter;
 mod import_sources;
 mod onboarding;
 #[cfg(target_os = "macos")]
@@ -52,6 +53,7 @@ mod native_header;
 mod native_header;
 mod mermaid;
 mod on_top;
+mod focus;
 mod printing;
 mod search;
 mod siyuan;

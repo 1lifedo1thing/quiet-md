@@ -20,6 +20,7 @@ use std::sync::{Arc, LazyLock, Mutex, RwLock};
 static FEISHU: AtomicBool = AtomicBool::new(false);
 static LANG: AtomicU8 = AtomicU8::new(Lang::En as u8);
 static MOTION_HIGH: AtomicBool = AtomicBool::new(false);
+static TYPEWRITER: AtomicBool = AtomicBool::new(false);
 static PREFS: RwLock<Option<Preferences>> = RwLock::new(None);
 
 /// The active document theme draws blocks the 飞书 way (else Craft's).
@@ -44,6 +45,8 @@ pub fn lang() -> Lang { Lang::ALL.get(LANG.load(Ordering::Relaxed) as usize).cop
 pub fn english() -> bool { lang() != Lang::Zh }
 /// 外观 › 动画 is 丰富: folding, the selection and hover animate too (else they answer at once).
 pub fn motion_high() -> bool { MOTION_HIGH.load(Ordering::Relaxed) }
+/// 打字机模式 is on (typewriter.rs).
+pub fn typewriter() -> bool { TYPEWRITER.load(Ordering::Relaxed) }
 pub fn tr(zh: &'static str, en: &'static str) -> &'static str { match lang() { Lang::Zh => zh, Lang::En => en, l => crate::l10n::get(l, zh).unwrap_or(en) } }
 /// `localized_format!` for a given language: `zh` / `en` build the two
 /// originals; other languages refill their translation of `template`.
@@ -124,6 +127,9 @@ pub struct Preferences {
     /// 外观 › 窗口背景: paint the window opaque instead of letting the desktop
     /// show through the sidebar material.
     pub opaque_window: bool,
+    /// 外观 › 文档大纲 off: no heading outline (nor its button) beside the page.
+    #[serde(default)]
+    pub hide_outline: bool,
     /// 外观 › 界面字号: "small" or "large"; empty is the 13pt standard.
     pub ui_font: String,
     /// 外观 › 界面字体: the family the sidebar, menus and settings are drawn in
@@ -159,6 +165,8 @@ pub struct Preferences {
     /// or a top-level folder that is gone, is the first open top-level folder (2.8).
     #[serde(default, alias = "quick_note_root")]
     pub quick_note_folder: String,
+    /// 打字机模式 (typewriter.rs): the caret's line stays in the middle of the page.
+    pub typewriter: bool,
 }
 
 /// A week between asks to move the library to real folders.
@@ -197,7 +205,7 @@ fn system_lang() -> Lang {
 impl Default for Preferences {
     fn default() -> Self {
         let lang = system_lang();
-        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_home: false, browser: String::new(), opaque_window: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new() }
+        Preferences { theme: String::new(), feishu: true, english: lang != Lang::Zh, language: lang.code().into(), remote_images: true, quick_hotkey: true, auto_update: true, appearance: String::new(), seen_version: String::new(), motion: String::new(), new_default: String::new(), last_new: String::new(), search_engine: String::new(), start_home: false, browser: String::new(), opaque_window: false, hide_outline: false, ui_font: String::new(), ui_family: String::new(), doc_family: String::new(), doc_size: String::new(), migrate_later: 0, find_regex: false, backspace_to_title: true, cjk_spacing: false, font_favorites: vec![], recent_doc_fonts: vec![], recent_ui_fonts: vec![], quick_note_folder: String::new(), typewriter: false }
     }
 }
 
@@ -276,6 +284,7 @@ fn apply(p: Preferences) {
     LANG.store(p.lang() as u8, Ordering::Relaxed);
     crate::model::set_untitled(translate(crate::model::UNTITLED, p.lang()));
     MOTION_HIGH.store(p.motion == "high", Ordering::Relaxed);
+    TYPEWRITER.store(p.typewriter, Ordering::Relaxed);
     // Before the themes are read (startup) the base comes from `feishu`.
     themes::select(&p.theme_id());
     themes::set_doc_font(&p.doc_family);
@@ -1012,7 +1021,7 @@ impl Workspace {
         }).collect::<Vec<_>>();
         let anchors = self.pref_anchors.clone();
         let id = m.id;
-        let menu = Popover::new("pref-menu").menu().min_w(px(160.))
+        let menu = Popover::new("pref-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if anchors.borrow().get(id).is_some_and(|b| b.contains(&ev.position)) { return }
                 w.pref_menu = None;
@@ -1292,7 +1301,7 @@ impl Workspace {
                 .on_click(cx.listener(move |w, _, _, cx| { w.lang_menu = None; w.set_pref(|p| p.set_lang(l), cx) }))
         });
         let anchor = self.lang_anchor.clone();
-        let menu = Popover::new("lang-menu").menu().w(px(160.))
+        let menu = Popover::new("lang-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if anchor.get().is_some_and(|b| b.contains(&ev.position)) { return }
                 w.lang_menu = None;
@@ -1680,6 +1689,8 @@ impl Workspace {
                                 .child(div().w(px(56.)).flex().items_center().justify_center().text_size(px(theme::ui_font())).text_color(Theme::text()).child(format!("{pt} pt")))
                                 .child(button("doc-size-plus", "+").on_click(cx.listener(step(1.))))))
                     }).into_any_element(),
+                    row(tr("文档大纲", "Outline"), desc(tr("在正文左侧显示标题目录。", "Shows the headings beside the text.")),
+                        switch("pref-outline", !prefs().hide_outline).on_click(cx.listener(|w, _, _, cx| w.set_pref(|p| p.hide_outline = !p.hide_outline, cx)))).into_any_element(),
                     row(tr("文档主题", "Document theme"), None, picker).into_any_element(),
                     sample.into_any_element(),
                 ].into_iter().chain(THEME_CSS.then(|| {

@@ -149,7 +149,7 @@ impl Workspace {
     pub(crate) fn view_menu(&self, cx: &mut Context<Self>) -> Popover {
         let view = |id: &'static str, ic: &'static str, label: &'static str, grid: bool| MenuItem::new(id).icon(ic).label(label).checked(self.home.grid == grid)
             .on_click(cx.listener(move |w, _, _, cx| { w.home.grid = grid; w.save_home(); w.home.view_menu = false; cx.notify(); }));
-        let menu = Popover::new("view-menu").menu().min_w(px(220.))
+        let menu = Popover::new("view-menu").menu().w(px(crate::design::menu_w::SM))
             .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.home.view_menu = false; cx.notify(); }))
             .child(MenuLabel::new(tr("视图", "View")))
             .child(view("tb-grid", "view-grid", tr("宫格", "Grid"), true))

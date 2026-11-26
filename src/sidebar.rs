@@ -11,7 +11,7 @@ use crate::ui::{TipExt, TitleBarExt, icon, ui_text};
 use gpui::{prelude::FluentBuilder, *};
 
 /// Row "…" menu geometry (`design::menu`): rows, separators, padding.
-const ROW_MENU_W: f32 = 180.;
+const ROW_MENU_W: f32 = crate::design::menu_w::SM;
 const ROW_ITEM: f32 = crate::design::menu::ROW_H;
 const ROW_DIVIDER: f32 = crate::design::menu::SEP_H;
 const ROW_ITEMS: usize = 9;
@@ -743,7 +743,7 @@ impl Workspace {
             let n = self.batch.as_ref().map_or(0, |b| b.len());
             let menu = Popover::new("batch-menu")
                 .menu()
-                .min_w(px(ROW_MENU_W))
+                .w(px(ROW_MENU_W))
                 .on_mouse_down_out(cx.listener(|w, _, _, cx| {
                     w.row_menu = None;
                     cx.notify();
@@ -772,18 +772,11 @@ impl Workspace {
         let new_window = doc.clone();
         let sub_doc = m.id.clone();
         let sub_bounds = self.row_sub_bounds.clone();
-        // The menu follows its longest translation too (#225); its rendered
-        // width (from the previous frame — a submenu only opens after one)
-        // places the 下载 submenu beside it.
-        let menu_w_record = self.row_menu_w.clone();
         // The row menu leaves out the cloud entries 在新标签页打开, 分享,
         // 复制链接, 添加快捷方式到, 转移所有权, 设置密级.
         let menu = Popover::new("row-menu")
             .menu()
-            .min_w(px(ROW_MENU_W))
-            // a line across the middle, not the whole box: the scrolling menu counts its children's extent as
-            // its content, and one as tall as the box, plus the padding, made a menu that fits scroll by 8
-            .child(canvas(move |b, _, _| menu_w_record.set(Some(f32::from(b.size.width))), |_, _, _, _| {}).absolute().left_0().right_0().top(relative(0.5)).h_0())
+            .w(px(ROW_MENU_W))
             .on_mouse_down_out(cx.listener(move |w, ev: &MouseDownEvent, _, cx| {
                 if sub_bounds.get().is_none_or(|b| !b.contains(&ev.position)) {
                     w.row_menu = None;
@@ -876,7 +869,7 @@ impl Workspace {
             record.set(None);
             // Level the submenu's first item with 下载.
             let top = row_sub_top(menu_top + extra as f32 * ROW_ITEM);
-            let menu_w = self.row_menu_w.get().unwrap_or(ROW_MENU_W);
+            let menu_w = ROW_MENU_W;
             let left = match corner {
                 Anchor::TopRight | Anchor::BottomRight => origin.x - px(menu_w),
                 _ => origin.x,
@@ -887,7 +880,7 @@ impl Workspace {
                     anchored().anchor(Anchor::TopLeft).position(point(x, px(top))).snap_to_window_with_margin(px(8.)).child(
                         Popover::new("rm-download-menu")
                             .menu()
-                            .min_w(px(130.))
+                            .w(px(crate::design::menu_w::SM))
                             .child(canvas(move |b, _, _| record.set(Some(b)), |_, _, _, _| {}).absolute().inset_0())
                             .when(crate::printing::SUPPORTED, |d| d.child(crate::docmenu::sub_item("rm-pdf", "PDF").on_click(cx.listener(move |w, _, window, cx| w.export_pdf(&pdf, window, cx)))))
                             .child(crate::docmenu::sub_item("rm-md", "Markdown").on_click(cx.listener(move |w, _, _, cx| w.open_export_md(&dl, cx)))),
