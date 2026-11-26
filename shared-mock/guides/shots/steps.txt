@@ -8,6 +8,8 @@ wait 1200
 move 1090 690
 wait 400
 SHOT home
+row Writing and formatting
+wait 600
 row Blocks: lists, quotes and callouts
 wait 1200
 move 1270 790
