@@ -546,6 +546,20 @@ fn truncated(line: &ShapedLine, runs: &[TextRun], suffix: &str, font_size: Pixel
     window.text_system().shape_line(s, font_size, &out, None)
 }
 
+thread_local! {
+    /// `cap_height`'s answers, by font and size (measured once, then read every frame).
+    static CAPS: RefCell<std::collections::HashMap<(FontId, u32), Pixels>> = RefCell::new(std::collections::HashMap::new());
+}
+
+/// The capitals' height from an "H" (the font's own cap height where it has none).
+fn cap_height(ts: &WindowTextSystem, id: FontId, size: Pixels) -> Pixels {
+    let key = (id, f32::from(size).to_bits());
+    if let Some(c) = CAPS.with(|m| m.borrow().get(&key).copied()) { return c }
+    let c = ts.typographic_bounds(id, size, 'H').map(|b| b.size.height.abs()).unwrap_or_else(|_| ts.cap_height(id, size));
+    CAPS.with(|m| m.borrow_mut().insert(key, c));
+    c
+}
+
 impl Element for UiText {
     type RequestLayoutState = UiTextLayout;
     type PrepaintState = Option<ShapedLine>;
@@ -625,7 +639,7 @@ impl Element for UiText {
                 // the capitals' height from an "H": PingFang's own cap height (0.86 em) is its ideographs',
                 // and taken at its word it pushed Latin text a point down instead of centring it
                 let id = ts.resolve_font(&run.font);
-                let cap = ts.typographic_bounds(id, layout.font_size, 'H').map(|b| b.size.height.abs()).unwrap_or_else(|_| ts.cap_height(id, layout.font_size));
+                let cap = cap_height(&ts, id, layout.font_size);
                 // the capitals' middle sits (ascent - descent - cap) / 2 below the box's; to whole device pixels
                 let sf = window.scale_factor();
                 origin.y -= px((f32::from(line.ascent - line.descent - cap) / 2. * sf).round() / sf);
