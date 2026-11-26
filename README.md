@@ -81,7 +81,7 @@ On first launch, Quiet.md looks for your Obsidian, Logseq, iA Writer and Typora 
 
 ### Work with agents
 
-The `quiet` command line tool lets an AI agent (Claude Code, Codex, or any MCP client) read, search and edit the same library you write in. It finds blocks by outline, edits through the same engine as the app, rewrites links when notes move, adds rows to data tables and draws on boards, and refuses to overwrite what you changed since it read. A note you have open takes in the agent's edit as it lands, every save keeps the previous text as a version, and `quiet run` takes a whole JavaScript script as one change that is written in full or not at all. `quiet skill install` gives Claude Code and Codex a skill, so they reach for `quiet` whenever you ask about your notes; clients without a shell use `quiet mcp`. `quiet` counts which of its commands run each day, under a random id and never with your notes, and sends the counts once a day; `quiet telemetry off`, `DO_NOT_TRACK=1` or turning off the app's automatic update check stops it.
+The `quiet` command line tool lets an AI agent (Claude Code, Codex and others) read, search and edit the same library you write in. It finds blocks by outline, edits through the same engine as the app, rewrites links when notes move, adds rows to data tables and draws on boards, and refuses to overwrite what you changed since it read. A note you have open takes in the agent's edit as it lands, every save keeps the previous text as a version, and `quiet run` takes a whole JavaScript script as one change that is written in full or not at all. The [Quiet.md agent skill](#use-with-ai-agents) teaches Claude Code, Codex and other agents to reach for `quiet` whenever you ask about your notes. `quiet` counts which of its commands run each day, under a random id and never with your notes, and sends the counts once a day; `quiet telemetry off`, `DO_NOT_TRACK=1` or turning off the app's automatic update check stops it.
 
 `quiet` ships inside the app. On macOS, put it on your PATH with `ln -s /Applications/quiet.md.app/Contents/MacOS/quiet /usr/local/bin/quiet`; on Windows it sits beside `quiet_md.exe` in the install folder. See [docs/design/CLI.md](docs/design/CLI.md).
 
@@ -119,6 +119,22 @@ The `quiet` command line tool lets an AI agent (Claude Code, Codex, or any MCP c
 You can also download from [Quiet.md](https://quiet.md/?lang=en). Every release and its SHA-256 checksums are on [GitHub Releases](https://github.com/s1dashu/quiet-md/releases).
 
 On first launch, Quiet.md asks for the interface language, where to keep your library and the quick-note shortcut, and offers to copy in notes from Obsidian, Logseq, iA Writer or Typora. An empty library gets a **Getting started** guide — a ten-minute tour of the main features. Existing notes are never overwritten.
+
+## Use with AI agents
+
+Two pieces: the `quiet` command line tool, which ships inside the Quiet.md app, and the agent skill in [`skills/quiet-md`](skills/quiet-md/SKILL.md), which teaches the agent to use it.
+
+1. **Install the skill** with the [skills](https://github.com/vercel-labs/skills) CLI (needs Node.js):
+
+   ```sh
+   npx skills add s1dashu/quiet-md -g -y -a claude-code   # or -a codex, …; leave out -a to choose
+   ```
+
+2. **Put `quiet` on your PATH.** macOS: Settings › 连接 Agent › 安装命令行工具 in Quiet.md (it links `quiet` into `~/.local/bin`), or `ln -sf /Applications/quiet.md.app/Contents/MacOS/quiet ~/.local/bin/quiet`; the Homebrew cask links it for you. Windows: the installer adds it to your PATH (open a new terminal). Linux: `bin/quiet` in the `.tar.gz`, or a link named `quiet` to the AppImage.
+
+3. **Check:** `quiet ls` lists the folders Quiet.md has open.
+
+An agent can do all of this for you. Tell it: *Install the Quiet.md skill and CLI from https://github.com/s1dashu/quiet-md into my Claude Code* (or Codex, …): it runs step 1 for that agent and follows the skill's first section for step 2.
 
 ## Performance
 

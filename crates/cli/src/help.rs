@@ -1,6 +1,6 @@
 //! `quiet help` and `quiet help COMMAND`: the overview, and each command
 //! with its options and an example, so an agent need not read the whole
-//! guide (`quiet skill`) to call one.
+//! guide (`quiet guide`) to call one.
 
 use crate::fail::{R, fail};
 
@@ -34,8 +34,7 @@ pub const HELP: &str = "quiet — read, search, edit and script a Quiet.md libra
   quiet run [FILE|-] [-e CODE]           a JavaScript script, as one transaction
   quiet call OP [JSON]                   any operation by name (what run's lib calls)
   quiet mcp                              serve these as MCP tools on stdio
-  quiet skill                            the full guide for agents (script API included)
-  quiet skill install                    the agent skill, for Claude Code and Codex
+  quiet guide                            the full guide for agents (script API included)
   quiet help COMMAND                     one command in detail
   quiet telemetry [on|off|status]        the anonymous daily usage counts
 
@@ -46,7 +45,14 @@ DOC is such a path (extension optional), a path or title only one document
 has, or an id. REF is what outline/blocks print (#3~k7f2: position and
 fingerprint), a position (#2.1) or a heading's text. New things go to the
 --in folder, else the first folder. Global: --library DIR (that folder on its
-own, paths starting in it), --json.";
+own, paths starting in it), --json.
+
+quiet ships inside Quiet.md (https://quiet.md). On macOS, Settings › 连接
+Agent › 安装命令行工具 links it into ~/.local/bin (or link
+/Applications/quiet.md.app/Contents/MacOS/quiet there yourself); Homebrew's
+cask and the Windows installer put it on the PATH; on Linux it is bin/quiet
+in the .tar.gz, and the AppImage runs it when called as quiet. The agent
+skill: npx skills add s1dashu/quiet-md.";
 
 /// (names, usage and notes).
 const COMMANDS: &[(&[&str], &str)] = &[
@@ -241,7 +247,7 @@ copied in), DocxXML (.xml), CSV/TSV (as a 数据表), .excalidraw (as a 画板).
 The originals are left alone."),
     (&["run"], "quiet run [FILE|-] [-e CODE] [--timeout SECS] [--dry-run]
 
-A JavaScript script against `lib` (see `quiet skill`, \"Script API\"). The
+A JavaScript script against `lib` (see `quiet guide`, \"Script API\"). The
 whole script is one transaction: if it throws or times out (60 s), nothing
 is written. Top-level await and return work; a returned value is printed.
 
@@ -273,15 +279,11 @@ stats.quiet.md, with quiet's version and the system (macos/windows, arm or x86).
 `status` shows what is kept and waiting; `off` stops it and forgets the id.
 Nothing is counted while DO_NOT_TRACK or QUIET_NO_TELEMETRY is set, in CI, or
 while 自动检查更新 (Check for updates automatically) is off in Quiet.md."),
-    (&["skill", "guide"], "quiet skill
-quiet skill install [--dir DIR]… [--force]
+    (&["guide", "skill"], "quiet guide
 
-The full guide for agents: addressing, every command, the script API, examples.
-`install` writes the agent skill (DIR/quiet/SKILL.md and references/guide.md),
-by default into ~/.claude/skills and ~/.codex/skills where those agents are
-installed, so they reach for quiet when a task is about the user's notes. Run it
-again after updating quiet. A skill called quiet that it did not write is
-left alone unless --force."),
+The full guide for agents: addressing, every command, the script API,
+examples. It matches this quiet; the agent skill (npx skills add
+s1dashu/quiet-md) carries the same guide as its reference."),
 ];
 
 pub fn of(cmd: Option<&str>) -> R<String> {

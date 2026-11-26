@@ -2,8 +2,8 @@
 
 `quiet` reads, searches and edits a Quiet.md library: a folder of documents
 (`.xml` DocxXML and `.md` Markdown), boards (`.excalidraw`) and 数据表
-(`.sqlite`). This guide matches the installed `quiet`; run `quiet skill`
-again after an update. `quiet help COMMAND` shows one command in detail.
+(`.sqlite`). `quiet guide` prints this guide as the installed `quiet` knows
+it; `quiet help COMMAND` shows one command in detail.
 
 The library is plain files, and you may read them directly. Edit through
 `quiet` instead: it keeps the structure valid, rewrites links when a document
@@ -89,7 +89,6 @@ quiet import FILE… [--in FOLDER]   .md/.txt, .xml, .csv/.tsv (as a 数据表),
 
 quiet run [FILE|-] [-e CODE] [--timeout SECS]
 quiet call OP [JSON]         any operation by name, as run's lib calls it
-quiet mcp                    the same as MCP tools, for clients without a shell
 ```
 
 Every write takes `--dry-run` (print what would change, write nothing) and

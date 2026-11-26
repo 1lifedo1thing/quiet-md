@@ -25,11 +25,9 @@ use serde_json::{Value, json};
 use fail::{R, fail};
 use session::Session;
 
-pub const GUIDE: &str = include_str!("guide.md");
-/// The agent skill `quiet skill install` writes, with the guide beside it.
-const SKILL: &str = include_str!("skill.md");
-/// What marks a skill folder as one `quiet skill install` wrote (so it may be replaced).
-const SKILL_MARK: &str = "<!-- written by `quiet skill install`";
+/// The full guide for agents: the skill's reference in the repository
+/// (skills/quiet-md, installed with `npx skills add`), the one copy.
+pub const GUIDE: &str = include_str!("../../../skills/quiet-md/references/guide.md");
 
 /// `read` prints at most this much unless `--max-chars` says otherwise (0: all).
 const READ_CAP: u64 = 40_000;
@@ -348,8 +346,7 @@ pub fn execute(raw: Vec<String>, mut input: Input, out: &mut String) -> R<()> {
     let cmd = a.pos.remove(0);
     match cmd.as_str() {
         "help" => { *out += &help::of(a.pos.first().map(String::as_str))?; return Ok(()); }
-        "skill" | "guide" if a.pos.first().map(String::as_str) == Some("install") => { *out += &install_skill(&a)?; return Ok(()); }
-        "skill" | "guide" => { *out += GUIDE; return Ok(()); }
+        "guide" | "skill" => { *out += GUIDE; return Ok(()); }
         "version" => { *out += &format!("quiet {}\n", env!("CARGO_PKG_VERSION")); return Ok(()); }
         "telemetry" => { *out += &usage::command(a.pos.first().map(String::as_str))?; return Ok(()); }
         _ if a.has("help") => { *out += &help::of(Some(&cmd))?; return Ok(()); }
@@ -392,33 +389,4 @@ pub fn execute(raw: Vec<String>, mut input: Input, out: &mut String) -> R<()> {
     }
     if json_out { *out += &format!("{v}\n"); }
     Ok(())
-}
-
-/// `quiet skill install [--dir DIR]… [--force]`: the skill as `DIR/quiet/`
-/// (SKILL.md, references/guide.md) for agents that load skills from DIR; by
-/// default Claude Code's and Codex's, where they are installed. Both files
-/// come from this binary, so they match it; run it again after an update.
-fn install_skill(a: &Args) -> R<String> {
-    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(std::path::PathBuf::from);
-    let dirs: Vec<std::path::PathBuf> = if a.all("dir").is_empty() {
-        let home = home.ok_or_else(|| fail("usage", "no home folder to install into").hint("pass --dir DIR"))?;
-        let found: Vec<_> = [".claude", ".codex"].iter().map(|d| home.join(d)).filter(|d| d.is_dir()).map(|d| d.join("skills")).collect();
-        if found.is_empty() { return Err(fail("not_found", "neither ~/.claude nor ~/.codex is here").hint("pass --dir DIR: the folder your agent loads skills from")); }
-        found
-    } else { a.all("dir").iter().map(std::path::PathBuf::from).collect() };
-    let mark = format!("{SKILL_MARK} {} -->\n", env!("CARGO_PKG_VERSION"));
-    let mut out = String::new();
-    for d in dirs {
-        let at = d.join("quiet");
-        let skill = at.join("SKILL.md");
-        if let Ok(old) = std::fs::read_to_string(&skill) && !old.contains(SKILL_MARK) && !a.has("force") {
-            return Err(fail("exists", format!("{} is a skill quiet did not write", skill.display())).hint("move it away, or pass --force to replace it"));
-        }
-        std::fs::create_dir_all(at.join("references"))?;
-        // LF whatever the checkout this was built from: agents read the frontmatter from `---\n`.
-        std::fs::write(&skill, format!("{SKILL}\n{mark}").replace("\r\n", "\n"))?;
-        std::fs::write(at.join("references").join("guide.md"), GUIDE.replace("\r\n", "\n"))?;
-        out += &format!("installed {}\n", at.display());
-    }
-    Ok(out)
 }

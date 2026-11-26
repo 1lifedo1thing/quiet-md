@@ -22,7 +22,7 @@ const KEEP: usize = 31;
 /// The commands counted by name; anything else counts as `other`.
 const NAMES: &[&str] = &["ls", "find", "outline", "read", "blocks", "links", "check", "new", "mkdir", "insert", "replace", "delete", "move", "set",
     "rename", "mv", "rm", "table", "table add", "table update", "table delete", "table import", "table field", "table view", "table new", "table rename", "table remove", "board", "board add", "board rm", "history", "restore", "trash",
-    "untrash", "import", "run", "call", "skill", "skill install", "help", "telemetry", "mcp"];
+    "untrash", "import", "run", "call", "skill", "help", "telemetry", "mcp"];
 
 const NOTICE: &str = "quiet counts how often its commands run (which ones and how many, under a random id; never your notes or arguments) and sends those counts once a day to stats.quiet.md. `quiet telemetry off` turns it off; `quiet help telemetry` says more.";
 
