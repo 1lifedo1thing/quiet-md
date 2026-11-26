@@ -272,11 +272,17 @@ pub struct Settings {
     /// 版本历史: snapshots kept per document (1–30). None is the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_limit: Option<u32>,
+    /// 回收站's 自动删除: days a deleted page waits (1–`TRASH_DAYS`). None is `TRASH_DAYS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trash_days: Option<u32>,
 }
 
 impl Settings {
     pub fn history_limit(&self) -> u32 { crate::versions::clamp_limit(self.history_limit.unwrap_or(crate::versions::DEFAULT_LIMIT)) }
     pub fn set_history_limit(&mut self, n: u32) { self.history_limit = Some(crate::versions::clamp_limit(n)); }
+    /// No longer than `TRASH_DAYS`: devices forget a purged page's record after that many days (meta.rs).
+    pub fn trash_days(&self) -> u64 { self.trash_days.map_or(TRASH_DAYS, |d| (d as u64).clamp(1, TRASH_DAYS)) }
+    pub fn set_trash_days(&mut self, n: u64) { self.trash_days = (n.clamp(1, TRASH_DAYS) != TRASH_DAYS).then_some(n.clamp(1, TRASH_DAYS) as u32); }
 }
 
 /// A document in the 回收站, as kept in `.quiet/trash/index.json`.
@@ -3321,7 +3327,7 @@ impl Store {
 
     /// The 回收站, newest first: one row per deleted page (its child pages
     /// ride along). Files trashed by older versions are adopted, and pages
-    /// past 30 days are removed for good.
+    /// past the 自动删除 days (`Settings::trash_days`) are removed for good.
     pub fn list_trash(&mut self) -> Vec<TrashEntry> {
         let _lock = match self.begin_write() {
             Ok(lock) => Some(lock),
@@ -3375,7 +3381,7 @@ impl Store {
             self.trash.retain(|id, t| t.meta.folder.is_some() || on_disk.contains(id));
             dirty |= self.trash.len() != before;
         }
-        let cutoff = now().saturating_sub(TRASH_DAYS * 86_400);
+        let cutoff = now().saturating_sub(self.settings().trash_days() * 86_400);
         let expired: Vec<String> = self.trash.iter().filter(|(_, t)| t.deleted <= cutoff).map(|(k, _)| k.clone()).collect();
         for id in expired.into_iter().filter(|_| _lock.is_some()) {
             let p = self.trash_path(&id);
@@ -3668,6 +3674,7 @@ impl Store {
             // The top-level folder's own (D5): in the devices' files, the latest of each.
             let m = self.merged.borrow();
             s.history_limit = m.get(meta::FOLDER_ITEM, "history_limit").and_then(|v| v.as_u64()).map(|n| n as u32);
+            s.trash_days = m.get(meta::FOLDER_ITEM, "trash_days").and_then(|v| v.as_u64()).map(|n| n as u32);
             s.scroll_top = m.items.keys().filter_map(|id| Some((id.clone(), serde_json::from_value(m.get(id, "scroll")?.clone()).ok()?))).collect();
         }
         s
@@ -3684,6 +3691,7 @@ impl Store {
             let was = self.settings();
             let mut changes = vec![];
             if was.history_limit != s.history_limit { changes.push((meta::FOLDER_ITEM.to_string(), "history_limit".to_string(), serde_json::to_value(s.history_limit)?)); }
+            if was.trash_days != s.trash_days { changes.push((meta::FOLDER_ITEM.to_string(), "trash_days".to_string(), serde_json::to_value(s.trash_days)?)); }
             for (id, v) in &s.scroll_top { if was.scroll_top.get(id) != Some(v) { changes.push((id.clone(), "scroll".into(), serde_json::to_value(v)?)); } }
             for id in was.scroll_top.keys() { if !s.scroll_top.contains_key(id) { changes.push((id.clone(), "scroll".into(), serde_json::Value::Null)); } }
             if changes.is_empty() { return Ok(()) }
@@ -5599,6 +5607,11 @@ mod tests {
         a.save_settings(&st).unwrap();
         b.list();
         assert_eq!(b.settings().history_limit(), 9);
+        let mut st = a.settings();
+        st.set_trash_days(7);
+        a.save_settings(&st).unwrap();
+        b.list();
+        assert_eq!((b.settings().trash_days(), b.settings().history_limit()), (7, 9));
         // Renamed on one device, the others follow.
         a.rename(&x, "改名").unwrap();
         assert_eq!(c.list().into_iter().find(|e| e.id == x).unwrap().meta.rel, "改名.xml");
@@ -5747,6 +5760,30 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list.iter().find(|e| e.id == b).unwrap().meta.parent.as_deref(), Some(a.as_str()));
         assert!(s.list_trash().is_empty());
+    }
+
+    /// 自动删除 after the chosen days, never past `TRASH_DAYS`.
+    #[test]
+    fn trash_keeps_pages_the_chosen_days() {
+        let lib = Lib::new("trash-days");
+        let mut s = lib.open();
+        let (a, b) = (s.create_from(&doc("八天前")).unwrap(), s.create_from(&doc("六天前")).unwrap());
+        s.delete(&a, None).unwrap();
+        s.delete(&b, None).unwrap();
+        s.trash.get_mut(&a).unwrap().deleted -= 8 * 86_400;
+        s.trash.get_mut(&b).unwrap().deleted -= 6 * 86_400;
+        s.save_trash().unwrap();
+        assert_eq!(s.list_trash().len(), 2, "30 days by default");
+        let mut st = s.settings();
+        st.set_trash_days(7);
+        s.save_settings(&st).unwrap();
+        let t = s.list_trash();
+        assert_eq!(t.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), [b.as_str()]);
+        let mut st = s.settings();
+        st.set_trash_days(90);
+        assert_eq!((st.trash_days(), st.trash_days), (TRASH_DAYS, None));
+        st.set_trash_days(0);
+        assert_eq!(st.trash_days(), 1);
     }
 
     /// A page a tree writer deleted is in this copy's 回收站 too, and comes back.

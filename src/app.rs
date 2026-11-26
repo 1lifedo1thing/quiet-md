@@ -469,6 +469,8 @@ pub struct Workspace {
     pub trash: Vec<crate::store::TrashEntry>,
     /// A 回收站 row's menu: the page and where it opens.
     pub trash_menu: Option<(String, Point<Pixels>, Anchor)>,
+    /// 回收站's 自动删除 dropdown is open.
+    pub trash_days_menu: bool,
     /// The toast and when it appeared.
     pub toast: Option<(ToastKind, SharedString, Instant)>,
     toast_task: Option<Task<()>>,
@@ -756,6 +758,7 @@ impl Workspace {
             settings_scroll: ScrollHandle::new(),
             trash: vec![],
             trash_menu: None,
+            trash_days_menu: false,
             toast: None,
             toast_task: None,
             mode_menu: false,
@@ -1313,6 +1316,7 @@ impl Workspace {
         self.view = view;
         self.row_menu = None;
         self.trash_menu = None;
+        self.trash_days_menu = false;
         self.theme_menu = None;
         self.lang_menu = None;
         self.pref_menu = None;

@@ -1,11 +1,13 @@
 //! 回收站 page and the confirmation dialogs (删除, 恢复, 彻底删除).
-//! Deleted pages wait in the library's `trash/` for 30 days; each row is a
+//! Deleted pages wait in the library's `trash/` for the 自动删除 days (1–30, the
+//! header's dropdown); each row is a
 //! deleted page together with the child pages that went with it.
 
 use crate::app::{Confirm, ConfirmCancel, ConfirmOk, Workspace};
 use crate::settings::display_title;
 use crate::search::doc_icon;
 use crate::store::{TRASH_DAYS, TrashEntry};
+use crate::design::{MenuItem, MenuLabel, MenuSeparator, Popover};
 pub(crate) use crate::ui::{ToastKind, list_header_text, row_hover, row_line};
 use crate::design::{Button, ButtonSize, Checkbox, Dialog};
 use crate::theme::{self, Theme};
@@ -17,9 +19,12 @@ pub const TRASH_MENU_W: f32 = crate::design::menu_w::SM;
 struct ListedTrash { lists: Vec<(String, Vec<TrashEntry>)>, warnings: Vec<String> }
 struct PurgedTrash { errors: Vec<String> }
 
+/// 自动删除's choices; 自定义 steps through the days between them.
+const DAY_CHOICES: [u64; 5] = [1, 3, 7, 14, 30];
+
 /// 剩余时间: whole days left before the automatic 彻底删除.
-fn remaining(deleted: u64) -> String {
-    let end = deleted + TRASH_DAYS * 86_400;
+fn remaining(deleted: u64, days: u64) -> String {
+    let end = deleted + days * 86_400;
     let left = end.saturating_sub(crate::time::now());
     if left < 86_400 { crate::settings::text("即将彻底删除").into() } else { crate::localized_count!(left.div_ceil(86_400), "{} 天", "{} day", "{} days", left.div_ceil(86_400)) }
 }
@@ -99,7 +104,14 @@ impl Workspace {
         // 清空回收站: a labelled button, only when there is something to empty.
         let empty = (!self.trash.is_empty()).then(|| Button::ghost("trash-empty").no_drag().mr(px(8.)).icon("bin").label(crate::settings::text("清空回收站"))
             .on_click(cx.listener(|w, _, _, cx| { w.trash_menu = None; w.confirm = Some(Confirm::EmptyTrash); cx.notify(); })));
-        let header = page_header(self, "回收站", 26., cx).children(empty).child(
+        // 自动删除: how long a page waits, a dropdown beside 清空回收站 (#410).
+        let days = self.store.trash_days();
+        let open = self.trash_days_menu;
+        let auto = Button::ghost("trash-days").no_drag().mr(px(4.)).selected(open)
+            .label(crate::localized_count!(days, "{} 天后自动删除", "Delete after {} day", "Delete after {} days", days)).icon_end("chevron-down")
+            .relative().child(self.home.track("trash-days"))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |w, _, _, cx| { cx.stop_propagation(); w.trash_menu = None; w.trash_days_menu = !open; cx.notify(); }));
+        let header = page_header(self, "回收站", 26., cx).child(auto).children(empty).child(
             crate::ui::header_icon("trash-search", "search")
                 .tip_label(crate::shortcuts::keys(crate::settings::text("搜索(⌘ + J)")).into(), crate::ui::TipSide::Below)
                 .on_click(cx.listener(|_, _, window, cx| window.dispatch_action(Box::new(crate::app::FocusSearch), cx))),
@@ -200,7 +212,7 @@ impl Workspace {
                             .child(icon("folder", 16., Theme::icon()))
                             .child(div().min_w_0().text_size(px(13.)).text_color(Theme::text_caption()).overflow_hidden().whitespace_nowrap().text_ellipsis().child(ui_text(self.trash_location(t)))),
                     )
-                    .child(div().w(px(168.)).flex_none().pl(px(20.)).text_size(px(13.)).text_color(Theme::text_caption()).child(remaining(t.deleted)))
+                    .child(div().w(px(168.)).flex_none().pl(px(20.)).text_size(px(13.)).text_color(Theme::text_caption()).child(remaining(t.deleted, days)))
                     .child(div().w(px(48.)).flex_none().flex().justify_end().pr(px(12.)).child(more)),
             );
         }
@@ -209,6 +221,7 @@ impl Workspace {
     }
 
     pub(crate) fn render_trash_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.trash_days_menu { return self.render_trash_days_menu(cx) }
         let (id, pos, corner) = self.trash_menu.clone()?;
         let item = |key: &'static str, ic: &'static str, label: &'static str, danger: bool| crate::design::MenuItem::new(key).icon(ic).label(crate::settings::label(label)).destructive(danger);
         let (a, b) = (id.clone(), id);
@@ -236,6 +249,34 @@ impl Workspace {
                 .with_priority(2)
                 .into_any_element(),
         )
+    }
+
+    /// 自动删除's menu: the usual days, then 自定义 a day at a time (1–30).
+    fn render_trash_days_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let b = self.view.eq(&crate::app::View::Trash).then(|| self.home.anchor("trash-days")).flatten()?;
+        let days = self.store.trash_days();
+        let set = |n: u64, close: bool| cx.listener(move |w: &mut Workspace, _: &ClickEvent, _: &mut Window, cx: &mut Context<Workspace>| {
+            if w.store.set_trash_days(n).is_err() { w.show_toast(crate::settings::tr("设置保存失败", "Couldn’t save the setting"), cx); }
+            if close { w.trash_days_menu = false; }
+            w.trash = w.store.list_trash();
+            cx.notify();
+        });
+        let mut menu = Popover::new("trash-days-menu").menu().w(px(crate::design::menu_w::SM))
+            .on_mouse_down_out(cx.listener(|w, _, _, cx| { w.trash_days_menu = false; cx.notify(); }))
+            .child(MenuLabel::new(crate::settings::tr("自动删除", "Auto-delete")));
+        for n in DAY_CHOICES {
+            menu = menu.child(MenuItem::new(SharedString::from(format!("trash-days-{n}"))).checked(days == n)
+                .label(crate::localized_count!(n, "{} 天后", "After {} day", "After {} days", n)).on_click(set(n, true)));
+        }
+        let step = |id: &'static str, ic: &'static str, n: u64, on: bool| Button::ghost(id).sized(ButtonSize::Xs).icon(ic).disabled(!on).on_click(set(n, false));
+        let custom = div().pl(px(12.)).pr(px(4.)).h(px(32.)).flex().items_center().gap(px(4.))
+            .child(div().flex_1().text_size(px(theme::ui_font())).child(crate::settings::tr("自定义", "Custom")))
+            .child(step("trash-days-minus", "minus", days.saturating_sub(1).max(1), days > 1))
+            .child(div().w(px(56.)).flex().justify_center().text_size(px(theme::ui_font())).child(crate::localized_count!(days, "{} 天", "{} day", "{} days", days)))
+            .child(step("trash-days-plus", "plus", (days + 1).min(TRASH_DAYS), days < TRASH_DAYS));
+        menu = menu.child(MenuSeparator::new()).child(custom);
+        let (pos, corner) = crate::design::hang(b, crate::design::Align::End, None);
+        Some(deferred(anchored().anchor(corner).position(pos).snap_to_window_with_margin(px(8.)).child(menu.fit(crate::design::room(pos, corner)))).with_priority(2).into_any_element())
     }
 
     pub(crate) fn restore_doc(&mut self, id: &str, cx: &mut Context<Self>) {

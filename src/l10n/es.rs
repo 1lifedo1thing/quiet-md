@@ -1476,4 +1476,7 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("无法添加文件夹：{}", "No se pudo añadir la carpeta: {}"),
     ("电脑上的文件夹原位使用，显示在侧栏里；要新的文件夹，在选择窗口里新建。", "Una carpeta de tu equipo se usa donde está y aparece en la barra lateral; para una nueva, créala en la ventana de selección."),
     ("这个文件夹保持原名", "Esta carpeta conserva su nombre"),
+    ("{} 天后自动删除", "{|one:Eliminar tras # día|other:Eliminar tras # días}"),
+    ("{} 天后", "{|one:Tras # día|other:Tras # días}"),
+    ("自动删除", "Eliminación automática"),
 ];

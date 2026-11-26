@@ -322,6 +322,13 @@ impl SharedStore {
     /// 版本历史's snapshots kept per document: the top-level folder in front's (文件夹级, 2.1).
     pub fn history_limit(&self) -> u32 { self.put(None, |s, _| Ok(s.settings().history_limit())).unwrap_or_else(|_| fdl_core::versions::default_history_limit()) }
     pub fn set_history_limit(&self, n: u32) -> Result<()> { self.put(None, |s, _| { let mut v = s.settings(); v.set_history_limit(n); s.save_settings(&v) }) }
+    /// 回收站's 自动删除 days: the top-level folder in front's; set on every one, as the 回收站 shows them all.
+    pub fn trash_days(&self) -> u64 { self.put(None, |s, _| Ok(s.settings().trash_days())).unwrap_or(fdl_core::store::TRASH_DAYS) }
+    pub fn set_trash_days(&self, n: u64) -> Result<()> {
+        let mut out = Ok(());
+        self.each(|s| { let mut v = s.settings(); v.set_trash_days(n); if let Err(e) = s.save_settings(&v) { out = Err(e) } });
+        out
+    }
     pub fn scroll_top(&self, id: &str) -> Option<(usize, f32)> { self.on(id, |s| s.scroll_top(id)).flatten() }
     pub fn remember_scroll(&self, id: &str, top: Option<(usize, f32)>) { self.on(id, |s| s.remember_scroll(id, top)); }
     pub fn flush_view_state(&self) -> Result<()> {
