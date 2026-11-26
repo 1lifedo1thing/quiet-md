@@ -112,7 +112,9 @@ fn island_rows(caption: &'static str, rows: Vec<Row>) -> Div {
             let parts: Vec<String> = if let Some(s) = alt.strip_suffix("++") { s.split('+').map(str::to_string).chain(std::iter::once("+".to_string())).collect() } else { alt.split('+').map(str::to_string).collect() };
             for p in parts { keys = keys.child(key(&p)); }
         }
-        list = list.child(div().min_h(px(36.)).flex().items_center().justify_between().gap(px(8.)).px(px(12.)).py(px(6.)).child(div().child(label)).child(keys));
+        list = list.child(div().min_h(px(36.)).flex().items_center().justify_between().gap(px(8.)).px(px(12.)).py(px(6.))
+            // a long label wraps, the keys keep their room (a narrow board, English)
+            .child(div().flex_1().min_w_0().child(label)).child(keys));
         if i + 1 < n { list = list.child(Separator::new()); }
     }
     div().flex().flex_col().gap(px(g.label_gap)).child(div().text_color(design::color::muted_foreground()).child(caption)).child(list)
