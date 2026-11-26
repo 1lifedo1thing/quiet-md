@@ -622,7 +622,10 @@ impl Element for UiText {
             let mut origin = bounds.origin;
             if self.optical && let Some(run) = layout.runs.first() {
                 let ts = window.text_system().clone();
-                let cap = ts.cap_height(ts.resolve_font(&run.font), layout.font_size);
+                // the capitals' height from an "H": PingFang's own cap height (0.86 em) is its ideographs',
+                // and taken at its word it pushed Latin text a point down instead of centring it
+                let id = ts.resolve_font(&run.font);
+                let cap = ts.typographic_bounds(id, layout.font_size, 'H').map(|b| b.size.height.abs()).unwrap_or_else(|_| ts.cap_height(id, layout.font_size));
                 // the capitals' middle sits (ascent - descent - cap) / 2 below the box's; to whole device pixels
                 let sf = window.scale_factor();
                 origin.y -= px((f32::from(line.ascent - line.descent - cap) / 2. * sf).round() / sf);
