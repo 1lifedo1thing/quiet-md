@@ -227,6 +227,7 @@ fn info(name: &str) -> Option<(usize, &'static str, &'static str)> {
         "ZoomInText" => (1, "放大正文", "Zoom in"),
         "ZoomOutText" => (1, "缩小正文", "Zoom out"),
         "ResetTextZoom" => (1, "正文实际大小", "Actual size"),
+        "ToggleParagraphFocus" => (1, "段落聚焦", "Paragraph focus"),
         "FindInDoc" => (1, "文档内查找", "Find in document"),
         "ReplaceInDoc" => (1, "查找和替换", "Find and replace"),
         "Undo" => (2, "撤销", "Undo"),

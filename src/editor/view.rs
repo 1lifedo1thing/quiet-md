@@ -233,6 +233,12 @@ pub struct Editor {
     /// that changed while the fade runs (`sync_lit`).
     pub(super) lit: Option<(usize, usize)>,
     pub(super) lit_fade: Option<((usize, usize), web_time::Instant)>,
+    /// 打字机模式: the caret's line was last brought to the middle (a wheel or a
+    /// click puts it elsewhere); the page's size last frame; a resize asks for
+    /// the line back without a glide.
+    pub(super) tw_centred: bool,
+    pub(super) tw_size: Option<Size<Pixels>>,
+    pub(super) tw_snap: bool,
     /// Last applied (text color, background) from the color panel.
     pub last_color: (Option<ColorName>, Option<ColorName>),
     pub last_lang: String,
@@ -498,6 +504,9 @@ impl Editor {
             zoom_badge: None,
             lit: None,
             lit_fade: None,
+            tw_centred: false,
+            tw_size: None,
+            tw_snap: false,
             last_color: (None, Some(ColorName("light-yellow".into()))),
             last_lang: "Plain Text".into(),
             link_field,
@@ -699,6 +708,7 @@ impl Editor {
     /// The wheel takes over from a glide under way: the page stays where the
     /// user scrolled it until the caret moves again.
     pub(super) fn wheel_stops_glide(&mut self) {
+        self.tw_centred = false;
         if self.glide.take().is_some() && matches!(self.reveal, Some((super::render::Reveal::Caret, _))) {
             self.reveal = None;
         }
@@ -2567,6 +2577,8 @@ impl Editor {
         self.link_ui.click = None;
         self.btn_press_reset();
         self.gap_press = None;
+        // A click puts the caret where it lands, off the middle.
+        self.tw_centred = false;
         if !ev.modifiers.shift && self.button_press(ev.position) {
             // The caret stays; the action runs on release.
             window.prevent_default();

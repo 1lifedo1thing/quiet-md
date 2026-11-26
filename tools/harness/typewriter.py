@@ -8,7 +8,10 @@ Cases: typing, enter, arrows, start, end, wheel (a manual scroll stays until
 the next keystroke), click (a click doesn't scroll), select (a selection
 reveals as usual), off (the switch off: no centring), shortcut (⌘⇧T turns it
 on), low (克制 motion jumps), perf (typing in a long document stays fast),
-focus (段落聚焦 fades the other paragraphs, light and dark, and keeps a selection clear).
+focus (段落聚焦 fades the other paragraphs, light and dark, and keeps a selection clear),
+find (a hit comes to the middle), resize (a resize keeps a centred line there, not a
+scrolled page), paste (a big paste is there at once), ime (composing keeps the page
+still), focus_key (⌘⇧F toggles 段落聚焦, remembered).
 """
 import json
 import os
@@ -187,6 +190,47 @@ def case_focus():
     carets, log, f = run("focus-off", to_middle + "type x\n" + settle + "shot mid\n")
     y = page_top(log) + carets[0][0]
     assert ink(f, "mid", y + 3 * 35) > 0.7 * ink(f, "mid", y), f"faded with the switch off; see {f}"
+
+
+def case_find():
+    # A find hit comes to the middle, where the caret will write.
+    carets, _, f = run("find", "key cmd-f\ntype MIDDLE_MARK\nwait 700\nkey escape\nkey right\n" + settle)
+    centred(carets[0], "find", f)
+
+
+def case_resize():
+    # The window resized under a centred caret: the line stays in the middle;
+    # scrolled away by the wheel first, the page stays where it was put.
+    carets, log, f = run("resize", to_middle + "type x\n" + settle + f"resize {W} 600\n" + settle + f"resize {W} {H}\n" + settle
+                         + "wheel 700 400 -150\n" + settle + f"resize {W} 700\n" + settle)
+    for i in (1, 2): centred(carets[i], f"resize {i}", f)
+    assert abs(carets[4][0] - carets[3][0]) < 1, f"a resize pulled a scrolled page back: {carets}; see {f}"
+
+
+def case_paste():
+    # A big paste lands the caret far below: the page is there at once, not gliding a long way.
+    clip = work / "big.txt"
+    clip.write_text("\n".join(f"Pasted line {i}" for i in range(150)))
+    carets, _, f = run("paste", to_middle + "type x\n" + settle + f"clip text {clip}\nkey cmd-v\nwait 60\ncaret\n" + settle)
+    centred(carets[1], "paste, next frames", f)
+    centred(carets[2], "paste", f)
+
+
+def case_ime():
+    # A word being composed keeps the page still; once committed, the line comes to the middle.
+    carets, _, f = run("ime", to_middle + "wait 300\ncaret\nmark nihao\n" + settle + "commit 你好\n" + settle)
+    assert abs(carets[1][0] - carets[0][0]) < 1, f"composing moved the page: {carets}; see {f}"
+    centred(carets[2], "ime committed", f)
+
+
+def case_focus_key():
+    # ⌘⇧F turns 段落聚焦 on and off, remembered.
+    carets, log, f = run("focus-key", to_middle + "type x\n" + settle + "key cmd-shift-f\nwait 600\nshot on\nkey cmd-shift-f\nwait 600\nshot off\n")
+    y = page_top(log) + carets[0][0]
+    assert ink(f, "on", y) > 1.8 * ink(f, "on", y + 3 * 35), f"⌘⇧F didn't fade the others; see {f}"
+    assert ink(f, "off", y + 3 * 35) > 0.7 * ink(f, "off", y), f"⌘⇧F didn't turn it off; see {f}"
+    saved = json.loads(next((f / "lib").rglob("preferences.json")).read_text())
+    assert saved.get("paragraph_focus") is False, f"not remembered: {saved}; see {f}"
 
 
 CASES = {n[5:]: f for n, f in globals().items() if n.startswith("case_")}

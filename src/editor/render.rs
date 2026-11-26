@@ -1443,7 +1443,10 @@ impl Editor {
         let at = self.cache.borrow().get(&h.block).map(|l| l.position_for(h.offset).y);
         match at.filter(|y| *y >= view.top() && *y < view.bottom()) {
             Some(y) if self.core.block_sel.is_none() => {
-                self.reveal = Some((if self.typewriter_on() { Reveal::Caret } else { Reveal::At(f32::from(y - view.top())) }, 0));
+                let tw = self.typewriter_on();
+                self.reveal = Some((if tw { Reveal::Caret } else { Reveal::At(f32::from(y - view.top())) }, 0));
+                // 打字机模式: back on the middle in one go, not a glide.
+                self.tw_snap = tw;
             }
             _ => {
                 let top = self.list.logical_scroll_top();
@@ -1495,19 +1498,20 @@ impl Editor {
         }
     }
 
-    /// Follows the selection to the rows 段落聚焦 keeps clear (before the list draws).
+    /// Follows the selection to the rows 段落聚焦 keeps clear (before the list
+    /// draws). Turning it on or off eases too: off is every row lit.
     fn sync_lit(&mut self, window: &mut Window) {
-        let lit = self.lit_rows();
-        if lit != self.lit {
-            self.lit_fade = match (self.lit, lit) {
-                (Some(before), Some(_)) if crate::settings::motion_high() => Some((before, web_time::Instant::now())),
-                _ => None,
-            };
-            self.lit = lit;
+        const ALL: (usize, usize) = (0, usize::MAX);
+        let (to, from) = (self.lit_rows().unwrap_or(ALL), self.lit.unwrap_or(ALL));
+        if to != from {
+            self.lit_fade = crate::settings::motion_high().then(|| (from, web_time::Instant::now()));
+            self.lit = Some(to);
         }
         if let Some((_, t0)) = self.lit_fade {
-            if t0.elapsed().as_secs_f32() >= FOCUS_FADE { self.lit_fade = None } else { window.request_animation_frame() }
+            if t0.elapsed().as_secs_f32() < FOCUS_FADE { window.request_animation_frame(); return }
+            self.lit_fade = None;
         }
+        if self.lit == Some(ALL) { self.lit = None }
     }
 
     /// The space below the last block: 200px, or with 打字机模式 half the page,
@@ -1552,6 +1556,8 @@ impl Editor {
             {
                 self.list.scroll_to(ListOffset { item_ix: ix, offset_in_item: px(0.) });
                 self.reveal = Some((req, tries + 1));
+                // A caret off the page lands in the middle in one go, not a glide from the top.
+                self.tw_snap = true;
                 // `refresh` is a no-op while drawing.
                 window.request_animation_frame();
             }
@@ -1573,6 +1579,8 @@ impl Editor {
             Reveal::Caret => px(0.),
             Reveal::At(y) => t.top() - (view.top() + px(y)),
             // The find box covers the top right of the page.
+            // 打字机模式 brings a find hit to the middle too, where the caret will write.
+            Reveal::Find(_) if crate::settings::typewriter() && !self.read_only => t.center().y - (view.top() + view.size.height * TYPEWRITER_LINE),
             Reveal::Find(_) if t.top() >= view.top() + px(250.) && t.bottom() <= view.bottom() - margin => px(0.),
             Reveal::Find(_) => t.top() - (view.top() + view.size.height / 2.),
             Reveal::Block(_) => t.top() - view.top() - px(24.),
@@ -1582,12 +1590,17 @@ impl Editor {
         // further. (Some frames draw before a step lands: one still frame is no stop.)
         let still = self.glide.map_or(0, |(_, before, n)| if (at - before).abs() < px(0.25) { n + 1 } else { 0 });
         let held = tw && still >= 3;
+        // The caret's line is (or is on its way to) the middle: a resize keeps it there.
+        if matches!(req, Reveal::Caret) { self.tw_centred = tw; }
+        // A window resize, the sidebar or 专注模式 reflowed the page: no glide.
+        let snap = std::mem::take(&mut self.tw_snap);
         if d == px(0.) || held {
             self.glide = None;
         } else {
             // 丰富 glides there (the rest of the way shrinks by e^(−t/60ms),
-            // re-aimed each frame as the text moves); 克制 jumps.
-            let step = match tw && crate::settings::motion_high() {
+            // re-aimed each frame as the text moves); 克制 jumps, and so does a
+            // jump of more than a page (a big paste, undo far away).
+            let step = match tw && crate::settings::motion_high() && !snap && d.abs() <= view.size.height {
                 true => {
                     let dt = self.glide.map_or(1. / 60., |(t, _, _)| t.elapsed().as_secs_f32().min(0.05));
                     let s = d * (1. - (-dt / 0.06).exp());
@@ -1631,6 +1644,13 @@ impl Editor {
         let find_box = self.find_box(window, cx);
         if std::mem::take(&mut self.autoscroll) && self.reveal.is_none() {
             self.reveal = Some((Reveal::Caret, 0));
+        }
+        // 打字机模式: a page resized (the window, the sidebar, 专注模式) under a
+        // centred caret keeps its line in the middle, at once.
+        let size = window.viewport_size();
+        if self.tw_size.replace(size).is_some_and(|was| was != size) && self.tw_centred && self.typewriter_on() && self.reveal.is_none() {
+            self.reveal = Some((Reveal::Caret, 0));
+            self.tw_snap = true;
         }
         // The handle floats above everything (deferred), so the page viewport
         // doesn't clip it: hide it once its block's top scrolls out of view.

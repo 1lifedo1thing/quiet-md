@@ -4,13 +4,13 @@
 //! document. The scrolling itself is the editor's caret reveal
 //! (`Editor::apply_reveal`); this holds the switch.
 //!
-//! 段落聚焦 is its own switch beside it, off by default: the paragraph being
+//! 段落聚焦 is its own switch beside it (⌘⇧F, Ctrl+Shift+F), off by default: the paragraph being
 //! written (every one a selection spans) stays clear and the others fade
 //! (`Editor::item_opacity`), as iA Writer's and Typora's focus do.
 use crate::app::Workspace;
 use gpui::*;
 
-actions!(workspace, [ToggleTypewriter]);
+actions!(workspace, [ToggleTypewriter, ToggleParagraphFocus]);
 
 /// The "…" menu row's glyph: a line held between two arrows.
 pub const ICON: &str = "valign-middle";
@@ -18,7 +18,7 @@ pub const ICON: &str = "valign-middle";
 pub const FOCUS_ICON: &str = "paragraph-focus";
 
 pub fn bind_keys(cx: &mut App) {
-    cx.bind_keys([KeyBinding::new("cmd-shift-t", ToggleTypewriter, None)]);
+    cx.bind_keys([KeyBinding::new("cmd-shift-t", ToggleTypewriter, None), KeyBinding::new("cmd-shift-f", ToggleParagraphFocus, None)]);
 }
 
 impl Workspace {
@@ -35,9 +35,12 @@ impl Workspace {
         cx.notify();
     }
 
-    /// The "…" menu's 段落聚焦 switch.
-    pub fn set_paragraph_focus(&mut self, on: bool, cx: &mut Context<Self>) {
+    /// The "…" menu's 段落聚焦 switch and ⌘⇧F; the shortcut says what it did.
+    pub fn set_paragraph_focus(&mut self, on: bool, toast: bool, cx: &mut Context<Self>) {
         self.set_pref(|p| p.paragraph_focus = on, cx);
+        if toast {
+            self.show_toast(if on { crate::settings::tr("段落聚焦已打开", "Paragraph focus on") } else { crate::settings::tr("段落聚焦已关闭", "Paragraph focus off") }, cx);
+        }
         if let Some(ed) = &self.editor {
             ed.update(cx, |_, cx| cx.notify());
         }

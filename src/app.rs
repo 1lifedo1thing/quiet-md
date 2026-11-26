@@ -2254,6 +2254,7 @@ impl Render for Workspace {
             .on_action(cx.listener(|w, _: &crate::zoom::ZoomInText, _, cx| w.zoom_text(Some(true), cx)))
             .on_action(cx.listener(|w, _: &crate::zoom::ZoomOutText, _, cx| w.zoom_text(Some(false), cx)))
             .on_action(cx.listener(|w, _: &crate::zoom::ResetTextZoom, _, cx| w.zoom_text(None, cx)))
+            .on_action(cx.listener(|w, _: &crate::typewriter::ToggleParagraphFocus, _, cx| w.set_paragraph_focus(!crate::settings::paragraph_focus(), true, cx)))
             .on_action(cx.listener(|w, _: &crate::modes::ToggleShortcuts, _, cx| {
                 w.shortcuts = !w.shortcuts;
                 cx.notify();

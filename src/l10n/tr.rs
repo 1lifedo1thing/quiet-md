@@ -1515,4 +1515,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("打字机模式已关闭", "Daktilo modu kapalı"),
     ("段落聚焦", "Paragraf odağı"),
     ("正在写的一段保持清晰，其余变淡", "Yazdığınız paragraf net kalır, gerisi soluklaşır"),
+    ("段落聚焦已打开", "Paragraf odağı açık"),
+    ("段落聚焦已关闭", "Paragraf odağı kapalı"),
 ];

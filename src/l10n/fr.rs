@@ -1515,4 +1515,6 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("打字机模式已关闭", "Mode machine à écrire désactivé"),
     ("段落聚焦", "Focus sur le paragraphe"),
     ("正在写的一段保持清晰，其余变淡", "Le paragraphe en cours reste net, le reste s'estompe"),
+    ("段落聚焦已打开", "Focus sur le paragraphe activé"),
+    ("段落聚焦已关闭", "Focus sur le paragraphe désactivé"),
 ];

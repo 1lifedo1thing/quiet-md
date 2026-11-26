@@ -220,9 +220,9 @@ impl Workspace {
                     .on_click(cx.listener(move |w, _, _, cx| w.set_typewriter(!typewriter, false, cx))).into_any_element(),
                 Item::Dim => menu_item("dm-dim", crate::typewriter::FOCUS_ICON, crate::settings::tr("段落聚焦", "Paragraph Focus"), false, false)
                     .switch(dim)
-                    .tip_right(crate::settings::tr("正在写的一段保持清晰，其余变淡", "The paragraph you write stays clear, the rest fade"), None)
+                    .tip_right(crate::settings::tr("正在写的一段保持清晰，其余变淡", "The paragraph you write stays clear, the rest fade"), Some(crate::shortcuts::hint("workspace::ToggleParagraphFocus", "⌘ + Shift + F")))
                     .on_hover(hover_sub(None))
-                    .on_click(cx.listener(move |w, _, _, cx| w.set_paragraph_focus(!dim, cx))).into_any_element(),
+                    .on_click(cx.listener(move |w, _, _, cx| w.set_paragraph_focus(!dim, false, cx))).into_any_element(),
                 Item::Refs => menu_item("dm-refs", "list", crate::settings::text("显示引用列表"), false, false)
                     .switch(refs_shown)
                     .on_hover(hover_sub(None))
