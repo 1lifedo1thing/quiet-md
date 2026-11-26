@@ -176,6 +176,7 @@ impl Workspace {
         let reading = self.reading();
         let typewriter = crate::settings::typewriter();
         let on_top = self.on_top;
+        let focus = self.focus_mode.switch();
         let sub = self.doc_sub;
         let hover_sub = |s: Option<DocSub>| {
             cx.listener(move |w: &mut Workspace, hovered: &bool, _, cx| {
@@ -226,9 +227,10 @@ impl Workspace {
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(move |w, _, window, cx| w.set_on_top(!on_top, window, cx))).into_any_element(),
                 Item::Focus => menu_item("dm-focus", crate::focus::ICON, crate::settings::tr("专注模式", "Focus Mode"), false, false)
+                    .switch(focus)
                     .tip_right(crate::settings::tr("只留正文，鼠标移到顶部可退出", "Just the page; point at the top to exit"), Some(crate::focus::hint()))
                     .on_hover(hover_sub(None))
-                    .on_click(cx.listener(|w, _, window, cx| w.enter_focus(window, cx))).into_any_element(),
+                    .on_click(cx.listener(|w, _, _, cx| w.focus_switch(cx))).into_any_element(),
                 Item::Find => menu_item("dm-find", "text-search", crate::settings::text("查找和替换"), false, false)
                     .on_hover(hover_sub(None))
                     .on_click(cx.listener(|w, _, window, cx| w.find_in_doc(false, window, cx))).into_any_element(),

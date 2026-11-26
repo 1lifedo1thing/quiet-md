@@ -29,7 +29,9 @@ pub const ICON: &str = "expand";
 /// way to the menu bar, or overshooting the button, leaves them.
 const LINGER: Duration = Duration::from_millis(400);
 const FADE_IN: f32 = 0.15;
-const FADE_OUT: f32 = 0.25;
+const FADE_OUT: f32 = 0.15;
+/// The 「…」 menu's switch slides on (`design::Switch`, 150ms) before the window empties.
+const SLIDE: Duration = Duration::from_millis(150);
 
 /// What the window showed before, to put back on leaving.
 struct Saved { sidebar_open: bool, sidebar_auto_hidden: bool }
@@ -37,6 +39,8 @@ struct Saved { sidebar_open: bool, sidebar_auto_hidden: bool }
 /// A window's 专注模式 and its top strip's fade.
 pub struct Focus {
     saved: Option<Saved>,
+    /// The menu's switch was clicked and is sliding on; 专注模式 starts when it is there.
+    pending: bool,
     reveal: bool,
     /// The strip's opacity when `reveal` last changed, and when its fade starts.
     from: f32,
@@ -45,10 +49,12 @@ pub struct Focus {
     lights: std::cell::Cell<f32>,
 }
 impl Default for Focus {
-    fn default() -> Self { Focus { saved: None, reveal: false, from: 0., since: Instant::now(), lights: std::cell::Cell::new(1.) } }
+    fn default() -> Self { Focus { saved: None, pending: false, reveal: false, from: 0., since: Instant::now(), lights: std::cell::Cell::new(1.) } }
 }
 impl Focus {
     pub fn on(&self) -> bool { self.saved.is_some() }
+    /// What the 「…」 menu's switch shows: on, or sliding there.
+    pub fn switch(&self) -> bool { self.on() || self.pending }
     /// The strip's controls, 0 (gone) to 1. 动画 › 丰富 fades them; 克制 shows and hides at once.
     pub fn opacity(&self) -> f32 {
         let target = if self.reveal { 1. } else { 0. };
@@ -113,10 +119,23 @@ impl Workspace {
     }
 
     pub fn toggle_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.focus_mode.on() { self.leave_focus(window, cx) } else { self.enter_focus(window, cx) }
+        if self.focus_mode.on() { self.leave_focus(window, cx) } else { self.enter_focus(cx) }
     }
 
-    pub fn enter_focus(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+    /// The 「…」 menu's switch: on, it slides over in the open menu, then the menu closes with
+    /// the rest of the window. There is no menu to turn it off from; leaving is the strip's 退出,
+    /// the shortcut or Esc, and the switch reads off again next time.
+    pub fn focus_switch(&mut self, cx: &mut Context<Self>) {
+        if self.focus_mode.switch() { return }
+        self.focus_mode.pending = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(SLIDE).await;
+            let _ = this.update(cx, |w, cx| { w.focus_mode.pending = false; w.enter_focus(cx); });
+        }).detach();
+    }
+
+    pub fn enter_focus(&mut self, cx: &mut Context<Self>) {
         if self.focus_mode.on() || !self.can_focus(cx) { return }
         self.doc_menu = false;
         self.doc_sub = None;
@@ -126,7 +145,6 @@ impl Workspace {
         self.sidebar_open = false;
         self.sidebar_auto_hidden = false;
         if let Some(ed) = &self.editor { ed.update(cx, |e, cx| { e.focus_mode = true; cx.notify(); }); }
-        self.show_toast_kind(crate::ui::ToastKind::Info, crate::settings::tr("按 Esc 退出专注模式", "Press Esc to exit Focus Mode"), cx);
         cx.notify();
     }
 
