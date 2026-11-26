@@ -170,6 +170,9 @@ pub static PROPS: LazyLock<Vec<Prop>> = LazyLock::new(|| {
 
 static BY_KEY: LazyLock<HashMap<&'static str, usize>> = LazyLock::new(|| PROPS.iter().enumerate().map(|(i, p)| (p.key.as_str(), i)).collect());
 
+/// `--token-*` names the app no longer reads (`scrollbar_thumb`: every scrollbar is `design::scroll`'s).
+const RETIRED: &[&str] = &["scrollbar_thumb"];
+
 /// Tokens a rule sets (the rest are listed as `--token-*` in full files).
 #[cfg(test)]
 static RULE_TOKENS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
@@ -632,6 +635,8 @@ fn parse_with_fonts<'a>(css: &str, fonts: &mut dyn FnMut() -> &'a [String]) -> R
         }
         if let Some(t) = n.strip_prefix("--token-") {
             let t = t.replace('-', "_");
+            // tokens the app no longer reads: older files that set them load without a warning
+            if RETIRED.contains(&t.as_str()) { continue }
             match (TOKENS.iter().position(|x| *x == t), parse_color(&v)) {
                 (Some(i), Some(c)) => st.tokens[i] = Some(c),
                 _ => warn.push(format!("{n}: {v}")),
@@ -1035,7 +1040,7 @@ mod tests {
     fn css_values() {
         let css = r#"
             /* comment */
-            :root { --theme-name: "T"; --accent: hsl(254, 80%, 68%); --color-red: #d44c47; --token-block-hover: rgba(0,0,0,.05); --mine: 1px; }
+            :root { --theme-name: "T"; --accent: hsl(254, 80%, 68%); --color-red: #d44c47; --token-block-hover: rgba(0,0,0,.05); --token-scrollbar-thumb: #00000038; --token-no-such: red; --mine: 1px; }
             .page, body { font-size: 16px; line-height: 1.5; font-family: "No Such", -apple-system, sans-serif; }
             h1 { font-size: 1.875em; line-height: 1.3; margin-top: 2em; font-weight: 600; }
             blockquote { border-left: 3px solid var(--accent); }
@@ -1057,7 +1062,9 @@ mod tests {
         assert_eq!((st.num("callout.pad-y"), st.num("callout.pad-x")), (16., 12.));
         assert!(st.palette("color", "red").is_some());
         assert!(st.tokens[TOKENS.iter().position(|t| *t == "block_hover").unwrap()].is_some());
-        assert_eq!(warn.len(), 2, "{warn:?}");
+        // a retired token loads quietly; an unknown one is listed
+        assert_eq!(warn.len(), 3, "{warn:?}");
+        assert!(warn.iter().any(|w| w.starts_with("--token-no-such")), "{warn:?}");
         assert!(warn.iter().any(|w| w.starts_with("@media")), "{warn:?}");
         assert!(warn.iter().any(|w| w == ".made-up { color }"), "{warn:?}");
     }
