@@ -56,8 +56,8 @@
   - `quiet run`：沙箱，60 秒超时，512MB 内存。整个脚本是一次事务。
   - 脚本的 `lib` API 和命令一一对应。
 - **给 Agent：**
-  - `quiet skill install`：装一个配套 skill（`quiet/SKILL.md` 加 `references/guide.md`，内容内置在二进制里，和版本一致），默认装进 `~/.claude/skills` 和 `~/.codex/skills`。只有一个 skill，不按功能拆分：触发描述覆盖「笔记、笔记库、周报、待办」等说法，正文是核心用法和在别人库里干活的规矩（先读后写、少改多加、批量改先 dry-run、写完告诉用户改了哪些路径、改错用 history 撤销）。
-  - `quiet skill`（完整指南）和 `quiet help CMD`
+  - 配套 skill 在仓库根的 `skills/quiet-md/`（`SKILL.md` 加 `references/guide.md`），用社区通用的 skills CLI 安装：`npx skills add s1dashu/quiet-md`（Claude Code 装到 `~/.claude/skills/`，Codex 装到 `~/.agents/skills/`）。`references/guide.md` 也编进二进制，`quiet guide` 输出它，是唯一来源；原来的 `quiet skill install` 删掉了。SKILL.md 先教 Agent 检查和安装 CLI（见下面「分发」），再教用法，不提 MCP。只有一个 skill，不按功能拆分：触发描述覆盖「笔记、笔记库、周报、待办」等说法，正文是核心用法和在别人库里干活的规矩（先读后写、少改多加、批量改先 dry-run、写完告诉用户改了哪些路径、改错用 history 撤销）。
+  - `quiet guide`（完整指南，`quiet skill` 是它的别名）和 `quiet help CMD`
   - `quiet mcp`（两个工具）
 - **和应用共存：**
   - 共用 `Store` 的写锁。
@@ -75,10 +75,19 @@
 | `library.rs` | 版本历史、回收站、导入 |
 | `js.rs`、`prelude.js` | 脚本 |
 | `mcp.rs` | MCP 服务 |
-| `help.rs`、`guide.md`、`skill.md` | 帮助、指南和配套 skill |
+| `help.rs` | 每个命令的帮助 |
+| 仓库根 `skills/quiet-md/` | 配套 skill；`references/guide.md` 即 `quiet guide` 的指南，编进二进制 |
 | `usage.rs` | 匿名用量统计 |
 
 测试在 `crates/cli/tests/cli.rs`，数据表的在 `crates/cli/tests/tables.rs`。
+
+## 分发
+
+`quiet` 随应用一起发版，不单独发包。各平台怎么拿到（`help.rs` 总帮助末尾、skill 开头「`quiet` 在不在」一节和这里保持一致）：
+
+- **macOS：** `.app` 里的 `Contents/MacOS/quiet`（`release.sh` 一起签名、公证）。应用「设置 › 连接 Agent › 安装命令行工具」软链到 `~/.local/bin/quiet`（另行实现），也可以自己 `ln -s`。Homebrew cask 有 `binary "#{appdir}/quiet.md.app/Contents/MacOS/quiet"`，用 cask 安装时直接进 PATH；仓库里的 cask 已经加上，tap 里那份要等第一个带 `quiet` 的版本（0.1.14 之后）发布时再加，否则旧版本安装会失败。
+- **Windows：** `package-windows.ps1` 把 `quiet.exe` 和 `quiet_md.exe` 一起放进安装包（签名时一起签）。安装包有一个默认勾选的任务「Add the quiet command to PATH」：只改当前用户的 PATH（`HKCU\Environment`），已有就不重复加，取消勾选重装或卸载时去掉，`ChangesEnvironment=yes` 通知正在运行的程序。`self-test-windows.ps1` 检查装好后 `quiet.exe version` 能跑、PATH 里有安装目录，卸载后没有。
+- **Linux：** tar 包里是 `bin/quiet`。AppImage 也带 `usr/bin/quiet`：以名为 `quiet` 的软链接调用（`ln -s …/quiet-md-*.AppImage ~/.local/bin/quiet`；AppImage 运行时把调用名放进 `ARGV0`），或 `quiet-md-*.AppImage --cli ARGS`，由 `AppRun` 转给 `quiet`；`package-appimage.sh` 打包后两种都验证。
 
 ## 数据表
 
@@ -122,8 +131,8 @@ CLI 能做应用里数据表的大部分事：读视图、按条件查、改字�
 | 一次读整篇大文档 | 输出可能几万字，浪费上下文 | `read` 默认最多 40k 字符，超出时提示按章节读。`--max-chars 0` 不限。 | ✅ |
 | 没有逐命令帮助 | Agent 要读整份指南 | `quiet help CMD` | ✅ |
 | 没有 shell 的 Agent 用不了 | Claude Desktop 之类只能用 MCP | `quiet mcp`：stdio MCP 服务，只有两个工具：`quiet`（命令行）和 `quiet_run`（脚本），schema 很小 | ✅ |
-| 没装到 PATH | 用户拿不到 `quiet` | macOS 包把 `quiet` 放进 `Contents/MacOS/`。Windows 安装包放在 exe 旁边。指南写软链接方法。 | ✅（打包脚本） |
-| 不知道 Agent 用得好不好 | 设计没验证 | 用模拟文档库和一组真实任务，让不同档位的模型只看 `quiet skill` 去完成，记录成功率、调用次数和卡住的地方，再据此改 | ✅ |
+| 没装到 PATH | 用户拿不到 `quiet` | 见「分发」 | ✅（打包脚本） |
+| 不知道 Agent 用得好不好 | 设计没验证 | 用模拟文档库和一组真实任务，让不同档位的模型只看 `quiet guide`（当时叫 `quiet skill`）去完成，记录成功率、调用次数和卡住的地方，再据此改 | ✅ |
 | Windows 没编过 | QuickJS 是 C 代码 | 在 sida-windows 上编译并跑测试 | ✅ |
 | CLI 保存不留历史版本 | 原来用 `Store::load` 读文档，没有登记编辑基线，`Store` 不存快照，改错了也无法 `restore` | 改用 `load_for_edit`，和编辑器一样登记基线。`restore` 前强制存一次快照，所以恢复本身也能撤销。 | ✅ |
 | 写不出文档之间的链接（评估发现） | `[标题](路径.xml)` 会变成普通网页链接，读出时提及也只剩纯文本，复制章节会丢链接 | 写入时，`[[路径或标题]]` 和指向库内文件的相对链接都转成 @提及；找不到目标就报 `not_found`。按 Markdown 读出时，提及写回 `[[路径]]`，读出的内容可以原样写回。 | ✅ |
@@ -200,10 +209,6 @@ CLI 能做应用里数据表的大部分事：读视图、按条件查、改字�
 - **画板细粒度编辑。** 按元素 id 改文字、移动、删除。
 - **PDF。** 等应用支持 PDF 后，`read` 输出文字，`outline` 输出书签。
 - **设置里加「安装命令行工具」。** 在 `~/.local/bin` 或 `/usr/local/bin` 建软链接。
-- **发版时：**
-  - 第一个带 `quiet` 的版本发布后，Homebrew cask 加 `binary "#{appdir}/quiet.md.app/Contents/MacOS/quiet"`，`brew install` 就能直接把它放到 PATH。现在加会让旧版本的安装失败。
-  - Windows 打包脚本把 `target\release\quiet.exe` 复制进 AppSource（`.iss` 已允许它不存在）。
-  - AppImage 暂不带 CLI，Linux 的 tar 包带。
 - **导入移进 core。** `quiet import` 和应用的 `transfer.rs` 现在各有一份 Markdown/CSV 导入代码。应用那份依赖 GPUI 侧的图片处理（`localize_pasted_images`），要先把它移进 core，两边再共用。
 - **数据表的值类型。** 现在读出的值都是字符串。可以加 `--typed`，按字段类型给出数字、布尔和数组。
 - **`read --as xml` 支持按块读。**
