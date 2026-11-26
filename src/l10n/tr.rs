@@ -1506,4 +1506,5 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("Skill 配套的命令行工具：在终端里用 quiet 命令列出、读写、搜索文档和数据表。", "Skill'in kullandığı komut: quiet ile belgeleri ve veri tablolarını listele, oku, yaz ve ara."),
     ("或者把这句话发给你的 Agent。", "Ya da bunu ajanına gönder."),
     ("按照 {} 安装 Quiet.md 的 skill 和 CLI。", "Quiet.md'nin skill'ini ve CLI'ını {} adresindeki adımları izleyerek kur."),
+    ("首次启动引导", "Karşılama turu"),
 ];

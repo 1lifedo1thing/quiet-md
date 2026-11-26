@@ -147,7 +147,7 @@ impl Workspace {
 
 /// Opening it would run something (an app, a script, an installer): a link
 /// in a note someone sent must not, so it only shows in the Finder.
-fn runs_program(p: &std::path::Path) -> bool {
+pub(crate) fn runs_program(p: &std::path::Path) -> bool {
     const RUN: &[&str] = &["app", "command", "tool", "terminal", "sh", "bash", "zsh", "csh", "fish", "py", "pyw", "pl", "rb", "php", "js", "jse",
         "scpt", "applescript", "workflow", "action", "pkg", "mpkg", "dmg", "jar", "exe", "com", "bat", "cmd", "msi", "msix", "ps1", "vbs", "vbe",
         "wsf", "wsh", "scr", "pif", "hta", "cpl", "reg", "lnk", "desktop", "appimage", "run", "url", "webloc", "inetloc", "fileloc"];
