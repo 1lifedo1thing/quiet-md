@@ -260,7 +260,7 @@ impl Editor {
                 }
             }
             ButtonAction::DuplicatePage => cx.emit(EditorEvent::Duplicate),
-            ButtonAction::FollowPage => self.toast(crate::settings::text("「关注」来自飞书，这里只作展示"), cx),
+            ButtonAction::FollowPage => self.toast(crate::settings::text("当前位置暂不支持该功能"), cx),
         }
     }
 
