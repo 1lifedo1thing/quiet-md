@@ -533,7 +533,7 @@ impl Editor {
         let duration = if d.by_date {
             let end = crate::time::local_to_unix(y, m, dd, h, mi) * 1000;
             if end < now as i64 {
-                self.toast_kind(ToastKind::Error, crate::settings::text("设置的倒计时时间必须晚于当前 GMT+8 的时间"), cx);
+                self.toast_kind(ToastKind::Error, crate::settings::text("请选一个晚于现在的时间（GMT+8）"), cx);
                 return;
             }
             (end - now as i64) as f64 / 1000. + 1.
