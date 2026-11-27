@@ -86,7 +86,7 @@ impl Workspace {
             }
             Err(e) => self.status = crate::app::SaveStatus::Failed(crate::localized_format!("新建失败：{}", "Could not create document: {}", crate::settings::diagnostic(&e.to_string()))),
         }
-        self.remember_files(file_before, tr("新建数据表", "New data table"));
+        self.remember_files(file_before, tr("新建数据表", "New database"));
         cx.notify();
     }
 

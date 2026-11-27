@@ -30,7 +30,7 @@ Quiet.md 数据表。每张数据表就是一张同名的 SQL 表，列名就是
 - 别的列可以直接改，也可以加行、删行、加列、加表：Quiet.md 下次读取时照单全收，没见过的选项名会加进选项。
 - 选项的颜色、数字和日期的显示格式、公式、是否唯一键（`unique`，只是标记，不阻止重复）在 `_fields.options`；视图（筛选、排序、分组、列宽等）在 `_views.config`；表的顺序在 `_tables`。
 
-A Quiet.md data table file. Every data table is a SQL table of the same name; its columns are the fields and its values are what the app shows.
+A Quiet.md database file. Each of its tables is a SQL table of the same name; its columns are the fields and its values are what the app shows.
 - Seven leading columns: `id` is the record's id (primary key), a random integer below 2^53; `_order` is its sort key in manual order: the rows sorted by it as strings are in order (equal keys by id); `_created_at` and `_updated_at` are when the record was made and last changed, UTC ISO 8601 such as 2027-01-15T00:02:03.123Z (2027-01-15 08:02:03+08:00, with an offset, reads too; no zone means UTC); `_created_by` and `_updated_by` say who made it and who changed it last (`user`: in Quiet.md; `agent:<name>`: an agent), empty when not known; `_auto` is its auto number.
 - Table, field, view and option ids are random integers too, each used once in the file. A row added without an id or `_order` is fine: Quiet.md fills them in when it reads it, and puts the row last; with no times it is taken as made now, with no `_auto` it gets a new number.
 - A single select holds the option's name; multi selects and people hold a JSON array of names; links hold a JSON array of the other table's record ids; attachments hold a JSON array of {path, name}; a note holds the path of its note relative to the folder this file is in (`三体.xml`, `../elsewhere/note.xml`); dates read 2026-11-17 or 2026-11-17 09:30; checkboxes are 1 / 0; an empty cell is NULL.

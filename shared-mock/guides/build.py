@@ -7,6 +7,7 @@ Each file in src/ is one document (file name order = reading order): a
 DocxXML .xml, or a Markdown file, 画板 or 数据表 copied as it is (NAMED titles
 those). Placeholders in the .xml ones:
   {{doc:key}}                       @文档 link to the guide whose KEYS entry is key
+  {{folder:key}}                    the name of the FOLDERS entry key (titles too)
   {{reminder:YYYY-MM-DD HH:MM}}     timed date reminder, notified when it is due
   {{reminder-day:YYYY-MM-DD}}       whole-day reminder, notified 09:00 that day
   {{countdown:YYYY-MM-DD HH:MM}}    countdown block to that moment (blue)
@@ -32,12 +33,13 @@ if zh: args = args[2:]
 assert len(args) == 1, __doc__
 out = Path(args[0]).resolve()
 NS = uuid.UUID("6f7c1e9a-9d0b-4a51-8c7e-2a1d3b4c5e6f")
-# Folders in the guide library: key -> title, a folder on disk.
-FOLDERS = ({"documents": "文档", "markdown-files": "Markdown 文件", "boards-folder": "画板", "data-tables-folder": "数据表"} if zh else
-           {"documents": "Documents", "markdown-files": "Markdown files", "boards-folder": "Boards", "data-tables-folder": "Data tables"})
+# Folders in the guide library: key -> title, a folder on disk. The guides
+# name a folder with {{folder:key}}, so renaming one is done here.
+FOLDERS = ({"documents": "文档", "markdown-files": "Markdown 文件", "boards-folder": "画板", "data-tables-folder": "数据表", "everyday": "日常使用"} if zh else
+           {"documents": "Documents", "markdown-files": "Markdown files", "boards-folder": "Boards", "data-tables-folder": "Databases", "everyday": "Everyday use"})
 # The top level, in order; every entry gets its place, so the sidebar and
-# Home's manual order (the default) read the same.
-TOP = ["welcome", "documents", "markdown-files", "boards-folder", "data-tables-folder", "organize", "data", "personalize", "practice"]
+# Home's manual order (the default) read the same. Only Welcome is not in a folder.
+TOP = ["welcome", "documents", "markdown-files", "boards-folder", "data-tables-folder", "everyday"]
 # file stem -> (key, parent key, pinned); a parent is a key of FOLDERS
 KEYS = {
     "01-welcome": ("welcome", None, False),
@@ -50,10 +52,9 @@ KEYS = {
     "06a-trip": ("board-trip", "boards-folder", False),
     "07-data-tables": ("data-tables", "data-tables-folder", False),
     "07a-reading-list": ("reading-list", "data-tables-folder", False),
-    "08-organize": ("organize", None, False),
-    "09-data": ("data", None, False),
-    "10-personalize": ("personalize", None, False),
-    "11-practice": ("practice", None, False),
+    "08-organize": ("organize", "everyday", False),
+    "09-data": ("data", "everyday", False),
+    "10-personalize": ("personalize", "everyday", False),
 }
 # What is not a DocxXML document (a Markdown file, a 画板, a 数据表) is titled
 # by its file name: key -> title. Its source is copied as it is.
@@ -64,6 +65,10 @@ ids.update({k: str(uuid.uuid5(NS, k)) for k in FOLDERS})
 files = [p for p in sorted((here / "src" / ("zh" if zh else "")).iterdir()) if p.is_file() and not p.name.startswith(".")]
 ext = {KEYS[p.stem][0]: p.suffix for p in files}
 srcs = {KEYS[p.stem][0]: p.read_bytes() if p.suffix == ".sqlite" else p.read_text() for p in files}
+def folder(m):
+    assert m.group(1) in FOLDERS, f"unknown folder {m.group(1)}"
+    return FOLDERS[m.group(1)]
+srcs = {k: re.sub(r"\{\{folder:([a-z-]+)\}\}", folder, x) if isinstance(x, str) else x for k, x in srcs.items()}
 assert set(NAMED) == {k for k, e in ext.items() if e != ".xml"}, "NAMED must title every file that is not .xml"
 missing = set(ids) - set(srcs) - set(FOLDERS)
 assert not missing, f"no source for {missing}"

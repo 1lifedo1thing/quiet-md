@@ -1961,7 +1961,7 @@ impl Workspace {
                     .into_any_element(),
             );
             crumbs.push(sep());
-            title = crate::settings::tr("数据表", "Data table").to_string();
+            title = crate::settings::tr("数据表", "Database").to_string();
         }
         // Too narrow for the path: it folds into one "…" (the path on hover),
         // and the title keeps the room. Left: the sidebar's buttons when it is

@@ -777,7 +777,7 @@ impl Workspace {
             },
             item("import-xml", "doc", crate::settings::tr("导入 DocxXML…", "Import DocxXML…"), ImportKind::DocxXml),
         ];
-        out.push(item("import-csv", "table-import", crate::settings::tr("从 CSV 新建数据表…", "New Data Table from CSV…"), ImportKind::Csv));
+        out.push(item("import-csv", "table-import", crate::settings::tr("从 CSV 新建数据表…", "New Database from CSV…"), ImportKind::Csv));
         out
     }
 

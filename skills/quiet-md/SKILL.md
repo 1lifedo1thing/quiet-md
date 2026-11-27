@@ -1,6 +1,6 @@
 ---
 name: quiet-md
-description: Read, search, edit and organize the user's Quiet.md notes library (documents, Markdown notes, boards, 数据表 data tables) with the `quiet` command line tool. Use it whenever a task touches the user's notes or knowledge base — "my notes", "my library", "Quiet.md", 笔记, 笔记库, 文档库, 知识库, 周报, 会议纪要, 待办, 数据表 — to find or summarize something in them, write a new note, update or reorganize existing ones, collect todos, query or fill a data table, or draw a diagram on a board. Edit the library through `quiet`, not by writing its files directly.
+description: Read, search, edit and organize the user's Quiet.md notes library (documents, Markdown notes, boards, 数据表 databases) with the `quiet` command line tool. Use it whenever a task touches the user's notes or knowledge base — "my notes", "my library", "Quiet.md", 笔记, 笔记库, 文档库, 知识库, 周报, 会议纪要, 待办, 数据表 — to find or summarize something in them, write a new note, update or reorganize existing ones, collect todos, query or fill a data table, or draw a diagram on a board. Edit the library through `quiet`, not by writing its files directly.
 ---
 
 # Quiet.md: the user's notes library
