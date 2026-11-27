@@ -1508,4 +1508,8 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("撤销可以恢复。", "Geri Al ile geri getirebilirsiniz."),
     ("将删除该字段在 {n} 条记录中的数据。", "Bu alanın {n} kayıttaki verileri silinecek."),
     ("将删除这 {k} 个字段在 {n} 条记录中的数据。", "Bu {k} alanın {n} kayıttaki verileri silinecek."),
+    ("撤销{}「{}」", "Geri al: {} “{}”"),
+    ("重做{}「{}」", "Yinele: {} “{}”"),
+    ("撤销{}", "Geri al: {}"),
+    ("重做{}", "Yinele: {}"),
 ];

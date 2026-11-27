@@ -1497,4 +1497,8 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("撤销可以恢复。", "Deshacer lo recupera."),
     ("将删除该字段在 {n} 条记录中的数据。", "Se eliminarán los datos de este campo en {n|one:# registro|other:# registros}."),
     ("将删除这 {k} 个字段在 {n} 条记录中的数据。", "Se eliminarán los datos de estos {k} campos en {n|one:# registro|other:# registros}."),
+    ("撤销{}「{}」", "Deshacer {} «{}»"),
+    ("重做{}「{}」", "Rehacer {} «{}»"),
+    ("撤销{}", "Deshacer {}"),
+    ("重做{}", "Rehacer {}"),
 ];

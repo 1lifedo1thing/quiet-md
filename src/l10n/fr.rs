@@ -1508,4 +1508,8 @@ pub(super) const STRINGS: &[(&str, &str)] = &[
     ("撤销可以恢复。", "Annuler le remet en place."),
     ("将删除该字段在 {n} 条记录中的数据。", "Les données de ce champ seront supprimées dans {n|one:# enregistrement|other:# enregistrements}."),
     ("将删除这 {k} 个字段在 {n} 条记录中的数据。", "Les données de ces {k} champs seront supprimées dans {n|one:# enregistrement|other:# enregistrements}."),
+    ("撤销{}「{}」", "Annuler {} « {} »"),
+    ("重做{}「{}」", "Rétablir {} « {} »"),
+    ("撤销{}", "Annuler {}"),
+    ("重做{}", "Rétablir {}"),
 ];
