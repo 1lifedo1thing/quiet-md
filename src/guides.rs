@@ -27,6 +27,9 @@ pub(crate) fn seeded(root: &Path) -> std::io::Result<bool> {
 
 /// A guide document (not an asset or the index).
 fn is_doc(name: &str) -> bool { !name.starts_with('.') && name.ends_with(".xml") }
+/// A page of the guides: a document, the Markdown example, the 画板 or the 数据表.
+#[cfg(test)]
+fn is_page(name: &str) -> bool { !name.starts_with('.') && fdl_core::store::DocKind::of_name(name).is_some() }
 
 /// Mac-only passages of the guides and what Windows reads instead; key
 /// combinations go through `shortcuts::windows_keys` afterwards.
@@ -176,14 +179,17 @@ mod tests {
         let list = store.list();
         assert!(store.warnings.is_empty(), "{:?}", store.warnings);
         let docs: Vec<_> = list.iter().filter(|e| e.meta.folder.is_none()).collect();
-        assert_eq!(docs.len(), super::files(chinese).iter().filter(|(n, _)| super::is_doc(n)).count());
+        assert_eq!(docs.len(), super::files(chinese).iter().filter(|(n, _)| super::is_page(n)).count());
+        // The examples beside the guides are files of their own kinds.
+        use fdl_core::store::DocKind;
+        assert!(docs.iter().any(|e| e.meta.markdown) && docs.iter().any(|e| e.meta.kind == DocKind::Board) && docs.iter().any(|e| e.meta.kind == DocKind::Table));
         assert!(list.iter().filter(|e| e.meta.folder.is_some()).count() >= 2);
         assert!(docs.iter().any(|e| e.meta.parent.is_some()));
         let ids: std::collections::HashSet<&str> = list.iter().map(|e| e.id.as_str()).collect();
         let links: Vec<_> = docs.iter().flat_map(|e| e.links.iter()).collect();
         assert!(!links.is_empty());
         for l in links { assert!(ids.contains(l.target.as_str()), "unresolved link {}", l.target); }
-        for e in &docs {
+        for e in docs.iter().filter(|e| !e.meta.named_by_file()) {
             let name = store.file_path(&e.id).unwrap().file_stem().unwrap().to_string_lossy().into_owned();
             assert_eq!(name, crate::store::file_name_for(&e.title), "build.py names {} differently", e.title);
         }
