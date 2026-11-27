@@ -870,11 +870,11 @@ impl Workspace {
         let gap = if mixed { 24. } else { 16. };
         let wide_cols = (((avail + gap) / (200. + gap)).floor() as usize).max(1);
         let n = if wide_cols >= 4 { (((avail + gap) / (240. + gap)).floor() as usize).max(4) } else { (((avail + gap) / (160. + gap)).floor() as usize).clamp(1, 3) };
-        // A document card is always 5:6 at its column's width; folders stand
-        // taller by their tab so the pages line up beside them.
+        // A card is always 5:6 at its column's width, a folder's too: its tab
+        // inside that height, so folders and documents share top and bottom
+        // edges (the maintainer, 2026-11-27).
         let col_w = (avail - gap * (n - 1) as f32) / n as f32;
-        let doc_h = col_w * (6. / 5.);
-        let card_h = if mixed { doc_h / (1. - crate::folder_card::TAB) } else { doc_h };
+        let card_h = col_w * (6. / 5.);
         let rows = entries.len().div_ceil(n);
         let grid = uniform_list("page-grid-area", rows, cx.processor(move |workspace, range: std::ops::Range<usize>, window, cx| {
             range.map(|row| {
@@ -885,8 +885,6 @@ impl Workspace {
                     .children(entries[start..end].iter().map(|e| {
                         // A folder with a 正文 is a document with child pages: a document's card (#357).
                         let card = if e.meta.folder.is_some() && e.note.is_none() { workspace.render_folder_card(e, col_w, card_h, window, cx) }
-                        else if mixed { div().w_full().min_w_0().h(px(card_h)).flex().flex_col().justify_end()
-                            .child(workspace.render_doc_card(e, doc_h, cx)).into_any_element() }
                         else { workspace.render_doc_card(e, card_h, cx) };
                         workspace.card_motion(&e.id, card)
                     }))

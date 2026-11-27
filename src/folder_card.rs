@@ -20,8 +20,8 @@ use gpui::{prelude::FluentBuilder, *};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use web_time::Instant;
 
-/// The tab's share of a folder card's height: the folder's body is a document
-/// card's size, the tab rises above it (`folder_page.rs` lowers the cards beside it).
+/// The tab's share of a folder card's height: the card is a document card's
+/// size, tab included (`folder_page.rs`), the body below the tab.
 pub(crate) const TAB: f32 = 0.06;
 /// Papers peeking out of a folder.
 const PAPERS: usize = 3;
