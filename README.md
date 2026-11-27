@@ -69,7 +69,7 @@ Boards are a whiteboard ported from Excalidraw: shapes, arrows that stay attache
 
 ### Organize in real folders
 
-The sidebar groups your top-level folders, and each one's page is its home: subfolders show as stacks of their pages, and the list view sorts by any column. Add any folder on your computer with **Add Folder** and it is used where it is. Hold a note over a folder and it opens for you; folders go inside folders, pages and folders move between top-level folders, and every move can be undone. Pin notes to the top of the sidebar, search every title and line from the search icon or `⌘ J`, and find and replace within a note, with regular expressions if you like. Deleted notes wait in the Trash for as many days as you choose. A Markdown file opened on its own is edited in its own window, right where it is.
+The sidebar groups your top-level folders. Open one and its page shows subfolders as stacks of their pages, and the list view sorts by any column. Add any folder on your computer with **Add Folder** and it is used where it is. Hold a note over a folder and it opens for you; folders go inside folders, pages and folders move between top-level folders, and every move can be undone. Pin notes to the top of the sidebar, search every title and line from the search icon or `⌘ J`, and find and replace within a note, with regular expressions if you like. Deleted notes wait in the Trash for as many days as you choose. A Markdown file opened on its own is edited in its own window, right where it is.
 
 ### Bring your notes
 
@@ -90,6 +90,23 @@ The `quiet` command line tool lets an AI agent (Claude Code, Codex and others) r
 - **Your language**: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, French, Arabic and Turkish. Arabic text joins its letters and runs right to left.
 - **Housekeeping**: Settings › Documents finds images and files no note uses any more and moves them out once you confirm.
 - **Updates**: new versions install from inside the app after their signature is verified. Automatic checks can be turned off.
+
+## Roadmap
+
+- [x] Rich documents: headings, lists, callouts, tables, columns, code, math, images and files
+- [x] Markdown files, opened and edited in place
+- [x] Boards: hand-drawn diagrams and sketches, inside notes or on their own
+- [x] Open any folder in place, side by side in the sidebar
+- [x] Import from Obsidian, Logseq, SiYuan, Typora, iA Writer and any Markdown folder
+- [x] Writing modes: focus, typewriter and paragraph focus
+- [x] Themes, dark mode and nine languages
+- [x] A `quiet` CLI and skill for AI agents
+- [ ] Data tables (in progress)
+- [ ] Mermaid diagrams (in progress)
+- [ ] Mobile support: iPhone, iPad and Android (in progress)
+- [ ] Sync across devices (in progress)
+- [ ] Document properties
+- [ ] Web clipper
 
 ## Download
 

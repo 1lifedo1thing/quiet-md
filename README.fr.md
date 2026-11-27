@@ -43,7 +43,7 @@
 
 ## Pourquoi Quiet.md
 
-**📁 Vos notes sont de simples fichiers.** Pas de compte, pas de cloud, et rien ne part sur le réseau par défaut (hors vérification facultative des mises à jour et polices que vous déclenchez : la police manuscrite pour le chinois, le japonais et le coréen la première fois qu'un tableau blanc en a besoin, et une police de document téléchargeable quand vous la choisissez). Chaque dossier de la barre latérale est un vrai dossier sur votre disque, et chaque note est un fichier nommé d'après son titre : `.md` pour le Markdown, `.xml` pour les documents enrichis. Synchronisez-les avec iCloud, Git ou l'outil de votre choix. Si vous arrêtez un jour d'utiliser Quiet.md, vos fichiers restent exactement où ils sont.
+**📁 Vos notes sont de simples fichiers.** Pas de compte, pas de cloud, et rien ne part sur le réseau par défaut (hors vérification facultative des mises à jour, comptes d'utilisation anonymes envoyés une fois par jour par l'app et l'outil en ligne de commande `quiet` — seulement des comptes, comme le nombre d'ouvertures de l'app ; à désactiver dans Réglages › Général › Statistiques d'utilisation anonymes — et polices que vous déclenchez : la police manuscrite pour le chinois, le japonais et le coréen la première fois qu'un tableau blanc en a besoin, et une police de document téléchargeable quand vous la choisissez). Chaque dossier de la barre latérale est un vrai dossier sur votre disque, et chaque note est un fichier nommé d'après son titre : `.md` pour le Markdown, `.xml` pour les documents enrichis. Synchronisez-les avec iCloud, Git ou l'outil de votre choix. Si vous arrêtez un jour d'utiliser Quiet.md, vos fichiers restent exactement où ils sont.
 
 **⚡ Native, et rapide.** Toute l'interface est dessinée sur le GPU par Rust et [GPUI](https://www.gpui.rs/). Ni Electron, ni WebView. Dans une note d'un million de caractères, la frappe prend environ 5 ms par image, quand un écran à 120 Hz en accorde 8,3.
 
@@ -69,7 +69,7 @@ Les tableaux sont un tableau blanc porté d'Excalidraw : formes, flèches qui re
 
 ### Ranger dans de vrais dossiers
 
-La barre latérale regroupe vos dossiers de premier niveau, et la page de chacun est son accueil : les sous-dossiers s'y montrent en piles de leurs pages, et la vue en liste se trie par n'importe quelle colonne. Ajoutez n'importe quel dossier de votre ordinateur avec **Ajouter un dossier** : il s'utilise sur place. Maintenez une note au-dessus d'un dossier et il s'ouvre tout seul ; les dossiers s'imbriquent, pages et dossiers passent d'un dossier de premier niveau à un autre, et chaque déplacement s'annule. Épinglez des notes en haut de la barre latérale, cherchez dans tous les titres et toutes les lignes depuis l'icône de recherche ou avec `⌘ J`, et faites des rechercher-remplacer dans une note, expressions régulières comprises. Les notes supprimées attendent dans la corbeille le nombre de jours que vous choisissez. Un fichier Markdown ouvert seul se modifie dans sa propre fenêtre, sur place.
+La barre latérale regroupe vos dossiers de premier niveau ; ouvrez-en un, et sa page montre les sous-dossiers en piles de leurs pages, et la vue en liste se trie par n'importe quelle colonne. Ajoutez n'importe quel dossier de votre ordinateur avec **Ajouter un dossier** : il s'utilise sur place. Maintenez une note au-dessus d'un dossier et il s'ouvre tout seul ; les dossiers s'imbriquent, pages et dossiers passent d'un dossier de premier niveau à un autre, et chaque déplacement s'annule. Épinglez des notes en haut de la barre latérale, cherchez dans tous les titres et toutes les lignes depuis l'icône de recherche ou avec `⌘ J`, et faites des rechercher-remplacer dans une note, expressions régulières comprises. Les notes supprimées attendent dans la corbeille le nombre de jours que vous choisissez. Un fichier Markdown ouvert seul se modifie dans sa propre fenêtre, sur place.
 
 ### Apporter vos notes
 
@@ -85,6 +85,23 @@ Importer depuis une autre app… (dans le menu Fichier) cherche sur l'ordinateur
 - **Votre langue** : anglais, chinois simplifié, chinois traditionnel, japonais, coréen, espagnol, français, arabe et turc. L'arabe lie ses lettres et s'écrit de droite à gauche.
 - **Ménage** : Réglages › Bibliothèque repère les images et fichiers qu'aucune note n'utilise plus et les retire une fois que vous avez confirmé.
 - **Mises à jour** : les nouvelles versions s'installent depuis l'app après vérification de leur signature. Les vérifications automatiques peuvent être désactivées.
+
+## Feuille de route
+
+- [x] Documents riches : titres, listes, encadrés, tableaux, colonnes, code, formules, images et fichiers
+- [x] Fichiers Markdown, ouverts et modifiés sur place
+- [x] Tableaux blancs : schémas et croquis à main levée, dans les notes ou à part
+- [x] Ouvrir n'importe quel dossier sur place, côte à côte dans la barre latérale
+- [x] Import depuis Obsidian, Logseq, SiYuan, Typora, iA Writer et tout dossier Markdown
+- [x] Modes d'écriture : concentration, machine à écrire et focus sur le paragraphe
+- [x] Thèmes, mode sombre et neuf langues
+- [x] Une CLI `quiet` et une skill pour les agents d'IA
+- [ ] Tables de données (en cours)
+- [ ] Diagrammes Mermaid (en cours)
+- [ ] Mobile : iPhone, iPad et Android (en cours)
+- [ ] Synchronisation entre appareils (en cours)
+- [ ] Propriétés de document
+- [ ] Capture de pages web
 
 ## Téléchargement
 

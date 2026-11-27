@@ -43,7 +43,7 @@
 
 ## Por qué Quiet.md
 
-**📁 Tus notas son archivos, sin más.** Sin cuenta, sin nube y, por defecto, nada sale a la red (salvo la comprobación opcional de actualizaciones y las fuentes que tú provocas: la manuscrita para chino, japonés y coreano la primera vez que una pizarra la necesita, y una fuente de documento descargable cuando la eliges). Cada carpeta de la barra lateral es una carpeta real de tu disco, y cada nota es un archivo con el nombre de su título: `.md` para Markdown y `.xml` para documentos enriquecidos. Sincronízalas con iCloud, Git o lo que prefieras. Si algún día dejas Quiet.md, tus archivos siguen exactamente donde estaban.
+**📁 Tus notas son archivos, sin más.** Sin cuenta, sin nube y, por defecto, nada sale a la red (salvo la comprobación opcional de actualizaciones, los recuentos de uso anónimos que la app y la herramienta de línea de comandos `quiet` envían una vez al día —solo recuentos, como cuántas veces se abrió la app; se desactivan en Ajustes › General › Estadísticas de uso anónimas— y las fuentes que tú provocas: la manuscrita para chino, japonés y coreano la primera vez que una pizarra la necesita, y una fuente de documento descargable cuando la eliges). Cada carpeta de la barra lateral es una carpeta real de tu disco, y cada nota es un archivo con el nombre de su título: `.md` para Markdown y `.xml` para documentos enriquecidos. Sincronízalas con iCloud, Git o lo que prefieras. Si algún día dejas Quiet.md, tus archivos siguen exactamente donde estaban.
 
 **⚡ Nativa, y rápida.** Toda la interfaz la dibujan en la GPU Rust y [GPUI](https://www.gpui.rs/). Sin Electron, sin WebView. En una nota de un millón de caracteres, escribir cuesta unos 5 ms por fotograma, y una pantalla de 120 Hz da 8,3.
 
@@ -69,7 +69,7 @@ Las pizarras son un tablero portado de Excalidraw: formas, flechas que siguen un
 
 ### Organiza en carpetas de verdad
 
-La barra lateral agrupa tus carpetas de primer nivel, y la página de cada una es su inicio: las subcarpetas aparecen como pilas de sus páginas y la vista de lista ordena por cualquier columna. Añade cualquier carpeta del ordenador con **Añadir carpeta** y se usa donde está. Mantén una nota sobre una carpeta y se abrirá sola; las carpetas pueden ir dentro de otras carpetas, las páginas y carpetas pasan de una carpeta de primer nivel a otra, y cada movimiento se puede deshacer. Fija notas arriba en la barra lateral, busca en todos los títulos y líneas desde el icono de búsqueda o con `⌘ J`, y busca y reemplaza dentro de una nota, también con expresiones regulares. Las notas eliminadas esperan en la papelera los días que elijas. Un archivo Markdown abierto por separado se edita en su propia ventana, donde está.
+La barra lateral agrupa tus carpetas de primer nivel; al abrir una, su página muestra las subcarpetas como pilas de sus páginas y la vista de lista ordena por cualquier columna. Añade cualquier carpeta del ordenador con **Añadir carpeta** y se usa donde está. Mantén una nota sobre una carpeta y se abrirá sola; las carpetas pueden ir dentro de otras carpetas, las páginas y carpetas pasan de una carpeta de primer nivel a otra, y cada movimiento se puede deshacer. Fija notas arriba en la barra lateral, busca en todos los títulos y líneas desde el icono de búsqueda o con `⌘ J`, y busca y reemplaza dentro de una nota, también con expresiones regulares. Las notas eliminadas esperan en la papelera los días que elijas. Un archivo Markdown abierto por separado se edita en su propia ventana, donde está.
 
 ### Trae tus notas
 
@@ -85,6 +85,23 @@ Importar desde otra app… (en el menú Archivo) busca en el ordenador tus bibli
 - **Tu idioma**: inglés, chino simplificado, chino tradicional, japonés, coreano, español, francés, árabe y turco. El árabe une sus letras y se escribe de derecha a izquierda.
 - **Limpieza**: Ajustes › Biblioteca encuentra las imágenes y archivos que ya no usa ninguna nota y los retira cuando lo confirmas.
 - **Actualizaciones**: las versiones nuevas se instalan desde la propia app tras verificar su firma. Las comprobaciones automáticas se pueden desactivar.
+
+## Hoja de ruta
+
+- [x] Documentos enriquecidos: encabezados, listas, avisos destacados, tablas, columnas, código, fórmulas, imágenes y archivos
+- [x] Archivos Markdown, abiertos y editados donde están
+- [x] Pizarras: diagramas y bocetos a mano alzada, dentro de las notas o por separado
+- [x] Abre cualquier carpeta donde está, una junto a otra en la barra lateral
+- [x] Importa desde Obsidian, Logseq, SiYuan, Typora, iA Writer y cualquier carpeta de Markdown
+- [x] Modos de escritura: concentración, máquina de escribir y enfoque de párrafo
+- [x] Temas, modo oscuro y nueve idiomas
+- [x] Una CLI `quiet` y una skill para agentes de IA
+- [ ] Tablas de datos (en curso)
+- [ ] Diagramas Mermaid (en curso)
+- [ ] Móviles: iPhone, iPad y Android (en curso)
+- [ ] Sincronización entre dispositivos (en curso)
+- [ ] Propiedades de documento
+- [ ] Recortes web
 
 ## Descarga
 
