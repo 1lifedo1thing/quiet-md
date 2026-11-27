@@ -799,18 +799,29 @@ impl Workspace {
             );
         }
         header = header.child(div().w(px(60.)).flex_none());
-        let mut rows = div().id("page-rows").flex_1().min_h_0().overflow_y_scroll().track_scroll(list_scroll).px(px(24.)).pb(px(24.));
+        let mut rows = div().id("page-rows").on_mouse_move(cx.listener(|w, ev: &MouseMoveEvent, _, cx| w.track_card_press(ev, cx)))
+            .flex_1().min_h_0().overflow_y_scroll().track_scroll(list_scroll).px(px(24.)).pb(px(24.));
         if entries.is_empty() {
             rows = rows.child(div().pt(px(72.)).child(empty_state("illus/empty-list.svg", crate::settings::text("当前列表暂无内容"))));
         }
         for (i, e) in entries.iter().enumerate() {
-            let (id, id2) = (e.id.clone(), e.id.clone());
+            let (id, id2, arm) = (e.id.clone(), e.id.clone(), e.id.clone());
             let menu_on = self.row_menu.as_ref().is_some_and(|m| m.id == e.id);
             let check = self.card_check(e);
             let key = SharedString::from(format!("page-row-{}", e.id));
+            // Carried away: its place an empty row, as a card's is.
+            if self.card_dragging(&e.id) {
+                let slot = div().id(key).relative().h(px(56.)).child(self.record_card(&e.id))
+                    .child(div().absolute().inset_0().rounded(px(ROW_RADIUS)).bg(Theme::fill_hover()));
+                rows = rows.child(self.card_motion(&e.id, slot.into_any_element()));
+                continue;
+            }
+            let over = self.card_drop_over(&e.id);
             let mut row = div()
                 .id(key.clone())
-                .relative().children(crate::devtools::anchor_probe(format!("list:{}", display_title(&e.title))))
+                .relative().child(self.record_card(&e.id)).children(crate::devtools::anchor_probe(format!("list:{}", display_title(&e.title))))
+                .when(check.is_none(), |d| d.on_mouse_down(MouseButton::Left, cx.listener(move |w, ev: &MouseDownEvent, _, cx| w.arm_card_drag(&arm, ev.position, cx))))
+                .when(over, |d| d.bg(Theme::sidebar_drop()).rounded(px(ROW_RADIUS)))
                 .h(px(56.))
                 .flex()
                 .items_center()
@@ -842,7 +853,7 @@ impl Workspace {
                 row = row.child(col_cell().pl(px(24.)).text_size(px(13.)).text_color(Theme::text_caption()).whitespace_nowrap().overflow_hidden().child(cell_text(e, *c)));
             }
             row = row.child(div().w(px(60.)).flex_none().flex().justify_end().pr(px(12.)).when(self.batch.is_none(), |d| d.child(self.card_more(e, format!("page-more-{}", e.id), cx))));
-            rows = rows.child(row);
+            rows = rows.child(self.card_motion(&e.id, row.into_any_element()));
         }
         div().flex_1().min_h_0().flex().flex_col().child(header.mx(px(24.)))
             .child(div().relative().flex_1().min_h_0().flex().flex_col().child(rows).child(self.folder_page.list_scrollbar.render(list_scroll))).into_any_element()
@@ -873,10 +884,11 @@ impl Workspace {
                     .grid().grid_cols(n as u16).gap(px(gap))
                     .children(entries[start..end].iter().map(|e| {
                         // A folder with a 正文 is a document with child pages: a document's card (#357).
-                        if e.meta.folder.is_some() && e.note.is_none() { workspace.render_folder_card(e, col_w, card_h, window, cx) }
+                        let card = if e.meta.folder.is_some() && e.note.is_none() { workspace.render_folder_card(e, col_w, card_h, window, cx) }
                         else if mixed { div().w_full().min_w_0().h(px(card_h)).flex().flex_col().justify_end()
                             .child(workspace.render_doc_card(e, doc_h, cx)).into_any_element() }
-                        else { workspace.render_doc_card(e, card_h, cx) }
+                        else { workspace.render_doc_card(e, card_h, cx) };
+                        workspace.card_motion(&e.id, card)
                     }))
             }).collect()
         }))

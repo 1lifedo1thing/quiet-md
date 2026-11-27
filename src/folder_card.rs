@@ -39,6 +39,11 @@ pub(crate) struct FolderCards {
     pub(crate) file_drop: Option<FileDrop>,
     /// Last-frame window bounds of the folder and document cards, by entry id.
     bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// Each card's / list row's place in the layout, before `motion` moves it
+    /// (`card_motion`): a reorder is aimed at these, so cards making room never move the targets.
+    slots: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
+    /// How far each card / row stands from its layout place, gliding to make room (手动排序).
+    motion: RefCell<HashMap<String, (Spring<2>, Instant)>>,
     /// The folder cards' papers and counts, kept while the entries hold (`Entries::generation`).
     papers: RefCell<Papers>,
 }
@@ -94,7 +99,19 @@ pub(crate) struct CardDrag {
     over: Option<String>,
     returning: bool,
     last: Option<Instant>,
+    /// 手动排序: the page's cards / rows as laid out when it was picked up, in their order.
+    /// Empty otherwise: a drop only goes into a folder.
+    slots: Vec<(String, Option<Bounds<Pixels>>)>,
+    /// Where it goes among the others (an index into `slots` without it): the gap the others open.
+    target: usize,
+    /// Carried as a row's face rather than a paper: a folder card, or any row of the list.
+    chip: bool,
+    list: bool,
 }
+
+/// The carried row face (a folder card's, a list row's).
+const CHIP_H: f32 = 40.;
+const CHIP_W: f32 = 260.;
 
 /// What lies on a paper: drawn lines, a real title over drawn lines, or real content.
 #[derive(Clone, Copy, PartialEq)]
@@ -258,6 +275,33 @@ fn glass(o: Point<Pixels>, p: &Pose, window: &mut Window) {
     if let Ok(path) = lit.build() { window.paint_path(path, theme::rgbaf(255, 255, 255, if theme::dark() { 0.18 } else { 0.85 + 0.15 * p.open.clamp(0., 1.) })); }
 }
 
+/// The order shown while dragging: the others as they were, the carried one at its gap.
+fn drag_order(d: &CardDrag) -> Vec<&str> {
+    let mut order: Vec<&str> = d.slots.iter().map(|(id, _)| id.as_str()).filter(|id| *id != d.id).collect();
+    order.insert(d.target.min(order.len()), &d.id);
+    order
+}
+
+/// Where the pointer aims a reorder: the folder whose middle it is on (`over`), or
+/// the gap before or after the card / row under it, by which half it is on (else
+/// the nearest one). The places are the pickup layout's, read through the drag's
+/// order, so the gap moving never moves what is under the pointer; on the gap
+/// itself nothing changes.
+fn aim_reorder(d: &CardDrag, at: Point<Pixels>, takes: &dyn Fn(&str) -> bool) -> (Option<String>, Option<usize>) {
+    let order = drag_order(d);
+    let placed = d.slots.iter().enumerate().filter_map(|(i, (_, b))| b.map(|b| (i, b)));
+    let far = |b: &Bounds<Pixels>| { let (dx, dy) = (f32::from(at.x - b.center().x), f32::from(at.y - b.center().y)); if d.list { dy.abs() } else { dx * dx + dy * dy } };
+    let hit = placed.clone().find(|(_, b)| b.contains(&at));
+    let Some((k, b)) = hit.or_else(|| placed.min_by(|(_, a), (_, b)| far(a).total_cmp(&far(b)))) else { return (None, None) };
+    let Some(&occupant) = order.get(k).filter(|o| **o != d.id) else { return (None, None) };
+    let (x, y) = (f32::from(at.x - b.left()) / f32::from(b.size.width), f32::from(at.y - b.top()) / f32::from(b.size.height));
+    // A folder's middle takes it in; its sides, like any other card, are gaps.
+    if hit.is_some() && takes(occupant) && (0.25..0.75).contains(if d.list { &y } else { &x }) { return (Some(occupant.to_string()), None); }
+    let Some(j) = order.iter().filter(|o| **o != d.id).position(|o| *o == occupant) else { return (None, None) };
+    let after = if d.list { y >= 0.5 } else { x >= 0.5 };
+    (None, Some(j + usize::from(after)))
+}
+
 impl Workspace {
     fn folder_papers(&self, id: &str, front: Option<&String>) -> (Vec<Entry>, usize) {
         let key = self.entries.generation();
@@ -308,6 +352,13 @@ impl Workspace {
     pub(crate) fn render_folder_card(&mut self, e: &Entry, w: f32, card_h: f32, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let id = e.id.clone();
         let h = card_h;
+        // Carried away: its place an empty slot of a card's shape, below the tab as a document's.
+        if self.card_dragging(&id) {
+            return div().id(SharedString::from(format!("page-folder-{id}"))).relative().w_full().min_w_0().h(px(h)).flex().flex_col().justify_end()
+                .child(self.record_card(&id))
+                .child(crate::ui::squircle_surface(32., Theme::fill_hover()).w_full().h(px(h * (1. - TAB))))
+                .into_any_element();
+        }
         let hot = self.folder_page.folders.hovered.as_ref() == Some(&id) && self.folder_page.folders.drag.is_none();
         let over = self.folder_page.folders.drag.as_ref().is_some_and(|d| d.started && !d.returning && d.over.as_ref() == Some(&id)) || self.file_drop_over(&id);
         let front = self.folder_page.folders.fx.get(&id).and_then(|f| f.front.clone());
@@ -401,9 +452,11 @@ impl Workspace {
                 else if w.folder_page.folders.hovered.as_ref() == Some(&hover_id) { w.folder_page.folders.hovered = None; }
                 cx.notify();
             }))
-            .on_mouse_down(MouseButton::Left, cx.listener({ let id = id.clone(); move |w, _, _, cx| {
+            .on_mouse_down(MouseButton::Left, cx.listener({ let id = id.clone(); move |w, ev: &MouseDownEvent, _, cx| {
                 // A press sinks the front a little; the release springs it back.
                 if let Some(f) = w.folder_page.folders.fx.get_mut(&id) { f.dip.v += 2.2; }
+                // Picked up like a document card (not in 批量管理, where a press checks it).
+                if w.batch.is_none() { w.arm_card_drag(&id, ev.position, cx); }
                 cx.notify();
             }}))
             .on_click(cx.listener(move |w, _, window, cx| if w.batch.is_some() { w.card_click(&open_id, window, cx) } else { w.try_open(&open_id, window, cx); }))
@@ -424,14 +477,66 @@ impl Workspace {
         canvas(move |b, _, _| { record.borrow_mut().insert(id.clone(), b); }, |_, _, _, _| {}).absolute().inset_0()
     }
 
-    /// A document card picked up on a folder page: it is carried as a
-    /// small page skeleton and can be dropped into a folder (cards are not
-    /// reordered by dragging).
+    /// A card or list row picked up on a folder page. A document card is
+    /// carried as a small page skeleton, a folder card or a row as its row's
+    /// face. Dropped on a folder's middle it goes inside; under 手动排序, put
+    /// anywhere else it takes the gap the others opened for it (Finder's icon
+    /// view: the half of a card the pointer is on says before or after it).
     pub(crate) fn arm_card_drag(&mut self, id: &str, at: Point<Pixels>, _cx: &mut Context<Self>) {
         let Some(origin) = self.folder_page.folders.bounds.borrow().get(id).copied() else { return };
         let grab = (((at.x - origin.left()) / origin.size.width).clamp(0., 1.), ((at.y - origin.top()) / origin.size.height).clamp(0., 1.));
         let r = [f32::from(origin.left()), f32::from(origin.top()), f32::from(origin.size.width), f32::from(origin.size.height)];
-        self.folder_page.folders.drag = Some(CardDrag { id: id.to_string(), start: at, at, started: false, grab, origin, rect: Spring::new(r), over: None, returning: false, last: None });
+        let list = !self.folder_page.grid;
+        let chip = list || self.entries.iter().any(|e| e.id == id && e.meta.folder.is_some() && e.note.is_none());
+        let slots: Vec<_> = if self.manual_page_sort() {
+            let placed = self.folder_page.folders.slots.borrow();
+            self.level_entries(self.folder_current.as_deref()).iter().map(|e| (e.id.clone(), placed.get(&e.id).copied())).collect()
+        } else { vec![] };
+        let target = slots.iter().position(|(k, _)| k == id).unwrap_or(0);
+        self.folder_page.folders.drag = Some(CardDrag { id: id.to_string(), start: at, at, started: false, grab, origin, rect: Spring::new(r), over: None, returning: false, last: None, slots, target, chip, list });
+    }
+
+    /// How far `id` stands from its own place in the drag's order (0 when nothing is reordered).
+    fn drag_offset(&self, id: &str) -> [f32; 2] {
+        let Some(d) = self.folder_page.folders.drag.as_ref().filter(|d| d.started && !d.returning && !d.slots.is_empty()) else { return [0., 0.] };
+        let (Some(from), Some(to)) = (d.slots.iter().position(|(k, _)| k == id), drag_order(d).iter().position(|k| *k == id)) else { return [0., 0.] };
+        match (d.slots[from].1, d.slots.get(to).and_then(|s| s.1)) {
+            (Some(a), Some(b)) => [f32::from(b.left() - a.left()), f32::from(b.top() - a.top())],
+            _ => [0., 0.],
+        }
+    }
+
+    /// A card or list row in its layout place, moved aside by its spring while a drag reorders.
+    pub(crate) fn card_motion(&self, id: &str, child: AnyElement) -> AnyElement {
+        let target = self.drag_offset(id);
+        let now = Instant::now();
+        let mut motions = self.folder_page.folders.motion.borrow_mut();
+        let (spring, last) = motions.entry(id.to_string()).or_insert((Spring::new([0., 0.]), now));
+        spring.target = target;
+        let dt = now.duration_since(*last).as_secs_f32().min(0.032);
+        *last = now;
+        let moving = spring.step(dt);
+        let [x, y] = spring.p;
+        if !moving && target == [0., 0.] { motions.remove(id); }
+        let (slots, key) = (self.folder_page.folders.slots.clone(), id.to_string());
+        div().relative().w_full().min_w_0()
+            .child(canvas(move |b, _, _| { slots.borrow_mut().insert(key.clone(), b); }, move |_, _, window, _| if moving { window.request_animation_frame(); }).absolute().inset_0())
+            .child(div().relative().left(px(x)).top(px(y)).child(child))
+            .into_any_element()
+    }
+
+    /// The layout changed under the springs (a drop reordered the page, or took the carried
+    /// card away): each keeps where it is drawn, measured from its new place.
+    fn settle_card_motion(&self, order: &[&str]) {
+        let Some(d) = self.folder_page.folders.drag.as_ref() else { return };
+        let mut motions = self.folder_page.folders.motion.borrow_mut();
+        for (to, id) in order.iter().enumerate() {
+            let (Some(from), Some((spring, _))) = (d.slots.iter().position(|(k, _)| k == id), motions.get_mut(*id)) else { continue };
+            if let (Some(a), Some(b)) = (d.slots[from].1, d.slots.get(to).and_then(|s| s.1)) {
+                spring.p[0] -= f32::from(b.left() - a.left()); spring.p[1] -= f32::from(b.top() - a.top());
+            }
+            spring.target = [0., 0.];
+        }
     }
 
     /// Before the drag starts the pointer is tracked by the folder page's body.
@@ -446,6 +551,11 @@ impl Workspace {
         }
     }
 
+    /// A folder that would take what is carried (its card or list row lights up).
+    pub(crate) fn card_drop_over(&self, id: &str) -> bool {
+        self.folder_page.folders.drag.as_ref().is_some_and(|d| d.started && !d.returning && d.over.as_deref() == Some(id))
+    }
+
     pub(crate) fn card_dragging(&self, id: &str) -> bool {
         self.folder_page.folders.drag.as_ref().is_some_and(|d| d.started && d.id == id)
     }
@@ -454,17 +564,31 @@ impl Workspace {
         if !self.folder_page.folders.drag.as_ref().is_some_and(|d| d.started && !d.returning) { return; }
         // Only folders on the page now: bounds linger for cards of pages left behind.
         let shown = self.level_entries(self.folder_current.as_deref());
-        let over = shown.iter().filter(|e| e.meta.folder.is_some() && e.note.is_none())
-            .find(|e| self.folder_page.folders.bounds.borrow().get(&e.id).is_some_and(|b| b.contains(&at)))
-            .map(|e| e.id.clone());
+        let takes = |id: &str| id != self.folder_page.folders.drag.as_ref().map_or("", |d| d.id.as_str()) && shown.iter().any(|e| e.id == id && e.meta.folder.is_some() && e.note.is_none());
+        let (over, target) = match self.folder_page.folders.drag.as_ref().filter(|d| !d.slots.is_empty()) {
+            Some(d) => aim_reorder(d, at, &takes),
+            None => (shown.iter().filter(|e| takes(&e.id))
+                .find(|e| self.folder_page.folders.bounds.borrow().get(&e.id).is_some_and(|b| b.contains(&at)))
+                .map(|e| e.id.clone()), None),
+        };
         let Some(d) = self.folder_page.folders.drag.as_mut() else { return };
         d.at = at;
+        if let Some(t) = target { d.target = t; }
         if over != d.over {
             // The folder notices: a small dip as its mouth opens.
             if let Some(f) = over.as_ref().and_then(|k| self.folder_page.folders.fx.get_mut(k)) { f.dip.v -= 1.6; }
             d.over = over;
         }
         cx.notify();
+    }
+
+    /// Where the carried one flies back to: its card, or its row's face over its row.
+    fn rest_rect(d: &CardDrag) -> [f32; 4] {
+        let o = d.origin;
+        if !d.chip { return [f32::from(o.left()), f32::from(o.top()), f32::from(o.size.width), f32::from(o.size.height)]; }
+        let w = CHIP_W.min(f32::from(o.size.width));
+        let x = f32::from(o.left()) + if d.list { 0. } else { (f32::from(o.size.width) - w) / 2. };
+        [x, f32::from(o.top()) + (f32::from(o.size.height) - CHIP_H) / 2., w, CHIP_H]
     }
 
     pub(crate) fn has_card_drag(&self) -> bool { self.folder_page.folders.drag.is_some() }
@@ -475,12 +599,27 @@ impl Workspace {
     }
 
     fn end_card_drag(&mut self, cx: &mut Context<Self>) {
-        let Some(d) = self.folder_page.folders.drag.as_mut().filter(|d| d.started && !d.returning) else { self.folder_page.folders.drag = None; return };
+        let Some(d) = self.folder_page.folders.drag.as_ref().filter(|d| d.started && !d.returning) else { self.folder_page.folders.drag = None; return };
         let target = d.over.clone().and_then(|f| self.folder_page.folders.bounds.borrow().get(&f).copied().map(|b| (f, b)));
+        let source = d.slots.iter().position(|(k, _)| *k == d.id);
+        if target.is_none() && source.is_some_and(|s| s != d.target) {
+            // 手动排序: into the gap. The others stay where they are drawn; the card
+            // comes down from where the carried one was let go.
+            let (id, order) = (d.id.clone(), drag_order(d).into_iter().map(str::to_string).collect::<Vec<_>>());
+            let before = order.iter().skip_while(|k| **k != id).nth(1).cloned();
+            let [x, y, ..] = d.rect.p;
+            let landing = d.slots.get(d.target).and_then(|s| s.1).map(|b| [x - f32::from(b.left()), y - f32::from(b.top())]);
+            self.settle_card_motion(&order.iter().map(String::as_str).collect::<Vec<_>>());
+            if let Some(p) = landing { self.folder_page.folders.motion.borrow_mut().insert(id.clone(), (Spring { p, v: [0.; 2], target: [0., 0.] }, Instant::now())); }
+            self.folder_page.folders.drag = None;
+            self.reorder_page_item(&id, before, cx);
+            return;
+        }
         let Some((folder, b)) = target else {
-            // Not over a folder: the paper flies back and becomes the card again.
+            // Not over a folder, nor moved: the carried one flies back and becomes the card again.
+            let Some(d) = self.folder_page.folders.drag.as_mut() else { return };
             d.returning = true;
-            d.rect.target = [f32::from(d.origin.left()), f32::from(d.origin.top()), f32::from(d.origin.size.width), f32::from(d.origin.size.height)];
+            d.rect.target = Self::rest_rect(d);
             cx.notify();
             return;
         };
@@ -488,6 +627,9 @@ impl Workspace {
         // Hand the paper to the folder where it is; it slides in behind the glass.
         let [x, y, w, h] = d.rect.p;
         let local = [x - f32::from(b.left()), y - f32::from(b.top()), w, h];
+        // The others close the gap it leaves, from where they are drawn.
+        let rest: Vec<&str> = d.slots.iter().map(|(k, _)| k.as_str()).filter(|k| *k != id).collect();
+        self.settle_card_motion(&rest);
         self.folder_page.folders.drag = None;
         let fx = self.folder_page.folders.fx.entry(folder.clone()).or_insert_with(FolderFx::new);
         fx.arrival = Some((id.clone(), Spring::new(local)));
@@ -503,24 +645,30 @@ impl Workspace {
         let now = Instant::now();
         let dt = d.last.replace(now).map_or(1. / 120., |t| now.duration_since(t).as_secs_f32().min(0.032));
         if !d.returning {
-            // The size a paper has inside a folder, from pickup to drop.
-            let (mut x, mut y) = (f32::from(d.at.x) - d.grab.0 * MINI_W, f32::from(d.at.y) - d.grab.1 * MINI_H);
+            // The size a paper has inside a folder, from pickup to drop; a row's face, a chip's.
+            let (w, h) = if d.chip { (CHIP_W.min(f32::from(d.origin.size.width)), CHIP_H) } else { (MINI_W, MINI_H) };
+            let grab_x = if d.chip { (d.grab.0 * f32::from(d.origin.size.width)).min(w - 24.).max(24.) / w } else { d.grab.0 };
+            let (mut x, mut y) = (f32::from(d.at.x) - grab_x * w, f32::from(d.at.y) - if d.chip { 0.5 } else { d.grab.1 } * h);
             if let Some(b) = folder_bounds {
-                // Drawn toward the folder's mouth, held just above the glass.
-                let (fx, fy) = (f32::from(b.center().x) - MINI_W / 2., f32::from(b.top()) + 0.56 * f32::from(b.size.height) - MINI_H);
+                // Drawn toward the folder's mouth, held just above the glass (a list row: toward its row).
+                let (fx, fy) = if d.list { (x, f32::from(b.center().y) - h / 2.) } else { (f32::from(b.center().x) - w / 2., f32::from(b.top()) + 0.56 * f32::from(b.size.height) - h) };
                 x += (fx - x) * 0.45; y += (fy - y) * 0.45;
             }
-            d.rect.target = [x, y, MINI_W, MINI_H];
+            d.rect.target = [x, y, w, h];
         }
         let moving = d.rect.step(dt);
         if d.returning && !moving { self.folder_page.folders.drag = None; cx.notify(); return None; }
         window.request_animation_frame();
         let [x, y, w, h] = d.rect.p;
         let e = self.entries.iter().find(|e| e.id == d.id)?.clone();
+        let chip = d.chip;
         // The carried card is a page's skeleton (a heading bar and lines of text),
         // painted straight onto the GPU: nothing is laid out while it moves.
         let paper = Paper { cx: w / 2., cy: h / 2., w, h, rot: 0., seed: seed(&e.id) };
         let lines = canvas(|_, _, _| {}, move |b, _, window, _| paper.paint(b.origin, Face::Sketch, window)).absolute().inset_0();
+        // A folder or a list row: its face as the sidebar draws it, on a lifted card.
+        let face = chip.then(|| div().size_full().flex().items_center().pr(px(10.)).rounded(px(10.)).bg(theme::raised(Theme::bg_body())).text_color(Theme::text())
+            .child(crate::sidebar_drag::row_face(&e).pl(px(10.))));
         let layer = div().id("page-drag-overlay").absolute().inset_0().occlude().cursor(CursorStyle::ClosedHand)
             .on_mouse_move(cx.listener(|w, ev: &MouseMoveEvent, _, cx| {
                 if ev.pressed_button != Some(MouseButton::Left) { w.cancel_card_drag(cx); return; }
@@ -535,7 +683,7 @@ impl Workspace {
             }))
             .child(div().absolute().left(px(x)).top(px(y)).w(px(w)).h(px(h))
                 .shadow(theme::shadow_panel()).rounded(px(10.))
-                .child(lines));
+                .map(|d| match face { Some(f) => d.child(f), None => d.child(lines) }));
         Some(deferred(layer).with_priority(5).into_any_element())
     }
 }
@@ -876,5 +1024,49 @@ impl Workspace {
         })).absolute().inset_0();
         let veil = theme::raised(Theme::bg_body()).opacity(0.86 * d.veil.p.clamp(0., 1.));
         Some(div().absolute().inset_0().bg(veil).child(edge).flex().items_center().justify_center().child(middle).into_any_element())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CardDrag, Spring, aim_reorder, drag_order};
+    use gpui::{Bounds, point, px, size};
+
+    /// Four cards in a row, 100 wide with 20 between; C is a folder; A is carried.
+    fn row(target: usize) -> CardDrag {
+        let slot = |i: usize| Some(Bounds::new(point(px(i as f32 * 120.), px(0.)), size(px(100.), px(120.))));
+        let slots = ["A", "B", "C", "D"].iter().enumerate().map(|(i, k)| (k.to_string(), slot(i))).collect();
+        CardDrag { id: "A".into(), start: point(px(50.), px(60.)), at: point(px(50.), px(60.)), started: true, grab: (0.5, 0.5), origin: slot(0).unwrap(),
+            rect: Spring::new([0.; 4]), over: None, returning: false, last: None, slots, target, chip: false, list: false }
+    }
+    fn aim(d: &CardDrag, x: f32) -> (Option<String>, Option<usize>) { aim_reorder(d, point(px(x), px(60.)), &|k| k == "C") }
+
+    #[test]
+    fn the_half_of_a_card_says_before_or_after_it() {
+        let d = row(0);
+        assert_eq!(aim(&d, 130.), (None, Some(0)), "B's left half: before B, where it was");
+        assert_eq!(aim(&d, 190.), (None, Some(1)), "B's right half: after B");
+        assert_eq!(aim(&d, 470.), (None, Some(3)), "past D: last");
+        assert_eq!(aim(&d, 112.), (None, Some(0)), "the gutter: the nearest card's half");
+    }
+
+    #[test]
+    fn a_folders_middle_takes_it_in_its_sides_reorder() {
+        let d = row(0);
+        assert_eq!(aim(&d, 290.), (Some("C".into()), None));
+        assert_eq!(aim(&d, 245.), (None, Some(1)), "C's left edge: before C");
+        assert_eq!(aim(&d, 335.), (None, Some(2)), "C's right edge: after C");
+    }
+
+    /// The places are the pickup layout's: once the gap moved under the pointer, it stays.
+    #[test]
+    fn the_gap_under_the_pointer_holds_still() {
+        let mut d = row(0);
+        let (_, t) = aim(&d, 190.);
+        d.target = t.unwrap();
+        assert_eq!(drag_order(&d), ["B", "A", "C", "D"]);
+        assert_eq!(aim(&d, 150.), (None, None), "on the gap itself nothing changes");
+        assert_eq!(aim(&d, 170.), (None, None));
+        assert_eq!(aim(&d, 60.), (None, Some(1)), "B, now first, right half: after it, as it is");
     }
 }

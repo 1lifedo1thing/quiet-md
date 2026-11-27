@@ -4596,6 +4596,47 @@ mod tests {
         assert_eq!(s.index[&id].parent.as_deref(), Some(folder.as_str()));
     }
 
+    /// 手动排序 by dragging on a folder's page (grid, list) or in the sidebar: a page or
+    /// folder put before a sibling, folders and documents in one order; one undo puts it
+    /// back; another device reads the same order, the moved one's key alone rewritten.
+    #[test]
+    fn hand_reorder_mixes_folders_and_documents_and_undoes() {
+        let lib = Lib::new("hand-reorder");
+        let mut s = lib.open();
+        let f = s.create_folder("夹", None).unwrap();
+        let a = s.create_from_in(&doc("a"), Some(&f)).unwrap();
+        let sub = s.create_folder("子夹", Some(&f)).unwrap();
+        let b = s.create_from_in(&doc("b"), Some(&f)).unwrap();
+        s.initialize_manual_order().unwrap();
+        s.move_in_tree(&a, Some(&f), None).unwrap();
+        s.move_in_tree(&sub, Some(&f), None).unwrap();
+        assert_eq!(in_order(&mut s, Some(&f)), [b.clone(), a.clone(), sub.clone()]);
+        // The hand order on disk: each page's fractional key (FORMAT 6).
+        let keys = |lib: &Lib| { let v = view(lib); [&a, &b, &sub].map(|id| v.get(id.as_str()).and_then(|f| f.get("order")).map(|w| w.0.clone())) };
+        let was = keys(&lib);
+        // The folder dropped into the gap before the first document.
+        let journal = s.track_file_changes();
+        s.move_in_tree(&sub, Some(&f), Some(&b)).unwrap();
+        let changes = journal.take();
+        assert_eq!(in_order(&mut s, Some(&f)), [sub.clone(), b.clone(), a.clone()]);
+        let now = keys(&lib);
+        assert_eq!((now[0].clone(), now[1].clone()), (was[0].clone(), was[1].clone()), "only the moved folder's key changes");
+        assert_ne!(now[2], was[2]);
+        assert_eq!(in_order(&mut lib.open(), Some(&f)), [sub.clone(), b.clone(), a.clone()], "reopened, the order holds");
+        // A document between two others, in the same folder: nothing moves on disk.
+        let file = |s: &mut Store, id: &str| s.file_path(id).unwrap();
+        let path = file(&mut s, &a);
+        s.move_in_tree(&a, Some(&f), Some(&b)).unwrap();
+        assert_eq!(in_order(&mut s, Some(&f)), [sub.clone(), a.clone(), b.clone()]);
+        assert_eq!(file(&mut s, &a), path);
+        // ⌘Z of the folder's move: one record, back where it was.
+        s.move_in_tree(&a, Some(&f), None).unwrap();
+        s.apply_file_history(&changes, false).unwrap();
+        assert_eq!(in_order(&mut s, Some(&f)), [b.clone(), a.clone(), sub.clone()]);
+        s.apply_file_history(&changes, true).unwrap();
+        assert_eq!(in_order(&mut s, Some(&f)), [sub, b, a]);
+    }
+
     #[test]
     fn missing_move_anchor_is_rejected_without_panicking() {
         let lib = Lib::new("missing-move-anchor");

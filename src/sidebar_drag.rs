@@ -211,7 +211,7 @@ impl SidebarDrag {
 }
 
 /// A row's face without its controls: the drag ghost and rows on their way out. Folders keep one glyph, open or not.
-fn row_face(e: &Entry) -> Div {
+pub(crate) fn row_face(e: &Entry) -> Div {
     div().h(px(crate::sidebar::ROW_H)).w_full().pl(px(6.)).flex().items_center()
         .child(div().size(px(20.)).flex_none().flex().items_center().justify_center().map(|d| match &e.icon {
             _ if e.meta.folder.is_some() && e.note.is_none() => d.child(icon("folder", crate::sidebar::ROW_ICON, Theme::icon())),
@@ -402,6 +402,19 @@ impl Workspace {
     /// Put `id` last in `folder` (a drop on a folder card), saved like a sidebar drop.
     pub(crate) fn move_into_folder(&mut self, id: &str, folder: &str, cx: &mut Context<Self>) {
         let mut movement = PendingMove { id: id.to_string(), parent: Some(folder.to_string()), before: None, history: 0, joined: false };
+        let file_before = self.entries.to_vec();
+        self.apply_tree_move(&movement);
+        movement.history = self.remember_tree_move(file_before, crate::settings::tr("拖拽移动", "Drag move"));
+        self.queue_tree_write(TreeWrite::Move(movement), cx);
+        self.sync_sub_pages(cx);
+        cx.notify();
+    }
+
+    /// 手动排序 on a folder's page: `id` put before `before` among its siblings (`None`: last),
+    /// saved and undone like a sidebar drop.
+    pub(crate) fn reorder_page_item(&mut self, id: &str, before: Option<String>, cx: &mut Context<Self>) {
+        let parent = self.entries.iter().find(|e| e.id == id).and_then(|e| e.meta.parent.clone());
+        let mut movement = PendingMove { id: id.to_string(), parent, before, history: 0, joined: false };
         let file_before = self.entries.to_vec();
         self.apply_tree_move(&movement);
         movement.history = self.remember_tree_move(file_before, crate::settings::tr("拖拽移动", "Drag move"));

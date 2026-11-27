@@ -21,7 +21,9 @@
 //!   url <quietmd://…> | url @<file> (a link handed over as `quiet open` hands one, or the one in that file; logs the block selected after it) |
 //!   origin board | origin window (the points of the mouse and file steps after it count from the open
 //!   画板's top-left corner, or again from the window's; no board open ends the run with exit code 3)
-//!   filedrag x y <path>[|<path>...] / filedrop x y / fileleave (files dragged in from the Finder)
+//!   filedrag x y <path>[|<path>...] / filedrop x y / fileleave (files dragged in from the Finder) |
+//!   downat / dragat / upat / moveat <name> [fx fy] (down, dragto, up or move at `fx fy` of a tracked
+//!   control's or sidebar row's size from its top-left; default its middle)
 //! For profiling: bench <n> <step> (runs the step n times, drawing a frame
 //!   synchronously after each, and prints step / frame / editor-render times) |
 //!   wheel x y dy [dx] (one scroll-wheel event; dx: sideways component).
@@ -189,6 +191,31 @@ pub fn start(window: &mut Window, cx: &mut App) {
                             eprintln!("devtools: {cmd}: {e}");
                             std::process::exit(3);
                         }
+                    }
+                }
+                // `downat` / `dragat` / `upat` / `moveat <name> [fx fy]`: press, drag, release or move
+                // at a point of a tracked control or sidebar row, `fx fy` of its width and height
+                // from its top-left (default its middle). Not there: stop, as `anchor` does.
+                "downat" | "dragat" | "upat" | "moveat" => {
+                    let words: Vec<&str> = rest.split_whitespace().collect();
+                    let frac = (words.len() >= 3).then(|| (words[words.len() - 2].parse::<f32>().ok(), words[words.len() - 1].parse::<f32>().ok())).and_then(|(x, y)| x.zip(y));
+                    let name = if frac.is_some() { words[..words.len() - 2].join(" ") } else { words.join(" ") };
+                    let (fx, fy) = frac.unwrap_or((0.5, 0.5));
+                    let at = handle.update(cx, |root, window, cx| {
+                        rows_begin(window);
+                        window.refresh();
+                        window.draw(cx).clear(cx);
+                        let ws = root.downcast::<crate::app::Workspace>().map_err(|_| "no workspace window".to_string())?;
+                        let b = ws.read(cx).folder_page.anchor(&name).or_else(|| probed_anchor(window, &name)).map_or_else(|| row_bounds(window, &name), Ok)?;
+                        Ok((f32::from(b.left() + b.size.width * fx).round(), f32::from(b.top() + b.size.height * fy).round()))
+                    }).unwrap_or_else(|e| Err(e.to_string()));
+                    match at {
+                        Ok((x, y)) => {
+                            eprintln!("devtools: {cmd} {name:?} at {x} {y}");
+                            resolved = format!("{x} {y}");
+                            (match cmd { "downat" => "down", "dragat" => "dragto", "upat" => "up", _ => "move" }, resolved.as_str())
+                        }
+                        Err(e) => { eprintln!("devtools: {cmd}: {e}"); std::process::exit(3); }
                     }
                 }
                 "origin" => {
@@ -565,11 +592,15 @@ fn probed_anchor(window: &Window, name: &str) -> Option<Bounds<Pixels>> {
 
 /// The middle of the topmost sidebar row titled `title` in the window's last frame.
 fn row_center(window: &Window, title: &str) -> Result<(f32, f32), String> {
+    row_bounds(window, title).map(|b| (f32::from(b.center().x).round(), f32::from(b.center().y).round()))
+}
+
+/// The topmost sidebar row titled `title` in the window's last frame.
+fn row_bounds(window: &Window, title: &str) -> Result<Bounds<Pixels>, String> {
     ROWS.with(|r| {
         let r = r.borrow();
         let rows = r.get(&window.window_handle().window_id()).map_or(&[][..], |v| &v[..]);
-        rows.iter().filter(|(t, _)| t == title).min_by(|a, b| a.1.origin.y.partial_cmp(&b.1.origin.y).unwrap())
-            .map(|(_, b)| (f32::from(b.center().x).round(), f32::from(b.center().y).round()))
+        rows.iter().filter(|(t, _)| t == title).min_by(|a, b| a.1.origin.y.partial_cmp(&b.1.origin.y).unwrap()).map(|(_, b)| *b)
             .ok_or_else(|| format!("no sidebar row or menu item titled {title:?}; shown: {:?}", rows.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>()))
     })
 }
