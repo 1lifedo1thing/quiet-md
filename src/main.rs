@@ -253,9 +253,9 @@ fn main() {
     // A first launch goes straight in: the default library (an old `Quiet.md`
     // is kept, `Store::default_in`) gets the guides and becomes a top-level
     // folder; the window opens on its first guide (`open_start`). That and
-    // opening the top-level folders (a new library's first opening moves it to
-    // the current format, ~180 ms of fsyncs) run beside GPUI's own start-up,
-    // which takes about as long; `start` waits for them.
+    // opening the top-level folders (the guides come in the current format,
+    // so a new library has nothing to upgrade) run beside GPUI's own
+    // start-up, which takes longer; `start` waits for them.
     let seed = (fixed || !existed) && (!scripted || selftest::active());
     let first = !existed && !scripted && !fixed;
     let chinese = seed && settings::prefs().lang() == settings::Lang::Zh;

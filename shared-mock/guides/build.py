@@ -19,11 +19,14 @@ names, same keys) into shared-mock/library-zh, without .assets: the app
 seeds it with the English library's (`guides.rs`), so its images and covers
 must be ones the English guides bring along too.
 
-The output is a FORMAT 4 library: folders on disk, each document a file named
-after its title (store::file_name_for), links as paths relative to the file,
-and what the files cannot say in .quiet/index.json, keyed by path.
+The output is a library in the current format (store::FORMAT, read from
+crates/core/src/store.rs; FORMAT 6, docs/FORMAT.md): folders on disk, each
+document a file named after its title (store::file_name_for), links as paths
+relative to the file, and what the files cannot say in .quiet/meta/, as one
+device's shards. That device is DEVICE: the app seeds the library as this
+computer's (`guides.rs`), so a new library opens with nothing to upgrade.
 """
-import datetime as dt, json, re, shutil, sys, time, uuid
+import datetime as dt, hashlib, json, re, shutil, sys, time, uuid
 from pathlib import Path
 
 here = Path(__file__).resolve().parent
@@ -33,6 +36,11 @@ if zh: args = args[2:]
 assert len(args) == 1, __doc__
 out = Path(args[0]).resolve()
 NS = uuid.UUID("6f7c1e9a-9d0b-4a51-8c7e-2a1d3b4c5e6f")
+# The format the app writes; a new one needs its layout here first.
+FORMAT = int(re.search(r"^pub const FORMAT: u32 = (\d+);", (here.parents[1] / "crates/core/src/store.rs").read_text(), re.M).group(1))
+assert FORMAT == 6, f"store::FORMAT is {FORMAT}: teach build.py that layout (docs/FORMAT.md)"
+# The device folder in .quiet/meta/ the app renames to this computer's id (guides.rs).
+DEVICE = "guides"
 # Folders in the guide library: key -> title, a folder on disk. The guides
 # name a folder with {{folder:key}}, so renaming one is done here.
 FOLDERS = ({"documents": "文档", "markdown-files": "Markdown 文件", "boards-folder": "画板", "data-tables-folder": "数据表", "everyday": "日常使用"} if zh else
@@ -144,12 +152,15 @@ if out.exists() and any(out.iterdir()):
     sys.exit(f"{out} is not empty")
 out.mkdir(parents=True, exist_ok=True)
 (out / ".quiet").mkdir()
-index = {}
+# id -> fields, as store's meta.rs writes them: `path` (a folder's ends in
+# `/`), `created` / `modified` in seconds, the place among siblings as a
+# fractional index in `order` (in a folder) or `root_order` (at the top).
+items = {}
 order = list(KEYS.values())
 inside = {}
 for k, title in FOLDERS.items():
     (out / file_name(title)).mkdir()
-    index[file_name(title) + "/"] = {"id": ids[k], "created": now - 3600, "modified": now}
+    items[ids[k]] = {"path": file_name(title) + "/", "created": now - 3600, "modified": now}
 for i, (k, parent, pinned) in enumerate(order):
     here_dir = paths[k].rpartition("/")[0]
     if ext[k] == ".xml": (out / paths[k]).write_text(fill(srcs[k]))
@@ -158,7 +169,7 @@ for i, (k, parent, pinned) in enumerate(order):
     # Reading order is written out: TOP places the top level, and a folder's
     # pages are numbered in file order.
     t = now - 60 * i
-    meta = {"id": ids[k], "created": now - 3600 + i, "modified": t}
+    meta = {"path": paths[k], "created": now - 3600 + i, "modified": t}
     if pinned: meta["pinned"] = True
     if parent:
         assert parent in FOLDERS, f"{k}: pages live in folders, not under {parent}"
@@ -166,13 +177,31 @@ for i, (k, parent, pinned) in enumerate(order):
         meta["order"] = inside[parent]
     else:
         assert k in TOP, f"{k} is missing from TOP"
-    index[paths[k]] = meta
+    items[ids[k]] = meta
 assert set(TOP) == {k for k, p, _ in KEYS.values() if not p} | set(FOLDERS), "TOP must list every top-level entry"
-key_of = {**{k: paths[k] for k in paths}, **{k: file_name(t) + "/" for k, t in FOLDERS.items()}}
 for i, k in enumerate(TOP):
-    index[key_of[k]]["root_order"] = i + 1
-(out / ".quiet" / "index.json").write_text(json.dumps(dict(sorted(index.items())), ensure_ascii=False, indent=2) + "\n")
-(out / ".quiet" / "format.json").write_text('{\n  "format": 4\n}')
+    items[ids[k]]["root_order"] = i + 1
+# Ranks as keys: generate_n_keys_between(None, None, n) gives "a0" … "az".
+B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+for f in items.values():
+    for field in ("order", "root_order"):
+        if field in f: assert f[field] <= len(B62); f[field] = "a" + B62[f[field] - 1]
+# Every field stamped now, in milliseconds: [value, stamp].
+stamp = now * 1000
+shards = {}
+for id, f in items.items():
+    # meta::shard_of: the low six bits of the SHA-1 of the id.
+    shards.setdefault(hashlib.sha1(id.encode()).digest()[0] & 63, {})[id] = {k: [v, stamp] for k, v in f.items()}
+dev = out / ".quiet" / "meta" / DEVICE
+dev.mkdir(parents=True)
+# As serde_json's to_vec_pretty writes them (struct fields in order, maps
+# sorted), so the app's first clean-up finds nothing to write again.
+pretty = lambda v: json.dumps(v, ensure_ascii=False, indent=2)
+(dev / "device.json").write_text(pretty({"id": DEVICE, "name": "", "platform": ""}))
+for n, its in sorted(shards.items()):
+    (dev / f"{n:02x}.json").write_text(pretty({"v": 1, "items": {id: dict(sorted(f.items())) for id, f in sorted(its.items())}}))
+# No id: the app gives each library its own when it seeds it.
+(out / ".quiet" / "format.json").write_text(pretty({"format": FORMAT}))
 if zh:
     # Images and covers come from the English library (see above).
     used = {m for x in srcs.values() if isinstance(x, str) for m in re.findall(r'(?:src|path)="assets/guides/([^"]+)"', x)}
