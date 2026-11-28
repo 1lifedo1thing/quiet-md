@@ -212,8 +212,8 @@ pub(crate) enum Popup {
     Date { rec: RecId, field: FieldId, year: i64, month: u32 },
     Links { rec: RecId, field: FieldId },
     Files { rec: RecId, field: FieldId },
-    /// 指向已有笔记: the library's documents, searched.
-    NotePick { rec: RecId, field: FieldId },
+    /// 指向已有笔记: the library's documents, searched; `new`: an empty cell opened, 新建笔记 first.
+    NotePick { rec: RecId, field: FieldId, new: bool },
     Panel(panels::Panel),
     /// The 「…」 menu: export, copy as Markdown.
     More,
