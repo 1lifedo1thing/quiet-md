@@ -196,3 +196,12 @@ Lo siguiente no está cubierto por la licencia MIT y debe sustituirse en los for
 
 - Los iconos de Nucleo de `assets/icons/` (82) y `assets/editor-icons/` (24) están bajo una licencia comercial de Nucleo. No los extraigas ni los redistribuyas por separado.
 - El nombre “Quiet.md” y el icono de la app.
+
+## Star History
+
+<a href="https://www.star-history.com/#s1dashu/quiet-md&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date&theme=dark" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date" />
+  </picture>
+</a>

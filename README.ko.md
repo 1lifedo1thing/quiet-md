@@ -196,3 +196,12 @@ WeChat 사용자는 아래 QR 코드를 스캔해 사용자 그룹에 참여할 
 
 - `assets/icons/`의 Nucleo 아이콘 82개와 `assets/editor-icons/`의 24개는 Nucleo 상용 라이선스를 따릅니다. 아이콘만 따로 추출하거나 재배포하지 마세요.
 - "Quiet.md"라는 이름과 앱 아이콘.
+
+## Star History
+
+<a href="https://www.star-history.com/#s1dashu/quiet-md&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date&theme=dark" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date" />
+  </picture>
+</a>

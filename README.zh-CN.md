@@ -196,3 +196,12 @@
 
 - `assets/icons/` 里的 82 个和 `assets/editor-icons/` 里的 24 个 Nucleo 图标使用 Nucleo 商业授权，请勿单独提取再分发；
 - 「Quiet.md」这个名字和应用图标。
+
+## Star History
+
+<a href="https://www.star-history.com/#s1dashu/quiet-md&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date&theme=dark" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date" />
+  </picture>
+</a>

@@ -196,3 +196,12 @@ WeChat をお使いの方は、下の QR コードからユーザーグループ
 
 - `assets/icons/` の 82 個と `assets/editor-icons/` の 24 個の Nucleo アイコンは、Nucleo の商用ライセンスのもとにあります。単独で取り出したり再配布したりしないでください。
 - 「Quiet.md」という名前と、アプリのアイコン。
+
+## Star History
+
+<a href="https://www.star-history.com/#s1dashu/quiet-md&type=date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date&theme=dark" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=s1dashu/quiet-md&type=date" />
+  </picture>
+</a>
