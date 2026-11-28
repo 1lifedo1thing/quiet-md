@@ -154,6 +154,12 @@ Quiet.md の開発に協力してくださったすべての方に感謝しま�
 
 [![コントリビューター](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## コミュニティ
+
+WeChat をお使いの方は、下の QR コードからユーザーグループに参加できます。Discord サーバーも近日公開予定です。
+
+<img src="docs/images/wechat-group.webp" alt="WeChat ユーザーグループ" width="200">
+
 ## 最近の更新
 
 - **0.1.14**（11 月 22 日）: 検索と置換で正規表現が使えるように。Obsidian の `[[ウィキリンク]]` からリンク先のノートを開けます。トルコ語のインターフェースを追加し、アラビア語は右から左に表示。インターフェースと書類のフォントを選べるようになり、どのノートも使っていない画像やファイルを整理できます。ノートが多くても検索が重くならず、まとめて削除するのも速くなりました。「バックスペースでタイトルに戻る」設定を追加。Windows と Linux では「Markdown としてコピー」が Ctrl+Shift+M になりました。

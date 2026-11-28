@@ -154,6 +154,12 @@ Gracias a todas las personas que han ayudado a construir Quiet.md. Los issues y 
 
 [![Colaboradores](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## Comunidad
+
+Si usas WeChat, escanea el código de abajo para unirte a nuestro grupo de usuarios. Pronto abriremos también un servidor de Discord.
+
+<img src="docs/images/wechat-group.webp" alt="Grupo de usuarios de WeChat" width="200">
+
 ## Novedades recientes
 
 - **0.1.14** (22 nov): buscar y reemplazar con expresiones regulares. Los `[[enlaces wiki]]` de Obsidian abren la nota a la que apuntan. Interfaz en turco, y el árabe se muestra de derecha a izquierda. Elige la fuente de la interfaz y la de los documentos, y retira las imágenes y archivos que ninguna nota usa. La búsqueda sigue el ritmo en bibliotecas grandes y borrar muchas notas es más rápido. Un ajuste para que Retroceso vuelva al título; en Windows y Linux, Copiar como Markdown pasa a ser Ctrl+Shift+M.

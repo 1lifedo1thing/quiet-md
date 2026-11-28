@@ -154,6 +154,12 @@
 
 [![Contributors](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## 交流群
+
+微信用户可以扫描下方二维码，加入 Quiet.md 用户群。Discord 社区也即将上线。
+
+<img src="docs/images/wechat-group.webp" alt="微信用户群" width="200">
+
 ## 近期更新
 
 - **0.1.14**（11 月 22 日）：查找替换支持正则表达式。Obsidian 的 `[[双链]]` 可以点击跳转。新增土耳其语界面，阿拉伯语从右往左排版。可以选择界面字体和文档字体，清理没有笔记用到的图片和文件。文档很多时搜索不再卡顿，批量删除更快。新增「退格键回到标题」开关；Windows 和 Linux 上「复制为 Markdown」改为 Ctrl+Shift+M。

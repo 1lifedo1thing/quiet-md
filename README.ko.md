@@ -154,6 +154,12 @@ Quiet.md를 함께 만들어 주신 모든 분께 감사드립니다. 이슈와 
 
 [![기여자](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## 커뮤니티
+
+WeChat 사용자는 아래 QR 코드를 스캔해 사용자 그룹에 참여할 수 있습니다. Discord 서버도 곧 열립니다.
+
+<img src="docs/images/wechat-group.webp" alt="WeChat 사용자 그룹" width="200">
+
 ## 최근 업데이트
 
 - **0.1.14**(11월 22일): 찾아 바꾸기에서 정규 표현식 지원. Obsidian `[[위키링크]]`를 클릭하면 해당 노트가 열립니다. 튀르키예어 인터페이스 추가, 아랍어는 오른쪽에서 왼쪽으로 표시. 인터페이스 글꼴과 문서 글꼴을 고를 수 있고, 어떤 노트도 쓰지 않는 이미지와 파일을 정리할 수 있습니다. 노트가 많아도 검색이 버벅이지 않고, 여러 노트를 한 번에 지우는 것도 빨라졌습니다. ‘백스페이스로 제목으로 돌아가기’ 설정 추가. Windows와 Linux에서는 ‘Markdown으로 복사’가 Ctrl+Shift+M으로 바뀌었습니다.

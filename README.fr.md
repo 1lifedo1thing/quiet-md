@@ -154,6 +154,12 @@ Merci à toutes les personnes qui ont contribué à construire Quiet.md. Issues 
 
 [![Contributeurs](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## Communauté
+
+Si vous utilisez WeChat, scannez le code ci-dessous pour rejoindre notre groupe d’utilisateurs. Un serveur Discord arrive bientôt.
+
+<img src="docs/images/wechat-group.webp" alt="Groupe d’utilisateurs WeChat" width="200">
+
 ## Dernières mises à jour
 
 - **0.1.14** (22 nov) : rechercher-remplacer avec des expressions régulières. Les `[[liens wiki]]` d'Obsidian ouvrent la note visée. Interface en turc, et l'arabe s'affiche de droite à gauche. Choisissez la police de l'interface et celle des documents, et retirez les images et fichiers qu'aucune note n'utilise. La recherche suit dans les grandes bibliothèques, et supprimer beaucoup de notes est plus rapide. Un réglage pour que Retour arrière revienne au titre ; sous Windows et Linux, Copier en Markdown devient Ctrl+Maj+M.

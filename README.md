@@ -177,6 +177,12 @@ Thanks to everyone who has helped build Quiet.md. Issues and pull requests are w
 
 [![Contributors](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## Community
+
+WeChat users can scan the code below to join our user group. A Discord server is coming soon.
+
+<img src="docs/images/wechat-group.webp" alt="WeChat user group" width="200">
+
 ## Recent updates
 
 - **0.1.14** (Nov 22): find and replace with regular expressions. Obsidian `[[wikilinks]]` open the note they point to. A Turkish interface, and Arabic laid out right to left. Choose the interface and document fonts, and clear out images and files no note uses. Search keeps up with large libraries, and deleting many notes is quicker. A setting for whether Backspace returns to the title; on Windows and Linux, Copy as Markdown is now Ctrl+Shift+M.

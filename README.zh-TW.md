@@ -154,6 +154,12 @@
 
 [![Contributors](https://raw.githubusercontent.com/s1dashu/quiet-md/contributors-assets/docs/images/contributors.svg?v=1)](https://github.com/s1dashu/quiet-md/graphs/contributors)
 
+## 交流群
+
+微信使用者可以掃描下方 QR Code，加入 Quiet.md 使用者群組。Discord 社群也即將推出。
+
+<img src="docs/images/wechat-group.webp" alt="微信使用者群組" width="200">
+
 ## 近期更新
 
 - **0.1.14**（11 月 22 日）：尋找與取代支援規則運算式。Obsidian 的 `[[雙向連結]]` 可以點擊跳轉。新增土耳其文介面，阿拉伯文由右至左排版。可以選擇介面字型與文件字型，清理沒有筆記使用的圖片和檔案。文件很多時搜尋不再卡頓，批次刪除更快。新增「退格鍵回到標題」開關；Windows 與 Linux 上「複製為 Markdown」改為 Ctrl+Shift+M。
